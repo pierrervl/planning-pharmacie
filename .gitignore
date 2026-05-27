@@ -1,0 +1,4 @@
+# Sauvegardes planning (données locales / OneDrive, pas sur GitHub)
+sauvegardes/*.json
+js/planning_*.json
+planning_*.json

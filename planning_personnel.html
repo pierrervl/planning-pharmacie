@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning Personnel — Gestion par patterns versionnés</title>
+<link rel="stylesheet" href="css/planning.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <h1>Planning Personnel <span class="sub">— gestion par patterns versionnés</span></h1>
+    <div class="topbtns">
+      <button id="btn-export-json" title="Enregistrer planning_AAAA-MM-JJ_HH-MM.json dans sauvegardes/">⬇ Exporter JSON</button>
+      <button id="btn-import-json" title="Importer la sauvegarde la plus récente depuis sauvegardes/">⬆ Importer JSON</button>
+      <input type="file" id="file-import" accept="application/json,.json" class="hidden">
+      <input type="file" id="folder-import" webkitdirectory multiple class="hidden">
+      <button id="btn-print" title="Imprimer la vue courante">🖨 Imprimer</button>
+      <button id="btn-export-png" title="Exporter la vue en image PNG">🖼 Exporter PNG</button>
+      <button id="btn-reset" title="Réinitialiser toutes les données">↺ Réinitialiser</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="week"    class="active">📅 Semaine</button>
+    <button data-tab="emp-overview">📊 Vue d'ensemble</button>
+    <button data-tab="emp-detail">👤 Salarié</button>
+    <button data-tab="patterns">🧩 Patterns</button>
+    <button data-tab="employees">👥 Équipe</button>
+    <button data-tab="conges">🌴 Congés</button>
+    <button data-tab="feries">🎉 Jours fériés</button>
+  </nav>
+
+  <div class="main">
+    <main class="content" id="content"></main>
+    <aside class="side" id="sidebar"></aside>
+  </div>
+
+</div>
+
+<!-- Ordre de chargement important (dépendances globales) -->
+<script src="js/02-dates.js"></script>
+<script src="js/04-engine.js"></script>
+<script src="js/01-state.js"></script>
+<script src="js/03-feries.js"></script>
+<script src="js/05-views.js"></script>
+<script src="js/06-editors.js"></script>
+<script src="js/07-app.js"></script>
+</body>
+</html>
