@@ -3,21 +3,33 @@
 
 const PATTERN_DAY_LABELS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
 
+function patternEscapeAttr(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderPatternsEditor(root) {
   const layout = STATE.ui.patternLayout || 'unified';
-  const visibleEmps = STATE.employees.filter(e => STATE.ui.filtersEmp.includes(e));
+  const patternEmps = STATE.employees.slice();
   const defaultStart = STATE.ui.patternImportStart || toISO(getPatternAnchorMonday());
   const defaultEnd = STATE.ui.patternImportEnd || INITIAL_DATA.planningEnd;
-  const anchorLbl = frFormat(getPatternAnchorMonday());
+  const anchorSummary = getPatternAnchorSummary();
+  const curMon = mondayOf(fromISO(STATE.ui.currentDate || todayISO()));
+  const defaultAnchorYear = STATE.ui.patternAnchorEditYear ?? getISOWeekYear(curMon);
+  const defaultAnchorWeek = STATE.ui.patternAnchorEditWeek ?? getISOWeek(curMon);
+  const defaultAnchorPattern = STATE.ui.patternAnchorEditName ?? getPatternWeekNameForMonday(curMon);
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls pattern-controls';
   ctrl.innerHTML = `
     <div class="label">Modèle de cycle — 6 semaines</div>
     <div class="help-text">
-      Même vue que le planning : chaque salarié, demi-journées M/A, 6 semaines-types
+      Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A, 6 semaines-types
       (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos.
-      Le cycle suit l'ancrage calendaire (S1 = semaine du ${anchorLbl}).
+      Tous les salariés sont listés ici (filtres latéraux ignorés).
+      L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
     <div class="spacer"></div>
     <label>Affichage :
@@ -29,13 +41,47 @@ function renderPatternsEditor(root) {
   `;
   root.appendChild(ctrl);
 
+  const anchorPanel = document.createElement('div');
+  anchorPanel.className = 'form-card pattern-anchor-panel no-print';
+  anchorPanel.innerHTML = `
+    <h3>Ancrage calendaire (pour l'import)</h3>
+    <p class="muted">
+      Indique quelle semaine ISO correspond à quelle semaine du cycle (S1, S2, S3…).
+      <strong>Cela ne modifie pas le planning en vue Semaine</strong> — seul un import explicite
+      (ci-dessous ou bouton ↓ Importer par semaine) recopie le modèle dans les cellules.
+    </p>
+    <p class="pattern-anchor-current">
+      <strong>Actuellement :</strong> S1 = semaine ISO <b>${anchorSummary.isoWeek}</b> (${anchorSummary.isoYear})
+      — lundi ${anchorSummary.anchorLabel}
+    </p>
+    <div class="form-grid pattern-anchor-grid">
+      <label>Année ISO
+        <input type="number" id="pat-anchor-year" min="2020" max="2100" value="${defaultAnchorYear}">
+      </label>
+      <label>Semaine ISO
+        <input type="number" id="pat-anchor-week" min="1" max="53" value="${defaultAnchorWeek}">
+      </label>
+      <label>Semaine du cycle
+        <select id="pat-anchor-pattern">
+          ${PATTERN_CYCLE_WEEKS.map(p =>
+            `<option value="${patternEscapeAttr(p)}"${p === defaultAnchorPattern ? ' selected' : ''}>${p}</option>`
+          ).join('')}
+        </select>
+      </label>
+      <button type="button" class="primary" id="pat-anchor-apply">Enregistrer l'ancrage</button>
+    </div>
+    <p class="muted pattern-anchor-preview" id="pat-anchor-preview"></p>
+  `;
+  root.appendChild(anchorPanel);
+  attachPatternAnchorHandlers(anchorPanel);
+
   const importPanel = document.createElement('div');
   importPanel.className = 'form-card pattern-import-panel no-print';
   importPanel.innerHTML = `
     <h3>Importer le cycle vers le planning</h3>
     <p class="muted">
-      Applique les 6 semaines-types (S1…S3') sur une période calendaire, pour tous les salariés.
-      Chaque date reçoit la semaine du cycle correspondant à l'ancrage S1.
+      Recopie les 6 semaines-types (S1…S3') sur une période calendaire, pour tous les salariés,
+      selon l'ancrage défini ci-dessus. Les cellules existantes peuvent être écrasées ou conservées.
     </p>
     <div class="form-grid pattern-import-grid">
       <label>Du <input type="text" class="fr-date" id="pat-import-start" data-iso="${defaultStart}" value="${frFormatNumeric(defaultStart)}"></label>
@@ -46,10 +92,10 @@ function renderPatternsEditor(root) {
   root.appendChild(importPanel);
   attachPatternPeriodImportHandlers(importPanel);
 
-  if (visibleEmps.length === 0) {
+  if (patternEmps.length === 0) {
     const msg = document.createElement('p');
     msg.className = 'muted';
-    msg.textContent = 'Aucun salarié sélectionné dans les filtres (panneau de droite).';
+    msg.textContent = 'Aucun salarié dans l\'équipe. Ajoutez des salariés dans l\'onglet Équipe.';
     root.appendChild(msg);
     $('#pat-layout').onchange = (e) => {
       STATE.ui.patternLayout = e.target.value;
@@ -59,9 +105,9 @@ function renderPatternsEditor(root) {
   }
 
   if (layout === 'split') {
-    renderPatternsSplit(root, visibleEmps);
+    renderPatternsSplit(root, patternEmps);
   } else {
-    renderPatternsUnified(root, visibleEmps);
+    renderPatternsUnified(root, patternEmps);
   }
 
   $('#pat-layout').onchange = (e) => {
@@ -76,7 +122,7 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   const cls = ['cell', 'editable', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
   if (weekBoundary && shift === 'matin') cls.push('week-start');
   const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos`;
-  return `<td class="${cls.join(' ')}" data-pat-emp="${emp}" data-pat-name="${pname}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${title}"></td>`;
+  return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}"></td>`;
 }
 
 function buildPatternTableHeader(thead, weekNames, headRows) {
@@ -258,6 +304,48 @@ function attachPatternPeriodImportHandlers(panel) {
       message: 'Cette période contient déjà des présences dans le planning.',
       onChoose: runImport
     });
+  };
+}
+
+function attachPatternAnchorHandlers(panel) {
+  const yearEl = panel.querySelector('#pat-anchor-year');
+  const weekEl = panel.querySelector('#pat-anchor-week');
+  const patternEl = panel.querySelector('#pat-anchor-pattern');
+  const previewEl = panel.querySelector('#pat-anchor-preview');
+  const applyBtn = panel.querySelector('#pat-anchor-apply');
+
+  const readAnchorForm = () => ({
+    isoYear: parseInt(yearEl.value, 10),
+    isoWeek: parseInt(weekEl.value, 10),
+    patternName: patternEl.value,
+  });
+
+  const updatePreview = () => {
+    const { isoYear, isoWeek, patternName } = readAnchorForm();
+    const info = describePatternAnchorForISOWeek(isoYear, isoWeek, patternName);
+    previewEl.textContent = info
+      ? `Aperçu import : ${patternName} = sem. ISO ${info.refIsoWeek} (${info.refIsoYear}) → S1 = sem. ISO ${info.anchorIsoWeek} (${info.anchorIsoYear}), lundi ${info.anchorLabel}.`
+      : 'Semaine ou année invalide.';
+  };
+
+  [yearEl, weekEl, patternEl].forEach(el => {
+    el.oninput = updatePreview;
+    el.onchange = updatePreview;
+  });
+  updatePreview();
+
+  applyBtn.onclick = () => {
+    const { isoYear, isoWeek, patternName } = readAnchorForm();
+    const r = setPatternAnchorFromISOWeek(isoYear, isoWeek, patternName);
+    if (!r.ok) {
+      toast(r.error, true);
+      return;
+    }
+    STATE.ui.patternAnchorEditYear = isoYear;
+    STATE.ui.patternAnchorEditWeek = isoWeek;
+    STATE.ui.patternAnchorEditName = patternName;
+    toast(`Ancrage enregistré (${patternName} = sem. ${isoWeek}/${isoYear}). Le planning n'est pas modifié — importez pour appliquer.`);
+    persistAndRender();
   };
 }
 

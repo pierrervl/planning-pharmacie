@@ -65,6 +65,43 @@ function getPatternWeekNameForDate(dateIso, state = STATE) {
   return getPatternWeekNameForMonday(mondayOf(fromISO(dateIso)), state);
 }
 
+function getPatternAnchorSummary(state = STATE) {
+  const anchorMon = getPatternAnchorMonday(state);
+  return {
+    anchorIso: toISO(anchorMon),
+    anchorLabel: frFormat(anchorMon),
+    isoWeek: getISOWeek(anchorMon),
+    isoYear: getISOWeekYear(anchorMon),
+  };
+}
+
+function setPatternAnchorFromISOWeek(isoYear, isoWeek, patternName, state = STATE) {
+  const idx = PATTERN_CYCLE_WEEKS.indexOf(patternName);
+  if (idx < 0) return { ok: false, error: 'Semaine de cycle invalide.' };
+  if (!Number.isFinite(isoYear) || !Number.isFinite(isoWeek) || isoWeek < 1 || isoWeek > 53) {
+    return { ok: false, error: 'Année ou semaine ISO invalide.' };
+  }
+  const weekMon = mondayOfISOWeek(isoYear, isoWeek);
+  const anchorMon = addDays(weekMon, -7 * idx);
+  state.patternAnchorDate = toISO(anchorMon);
+  return { ok: true, ...getPatternAnchorSummary(state), refPattern: patternName, refIsoWeek: isoWeek, refIsoYear: isoYear };
+}
+
+function describePatternAnchorForISOWeek(isoYear, isoWeek, patternName) {
+  const idx = PATTERN_CYCLE_WEEKS.indexOf(patternName);
+  if (idx < 0 || isoWeek < 1 || isoWeek > 53) return null;
+  const weekMon = mondayOfISOWeek(isoYear, isoWeek);
+  const anchorMon = addDays(weekMon, -7 * idx);
+  return {
+    anchorLabel: frFormat(anchorMon),
+    anchorIsoWeek: getISOWeek(anchorMon),
+    anchorIsoYear: getISOWeekYear(anchorMon),
+    refPattern: patternName,
+    refIsoWeek: isoWeek,
+    refIsoYear: isoYear,
+  };
+}
+
 /* Valeur du pattern pour une date — alignée sur le calendrier (ancrage S1) */
 function patternValueForDate(empName, dateIso, shift, assignStart, patternName, state = STATE) {
   const dayIdx = weekDayIndex(fromISO(dateIso));

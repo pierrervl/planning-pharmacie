@@ -71,6 +71,13 @@ function mondayOf(d) {
   return r;
 }
 
+/* Lundi de la semaine ISO (année ISO + numéro 1–53) --------------------- */
+function mondayOfISOWeek(isoYear, isoWeek) {
+  const jan4 = new Date(isoYear, 0, 4, 12, 0, 0, 0);
+  const week1Mon = mondayOf(jan4);
+  return addDays(week1Mon, (isoWeek - 1) * 7);
+}
+
 /* Index 0=lundi..6=dimanche -------------------------------------------- */
 function weekDayIndex(d) {
   return (d.getDay() + 6) % 7;

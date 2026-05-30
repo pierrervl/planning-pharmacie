@@ -1378,6 +1378,40 @@ table.heatmap th.month-name { width: 80px; text-align: left; padding: 0 6px; }
 .pattern-import-panel {
   margin: 0 0 14px;
 }
+.pattern-anchor-panel {
+  margin: 0 0 14px;
+}
+.pattern-anchor-current {
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.pattern-anchor-preview {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.pattern-anchor-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+.pattern-anchor-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.pattern-anchor-grid input[type="number"],
+.pattern-anchor-grid select {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+.pattern-anchor-grid input[type="number"] { width: 100px; }
+.pattern-anchor-grid select { min-width: 150px; }
 .pattern-import-panel .muted {
   font-size: 12px;
   margin-bottom: 12px;
@@ -1548,7 +1582,8 @@ input.fr-date::placeholder {
 .fr-cal-today:hover {
   background: var(--accent-soft);
 }
-.pattern-import-grid button.primary {
+.pattern-import-grid button.primary,
+.pattern-anchor-grid button.primary {
   align-self: flex-end;
   white-space: nowrap;
 }
