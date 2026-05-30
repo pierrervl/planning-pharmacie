@@ -108,7 +108,7 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   if (!passesFilter) cls.push('filtered-out');
   if (c.ferie) cls.push('ferie');
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const hint = editable ? ' — clic : plein ↔ repos · Ctrl+clic : présence spéciale (orange)' : '';
+  const hint = editable ? ' — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)' : '';
   const title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}` +
                 (c.ferie ? ` (${c.ferieLabel})` : '') +
                 (c.garde ? ` (${c.gardeLabel})` : '') + hint;
@@ -282,10 +282,16 @@ function attachWeekTableHandlers(wrap) {
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
       const cur = getPlanningValue(emp, iso, shift);
-      const next = (e.ctrlKey || e.metaKey)
-        ? toggleSpecialPlanningValue(cur)
-        : cyclePlanningValue(cur);
-      setPlanningValue(emp, iso, shift, next);
+      setPlanningValue(emp, iso, shift, nextPlanningValueOnLeftClick(cur, e));
+      persistAndRender();
+    };
+    el.oncontextmenu = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.emp;
+      const iso = el.dataset.date;
+      const shift = el.dataset.shift;
+      const cur = getPlanningValue(emp, iso, shift);
+      setPlanningValue(emp, iso, shift, nextPlanningValueOnRightClick(cur));
       persistAndRender();
     };
   });
@@ -427,7 +433,7 @@ function renderWeekView(root) {
     <div class="week-num">${numWeeks} semaines · S${isoWeek}–S${getISOWeek(lastDay)} · ${isoYear}</div>
     <div class="spacer"></div>
     <label>Aller à : <input type="text" class="fr-date" id="wk-jump" data-iso="${STATE.ui.currentDate}" value="${frFormatNumeric(STATE.ui.currentDate)}"></label>
-    <span class="help-text no-print">Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · Ctrl+clic = présence spéciale (orange)</span>
+    <span class="help-text no-print">Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit ou Ctrl+clic = présence spéciale (orange)</span>
   `;
   root.appendChild(ctrl);
 
@@ -933,7 +939,7 @@ function renderSidebar() {
   h += `<div class="side-section">
     <h3>Légende</h3>
     <div class="legend-item"><span class="sw" style="background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">×</span> Plein (présent)</div>
-    <div class="legend-item"><span class="sw sw-special">×</span> Présence spéciale (Ctrl+clic)</div>
+    <div class="legend-item"><span class="sw sw-special">×</span> Présence spéciale (clic droit ou Ctrl+clic)</div>
     <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
     <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
     <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>

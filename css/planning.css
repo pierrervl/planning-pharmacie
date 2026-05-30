@@ -17,7 +17,7 @@
   --rest-soft:   #e6e3d8;
 
   --cp:           #e89846;       /* orange congés payés */
-  --presence-special: #e89846;  /* orange présence spéciale (Ctrl+clic) */
+  --presence-special: #e89846;  /* orange présence spéciale (clic droit / Ctrl+clic) */
   --rtt:          #7fb8d4;       /* bleu clair RTT */
   --mal:          #c8523f;       /* rouge maladie */
   --form:         #9b6fb0;       /* violet formation */

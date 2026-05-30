@@ -27,7 +27,7 @@ function renderPatternsEditor(root) {
     <div class="label">Modèle de cycle — 6 semaines</div>
     <div class="help-text">
       Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A, 6 semaines-types
-      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · Ctrl+clic = présence spéciale (orange).
+      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · clic droit ou Ctrl+clic = présence spéciale (orange).
       Tous les salariés sont listés ici (filtres latéraux ignorés).
       L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
@@ -121,7 +121,7 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
   const cls = ['cell', 'editable', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos · Ctrl+clic : présence spéciale (orange)`;
+  const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)`;
   return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}"></td>`;
 }
 
@@ -192,10 +192,17 @@ function attachPatternCellHandlers(container) {
       const dayIdx = parseInt(el.dataset.patDay, 10);
       const shift = el.dataset.patShift;
       const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      const next = (e.ctrlKey || e.metaKey)
-        ? toggleSpecialPlanningValue(cur)
-        : cyclePlanningValue(cur);
-      setPatternWeekValue(emp, pname, dayIdx, shift, next);
+      setPatternWeekValue(emp, pname, dayIdx, shift, nextPlanningValueOnLeftClick(cur, e));
+      persistAndRender();
+    };
+    el.oncontextmenu = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.patEmp;
+      const pname = el.dataset.patName;
+      const dayIdx = parseInt(el.dataset.patDay, 10);
+      const shift = el.dataset.patShift;
+      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
+      setPatternWeekValue(emp, pname, dayIdx, shift, nextPlanningValueOnRightClick(cur));
       persistAndRender();
     };
   });

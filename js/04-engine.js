@@ -225,6 +225,15 @@ function toggleSpecialPlanningValue(cur) {
   return cur === PLANNING_SPECIAL ? PLANNING_PRESENT : PLANNING_SPECIAL;
 }
 
+function nextPlanningValueOnLeftClick(cur, e) {
+  if (e.ctrlKey || e.metaKey) return toggleSpecialPlanningValue(cur);
+  return cyclePlanningValue(cur);
+}
+
+function nextPlanningValueOnRightClick(cur) {
+  return toggleSpecialPlanningValue(cur);
+}
+
 function isPlanningPresent(val) {
   return val === PLANNING_PRESENT || val === PLANNING_SPECIAL;
 }
