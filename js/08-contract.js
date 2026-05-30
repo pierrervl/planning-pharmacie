@@ -24,6 +24,44 @@ function persistContractMetaFromDom() {
   saveState();
 }
 
+function mountContractPartySection(root, options = {}) {
+  const pharmacy = getPharmacyInfo();
+  const employer = getEmployerInfo();
+  const panelId = options.panelId || 'contract-party-panel';
+
+  const partyCard = document.createElement('div');
+  partyCard.className = 'form-card contract-party-card no-print settings-section';
+  if (options.sectionId) partyCard.id = options.sectionId;
+  partyCard.innerHTML = `
+    <h3>Pharmacie &amp; employeur</h3>
+    <p class="muted">Ces informations apparaissent dans le bloc « Employeur » des contrats PDF.</p>
+    <div class="contract-party-columns" id="${escapeHtml(panelId)}">
+      <div class="contract-party-col">
+        <h4>Établissement</h4>
+        <div class="contract-party-grid">
+          ${PHARMACY_INFO_FIELDS.map(f => renderPartyInfoFieldHtml('pharmacy', f, pharmacy)).join('')}
+        </div>
+      </div>
+      <div class="contract-party-col">
+        <h4>Employeur</h4>
+        <div class="contract-party-grid">
+          ${EMPLOYER_INFO_FIELDS.map(f => renderPartyInfoFieldHtml('employer', f, employer)).join('')}
+        </div>
+      </div>
+    </div>
+    <button type="button" class="primary contract-party-save" id="contract-party-save">Enregistrer pharmacie &amp; employeur</button>`;
+  root.appendChild(partyCard);
+
+  $('#contract-party-save').onclick = () => {
+    persistContractMetaFromDom();
+    toast('Pharmacie et employeur enregistrés');
+  };
+  partyCard.querySelectorAll('[data-party]').forEach(el => {
+    el.onchange = persistContractMetaFromDom;
+  });
+  return partyCard;
+}
+
 function renderContractEditor(root) {
   if (STATE.employees.length === 0) {
     root.innerHTML = `
@@ -42,18 +80,18 @@ function renderContractEditor(root) {
   const days = sortContractDays(getContractDays(emp));
   const totalH = contractDaysTotalHours(days);
   const docTitle = STATE.ui.contractDocTitle || 'Planning des journées de travail';
-  const pharmacy = getPharmacyInfo();
-  const employer = getEmployerInfo();
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls contract-controls no-print';
   ctrl.innerHTML = `
     <div class="label">Contrat — jours travaillés</div>
     <div class="help-text">
-      Renseignez la pharmacie et l'employeur, sélectionnez un salarié, ajoutez les journées prévues,
-      puis générez un PDF (<b>format portrait</b>) via le bouton ci-dessous ou <b>🖨 Imprimer</b>.
+      Sélectionnez un salarié, ajoutez les journées prévues, puis générez un PDF (<b>format portrait</b>).
+      Pharmacie et employeur :
+      <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-contract-party">Configuration</button>
     </div>`;
   root.appendChild(ctrl);
+  bindSettingsNavLinks(ctrl);
 
   const metaCard = document.createElement('div');
   metaCard.className = 'form-card contract-meta-card no-print';
@@ -72,28 +110,14 @@ function renderContractEditor(root) {
     </div>`;
   root.appendChild(metaCard);
 
-  const partyCard = document.createElement('div');
-  partyCard.className = 'form-card contract-party-card no-print';
-  partyCard.id = 'contract-party-panel';
-  partyCard.innerHTML = `
-    <h3>Pharmacie &amp; employeur</h3>
-    <p class="muted">Ces informations apparaissent dans le bloc « Employeur » du PDF.</p>
-    <div class="contract-party-columns">
-      <div class="contract-party-col">
-        <h4>Établissement</h4>
-        <div class="contract-party-grid">
-          ${PHARMACY_INFO_FIELDS.map(f => renderPartyInfoFieldHtml('pharmacy', f, pharmacy)).join('')}
-        </div>
-      </div>
-      <div class="contract-party-col">
-        <h4>Employeur</h4>
-        <div class="contract-party-grid">
-          ${EMPLOYER_INFO_FIELDS.map(f => renderPartyInfoFieldHtml('employer', f, employer)).join('')}
-        </div>
-      </div>
-    </div>
-    <button type="button" class="primary contract-party-save" id="contract-party-save">Enregistrer pharmacie &amp; employeur</button>`;
-  root.appendChild(partyCard);
+  const partyHint = document.createElement('div');
+  partyHint.className = 'form-card settings-hint-card no-print';
+  partyHint.innerHTML = `
+    <p class="muted">Pharmacie et employeur (bloc PDF) :
+      <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-contract-party">Configuration → Pharmacie &amp; employeur</button>
+    </p>`;
+  root.appendChild(partyHint);
+  bindSettingsNavLinks(partyHint);
 
   const infoCard = document.createElement('div');
   infoCard.className = 'form-card contract-info-card';
@@ -180,13 +204,6 @@ function renderContractEditor(root) {
   };
 
   $('#contract-doc-title').onchange = persistContractMetaFromDom;
-  $('#contract-party-save').onclick = () => {
-    persistContractMetaFromDom();
-    toast('Pharmacie et employeur enregistrés');
-  };
-  partyCard.querySelectorAll('[data-party]').forEach(el => {
-    el.onchange = persistContractMetaFromDom;
-  });
 
   const submitDay = () => {
     persistContractMetaFromDom();

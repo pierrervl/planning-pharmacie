@@ -16,10 +16,6 @@ function renderPatternsEditor(root) {
   const defaultStart = STATE.ui.patternImportStart || toISO(getPatternAnchorMonday());
   const defaultEnd = STATE.ui.patternImportEnd || INITIAL_DATA.planningEnd;
   const anchorSummary = getPatternAnchorSummary();
-  const curMon = mondayOf(fromISO(STATE.ui.currentDate || todayISO()));
-  const defaultAnchorYear = STATE.ui.patternAnchorEditYear ?? getISOWeekYear(curMon);
-  const defaultAnchorWeek = STATE.ui.patternAnchorEditWeek ?? getISOWeek(curMon);
-  const defaultAnchorPattern = STATE.ui.patternAnchorEditName ?? getPatternWeekNameForMonday(curMon);
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls pattern-controls';
@@ -41,39 +37,7 @@ function renderPatternsEditor(root) {
   `;
   root.appendChild(ctrl);
 
-  const anchorPanel = document.createElement('div');
-  anchorPanel.className = 'form-card pattern-anchor-panel no-print';
-  anchorPanel.innerHTML = `
-    <h3>Ancrage calendaire (pour l'import)</h3>
-    <p class="muted">
-      Indique quelle semaine ISO correspond à quelle semaine du cycle (S1, S2, S3…).
-      <strong>Cela ne modifie pas le planning en vue Semaine</strong> — seul un import explicite
-      (ci-dessous ou bouton ↓ Importer par semaine) recopie le modèle dans les cellules.
-    </p>
-    <p class="pattern-anchor-current">
-      <strong>Actuellement :</strong> S1 = semaine ISO <b>${anchorSummary.isoWeek}</b> (${anchorSummary.isoYear})
-      — lundi ${anchorSummary.anchorLabel}
-    </p>
-    <div class="form-grid pattern-anchor-grid">
-      <label>Année ISO
-        <input type="number" id="pat-anchor-year" min="2020" max="2100" value="${defaultAnchorYear}">
-      </label>
-      <label>Semaine ISO
-        <input type="number" id="pat-anchor-week" min="1" max="53" value="${defaultAnchorWeek}">
-      </label>
-      <label>Semaine du cycle
-        <select id="pat-anchor-pattern">
-          ${PATTERN_CYCLE_WEEKS.map(p =>
-            `<option value="${patternEscapeAttr(p)}"${p === defaultAnchorPattern ? ' selected' : ''}>${p}</option>`
-          ).join('')}
-        </select>
-      </label>
-      <button type="button" class="primary" id="pat-anchor-apply">Enregistrer l'ancrage</button>
-    </div>
-    <p class="muted pattern-anchor-preview" id="pat-anchor-preview"></p>
-  `;
-  root.appendChild(anchorPanel);
-  attachPatternAnchorHandlers(anchorPanel);
+  mountPatternAnchorPanel(root);
 
   const importPanel = document.createElement('div');
   importPanel.className = 'form-card pattern-import-panel no-print';
@@ -317,12 +281,59 @@ function attachPatternPeriodImportHandlers(panel) {
   };
 }
 
-function attachPatternAnchorHandlers(panel) {
-  const yearEl = panel.querySelector('#pat-anchor-year');
-  const weekEl = panel.querySelector('#pat-anchor-week');
-  const patternEl = panel.querySelector('#pat-anchor-pattern');
-  const previewEl = panel.querySelector('#pat-anchor-preview');
-  const applyBtn = panel.querySelector('#pat-anchor-apply');
+function mountPatternAnchorPanel(root, options = {}) {
+  const idPrefix = options.idPrefix || 'pat-anchor';
+  const anchorSummary = getPatternAnchorSummary();
+  const curMon = mondayOf(fromISO(STATE.ui.currentDate || todayISO()));
+  const defaultAnchorYear = STATE.ui.patternAnchorEditYear ?? getISOWeekYear(curMon);
+  const defaultAnchorWeek = STATE.ui.patternAnchorEditWeek ?? getISOWeek(curMon);
+  const defaultAnchorPattern = STATE.ui.patternAnchorEditName ?? getPatternWeekNameForMonday(curMon);
+  const compactHelp = options.compactHelp;
+
+  const panel = document.createElement('div');
+  panel.className = 'form-card pattern-anchor-panel no-print settings-section';
+  if (options.sectionId) panel.id = options.sectionId;
+  panel.innerHTML = `
+    <h3>Ancrage calendaire (cycle patterns)</h3>
+    <p class="muted">
+      Indique quelle semaine ISO correspond à quelle semaine du cycle (S1, S2, S3…).
+      <strong>Cela ne modifie pas le planning en vue Semaine</strong> — seul un import explicite
+      recopie le modèle dans les cellules.
+      ${compactHelp ? ` <button type="button" class="nav settings-goto" data-tab="patterns">→ Import depuis Patterns</button>` : ''}
+    </p>
+    <p class="pattern-anchor-current">
+      <strong>Actuellement :</strong> S1 = semaine ISO <b>${anchorSummary.isoWeek}</b> (${anchorSummary.isoYear})
+      — lundi ${anchorSummary.anchorLabel}
+    </p>
+    <div class="form-grid pattern-anchor-grid">
+      <label>Année ISO
+        <input type="number" id="${idPrefix}-year" min="2020" max="2100" value="${defaultAnchorYear}">
+      </label>
+      <label>Semaine ISO
+        <input type="number" id="${idPrefix}-week" min="1" max="53" value="${defaultAnchorWeek}">
+      </label>
+      <label>Semaine du cycle
+        <select id="${idPrefix}-pattern">
+          ${PATTERN_CYCLE_WEEKS.map(p =>
+            `<option value="${patternEscapeAttr(p)}"${p === defaultAnchorPattern ? ' selected' : ''}>${p}</option>`
+          ).join('')}
+        </select>
+      </label>
+      <button type="button" class="primary" id="${idPrefix}-apply">Enregistrer l'ancrage</button>
+    </div>
+    <p class="muted pattern-anchor-preview" id="${idPrefix}-preview"></p>`;
+  root.appendChild(panel);
+  attachPatternAnchorHandlers(panel, idPrefix);
+  bindSettingsNavLinks(panel);
+  return panel;
+}
+
+function attachPatternAnchorHandlers(panel, idPrefix = 'pat-anchor') {
+  const yearEl = panel.querySelector(`#${idPrefix}-year`);
+  const weekEl = panel.querySelector(`#${idPrefix}-week`);
+  const patternEl = panel.querySelector(`#${idPrefix}-pattern`);
+  const previewEl = panel.querySelector(`#${idPrefix}-preview`);
+  const applyBtn = panel.querySelector(`#${idPrefix}-apply`);
 
   const readAnchorForm = () => ({
     isoYear: parseInt(yearEl.value, 10),
@@ -618,13 +629,14 @@ function bindCongeTypeCatalogEditor(card) {
   }
 }
 
-function renderCongesEditor(root) {
+function mountCongeTypeCatalogSection(root, options = {}) {
   const catalog = getCongeTypeCatalog();
   const defaultAddThemeId = getDefaultCongeThemeIdForIndex(catalog.length);
 
-  const catalogCard = document.createElement('div');
-  catalogCard.className = 'form-card conge-catalog-card';
-  catalogCard.innerHTML = `
+  const card = document.createElement('div');
+  card.className = 'form-card conge-catalog-card settings-section';
+  if (options.sectionId) card.id = options.sectionId;
+  card.innerHTML = `
     <h3>Modes de congés</h3>
     <p class="muted">Définissez les types d'absence et leur couleur dans le planning. Les changements s'appliquent immédiatement.</p>
     <table class="list conge-catalog-table">
@@ -655,9 +667,21 @@ function renderCongesEditor(root) {
     <div class="conge-catalog-actions-footer">
       <button type="button" class="nav" id="conge-type-themes-reset-all">Réinitialiser tous les thèmes</button>
     </div>`;
-  root.appendChild(catalogCard);
-  bindCongeTypeCatalogEditor(catalogCard);
-  bindCongeThemePicker($('#conge-catalog-add-theme'));
+  root.appendChild(card);
+  bindCongeTypeCatalogEditor(card);
+  bindCongeThemePicker(card.querySelector('#conge-catalog-add-theme'));
+  return card;
+}
+
+function renderCongesEditor(root) {
+  const hint = document.createElement('div');
+  hint.className = 'form-card settings-hint-card';
+  hint.innerHTML = `
+    <p class="muted">Modes et couleurs des absences :
+      <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-conge-types">Configuration → Modes de congés</button>
+    </p>`;
+  root.appendChild(hint);
+  bindSettingsNavLinks(hint);
 
   // formulaire d'ajout
   const form = document.createElement('div');
@@ -1175,14 +1199,14 @@ function bindEmployeeTypeCatalogEditor(card) {
   }
 }
 
-function renderEmployeesEditor(root) {
+function mountEmployeeTypeCatalogSection(root, options = {}) {
   const catalog = getEmployeeTypeCatalog();
-  const defaultTypeId = getDefaultEmployeeTypeId();
   const defaultAddThemeId = getDefaultThemeIdForCatalogIndex(catalog.length);
 
-  const legendCard = document.createElement('div');
-  legendCard.className = 'form-card employees-legend-card';
-  legendCard.innerHTML = `
+  const card = document.createElement('div');
+  card.className = 'form-card employees-legend-card settings-section';
+  if (options.sectionId) card.id = options.sectionId;
+  card.innerHTML = `
     <h3>Types de salariés</h3>
     <div class="employees-type-legend">${renderEmployeeTypeLegendGroups()}</div>
     <p class="muted">Couleur visible sur le nom en vue Semaine. Choisissez un thème pour chaque type, modifiez les libellés ou ajoutez de nouveaux types.</p>
@@ -1219,9 +1243,25 @@ function renderEmployeesEditor(root) {
         <button type="button" class="nav" id="emp-type-themes-reset-all">Réinitialiser tous les thèmes</button>
       </div>
     </div>`;
-  root.appendChild(legendCard);
-  bindEmployeeTypeCatalogEditor(legendCard);
-  bindThemePicker($('#emp-catalog-add-theme'));
+  root.appendChild(card);
+  bindEmployeeTypeCatalogEditor(card);
+  bindThemePicker(card.querySelector('#emp-catalog-add-theme'));
+  return card;
+}
+
+function renderEmployeesEditor(root) {
+  const defaultTypeId = getDefaultEmployeeTypeId();
+
+  const hint = document.createElement('div');
+  hint.className = 'form-card settings-hint-card';
+  hint.innerHTML = `
+    <h3>Types de salariés</h3>
+    <div class="employees-type-legend">${renderEmployeeTypeLegendGroups()}</div>
+    <p class="muted">Gérer les types et couleurs :
+      <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-emp-types">Configuration → Types de salariés</button>
+    </p>`;
+  root.appendChild(hint);
+  bindSettingsNavLinks(hint);
 
   const addCard = document.createElement('div');
   addCard.className = 'form-card employees-add-card';
@@ -1243,7 +1283,7 @@ function renderEmployeesEditor(root) {
   listCard.className = 'form-card employees-list-card';
   listCard.innerHTML = `
     <h3>Salariés (${STATE.employees.length})</h3>
-    <p class="muted">Glissez la poignée ⋮⋮ ou utilisez ↑ / ↓ pour définir l'ordre d'affichage (planning, listes). Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées et données personnelles (exportées dans le JSON).</p>`;
+    <p class="muted">Glissez la poignée ⋮⋮ ou utilisez ↑ / ↓ pour définir l'ordre d'affichage (planning, listes). Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées, la <b>fin de contrat</b> et les données personnelles (exportées dans le JSON).</p>`;
 
   if (STATE.employees.length === 0) {
     listCard.innerHTML += `<p class="muted">Aucun salarié pour l'instant.</p>`;
@@ -1282,8 +1322,13 @@ function renderEmployeesEditor(root) {
               </div>
             </td>
             <td class="emp-name-cell ${employeeTypeClass(emp)}">
-              <input type="text" class="emp-rename-input" data-idx="${idx}"
-                     value="${escapeHtml(emp)}" maxlength="60" aria-label="Nom de ${escapeHtml(emp)}">
+              <div class="emp-name-wrap">
+                <input type="text" class="emp-rename-input" data-idx="${idx}"
+                       value="${escapeHtml(emp)}" maxlength="60" aria-label="Nom de ${escapeHtml(emp)}">
+                ${info.contractEndDate
+                  ? `<span class="emp-contract-end-badge" title="Fin de contrat le ${escapeHtml(frFormatNumeric(info.contractEndDate))}">Fin ${escapeHtml(frFormatNumeric(info.contractEndDate))}</span>`
+                  : ''}
+              </div>
             </td>
             <td>
               <select class="emp-type-select ${employeeTypeSelectClass(getEmployeeTypeId(emp))}" data-emp="${escapeHtml(emp)}" aria-label="Type de ${escapeHtml(emp)}">
@@ -1303,6 +1348,11 @@ function renderEmployeesEditor(root) {
                 <div class="emp-info-grid">
                   ${EMPLOYEE_INFO_FIELDS.map(f => renderEmployeeInfoFieldHtml(emp, f, info)).join('')}
                 </div>
+                <p class="muted emp-contract-end-help">
+                  Si une <b>fin de contrat</b> est renseignée, toutes les présences (plein et spéciale)
+                  <em>après</em> cette date sont retirées du planning à l'enregistrement.
+                  Le jour de fin reste modifiable.
+                </p>
                 <div class="emp-info-actions">
                   <button type="button" class="primary emp-info-save" data-emp="${escapeHtml(emp)}">Enregistrer les infos</button>
                 </div>
@@ -1403,9 +1453,22 @@ function renderEmployeesEditor(root) {
       const emp = btn.dataset.emp;
       const panel = btn.closest('.emp-info-panel');
       if (!panel) return;
-      setEmployeeInfo(emp, readEmployeeInfoFromPanel(panel));
+      const info = readEmployeeInfoFromPanel(panel);
+      setEmployeeInfo(emp, info);
+      let cleared = 0;
+      if (info.contractEndDate) {
+        cleared = enforceEmployeeContractEnd(emp).cleared;
+      }
       saveState();
-      toast(`Informations enregistrées pour ${emp}`);
+      if (sessionInitialized) markSessionDirty();
+      let msg = `Informations enregistrées pour ${emp}`;
+      if (info.contractEndDate) {
+        msg += cleared > 0
+          ? ` — ${cleared} présence${cleared > 1 ? 's' : ''} retirée${cleared > 1 ? 's' : ''} après le ${frFormatNumeric(info.contractEndDate)}`
+          : ` — fin de contrat le ${frFormatNumeric(info.contractEndDate)}`;
+      }
+      toast(msg);
+      persistAndRender();
     };
   });
 }
@@ -1472,6 +1535,82 @@ function bindEmployeeListReorder(listCard) {
       persistAndRender();
     };
   });
+}
+
+function bindSettingsNavLinks(root) {
+  if (!root) return;
+  root.querySelectorAll('.settings-goto').forEach(btn => {
+    btn.onclick = () => goToTab(btn.dataset.tab || 'settings', btn.dataset.hash || '');
+  });
+}
+
+function renderSettingsEditor(root) {
+  const header = document.createElement('div');
+  header.className = 'controls settings-header';
+  header.innerHTML = `
+    <div class="label">Configuration</div>
+    <div class="help-text">
+      Paramètres globaux de l'application : types et couleurs, ancrage du cycle patterns,
+      informations pharmacie pour les contrats PDF.
+    </div>`;
+  root.appendChild(header);
+
+  const toc = document.createElement('nav');
+  toc.className = 'settings-toc';
+  toc.setAttribute('aria-label', 'Sections de configuration');
+  toc.innerHTML = `
+    <a href="#cfg-emp-types" class="settings-toc-link">Types de salariés</a>
+    <a href="#cfg-conge-types" class="settings-toc-link">Modes de congés</a>
+    <a href="#cfg-pattern-anchor" class="settings-toc-link">Ancrage cycle</a>
+    <a href="#cfg-contract-party" class="settings-toc-link">Pharmacie &amp; employeur</a>
+    <a href="#cfg-related" class="settings-toc-link">Autres réglages</a>`;
+  root.appendChild(toc);
+
+  toc.querySelectorAll('.settings-toc-link').forEach(link => {
+    link.onclick = (e) => {
+      e.preventDefault();
+      const id = link.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  });
+
+  mountEmployeeTypeCatalogSection(root, { sectionId: 'cfg-emp-types' });
+  mountCongeTypeCatalogSection(root, { sectionId: 'cfg-conge-types' });
+  mountPatternAnchorPanel(root, { sectionId: 'cfg-pattern-anchor', idPrefix: 'cfg-pat-anchor', compactHelp: true });
+
+  mountContractPartySection(root, { sectionId: 'cfg-contract-party' });
+
+  const related = document.createElement('div');
+  related.className = 'form-card settings-related-card settings-section';
+  related.id = 'cfg-related';
+  related.innerHTML = `
+    <h3>Autres réglages</h3>
+    <p class="muted">Ces éléments se gèrent dans leurs onglets dédiés :</p>
+    <div class="settings-related-grid">
+      <button type="button" class="settings-related-item settings-goto" data-tab="patterns">
+        <span class="settings-related-icon">🧩</span>
+        <span class="settings-related-label">Modèle de cycle (patterns)</span>
+        <span class="settings-related-desc">Grille 6 semaines-types et import vers le planning</span>
+      </button>
+      <button type="button" class="settings-related-item settings-goto" data-tab="feries">
+        <span class="settings-related-icon">🎉</span>
+        <span class="settings-related-label">Jours fériés</span>
+        <span class="settings-related-desc">Ponts et jours offerts personnalisés</span>
+      </button>
+      <button type="button" class="settings-related-item settings-goto" data-tab="gardes">
+        <span class="settings-related-icon">🏥</span>
+        <span class="settings-related-label">Jours de garde</span>
+        <span class="settings-related-desc">Périodes de garde affichées dans le planning</span>
+      </button>
+      <button type="button" class="settings-related-item settings-goto" data-tab="contract">
+        <span class="settings-related-icon">📄</span>
+        <span class="settings-related-label">Contrats PDF</span>
+        <span class="settings-related-desc">Journées travaillées par salarié</span>
+      </button>
+    </div>`;
+  root.appendChild(related);
+  bindSettingsNavLinks(related);
 }
 
 function escapeHtml(s) {

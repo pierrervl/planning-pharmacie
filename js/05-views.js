@@ -8,14 +8,21 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'contract', 'feries', 'gardes'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'contract', 'feries', 'gardes', 'settings'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract'],
   journees: ['feries', 'gardes'],
+  config:   ['settings'],
 };
+
+function goToTab(tab, hash) {
+  if (VALID_TABS.includes(tab)) STATE.ui.currentTab = tab;
+  if (hash) STATE.ui.settingsScrollHash = hash;
+  persistAndRender();
+}
 
 function groupForTab(tab) {
   for (const [group, tabs] of Object.entries(TAB_GROUPS)) {
@@ -54,9 +61,18 @@ function render() {
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
+    case 'settings':       renderSettingsEditor(content); break;
   }
   renderSidebar();
   initFrDateInputs(content);
+  if (STATE.ui.settingsScrollHash) {
+    const hash = STATE.ui.settingsScrollHash;
+    STATE.ui.settingsScrollHash = '';
+    requestAnimationFrame(() => {
+      const el = document.getElementById(hash);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 }
 
 /* ===========================================================================
@@ -100,19 +116,23 @@ function chunkDaysForPrint(days, weeksPerPage) {
 
 function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   const { editable = true, forPrint = false } = options;
+  const afterContract = isAfterEmployeeContractEnd(emp, iso);
   const c = computeCell(emp, iso, shift);
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
   const passesFilter = forPrint || cellPassesTypeFilter(c);
   const cls = ['cell', cellDisplayClass(c), shiftCls, weekParityClass(d)];
-  if (editable) cls.unshift('editable');
+  const canEdit = editable && !afterContract;
+  if (canEdit) cls.unshift('editable');
   if (!passesFilter) cls.push('filtered-out');
   if (c.ferie) cls.push('ferie');
+  if (afterContract) cls.push('post-contract');
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const hint = editable ? ' — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)' : '';
+  const hint = canEdit ? ' — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)' : '';
+  const contractHint = afterContract ? ' — après fin de contrat' : '';
   const title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}` +
                 (c.ferie ? ` (${c.ferieLabel})` : '') +
-                (c.garde ? ` (${c.gardeLabel})` : '') + hint;
-  const data = editable ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
+                (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint;
+  const data = canEdit ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
   return `<td class="${cls.join(' ')}"${data} title="${title}"></td>`;
 }
 
@@ -120,6 +140,7 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
 function countPresences(employees, dateIso, shift) {
   let n = 0;
   for (const emp of employees) {
+    if (isAfterEmployeeContractEnd(emp, dateIso)) continue;
     if (computeCell(emp, dateIso, shift).full) n++;
   }
   return n;
@@ -281,6 +302,10 @@ function attachWeekTableHandlers(wrap) {
       const emp = el.dataset.emp;
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) {
+        toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
       const cur = getPlanningValue(emp, iso, shift);
       setPlanningValue(emp, iso, shift, nextPlanningValueOnLeftClick(cur, e));
       persistAndRender();
@@ -290,6 +315,10 @@ function attachWeekTableHandlers(wrap) {
       const emp = el.dataset.emp;
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) {
+        toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
       const cur = getPlanningValue(emp, iso, shift);
       setPlanningValue(emp, iso, shift, nextPlanningValueOnRightClick(cur));
       persistAndRender();
@@ -903,7 +932,8 @@ function renderSidebar() {
   const isEmployeeTab = STATE.ui.currentTab === 'emp-overview'
     || STATE.ui.currentTab === 'emp-detail'
     || STATE.ui.currentTab === 'employees'
-    || STATE.ui.currentTab === 'contract';
+    || STATE.ui.currentTab === 'contract'
+    || STATE.ui.currentTab === 'settings';
 
   if (!isEmployeeTab) {
     h += `<div class="side-section">

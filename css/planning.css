@@ -362,6 +362,17 @@ table.planning td.cell.filtered-out {
 table.planning td.cell.filtered-out.editable:hover {
   opacity: 0.85;
 }
+table.planning td.cell.post-contract {
+  opacity: 0.38;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 0, 0, 0.04) 4px,
+    rgba(0, 0, 0, 0.04) 8px
+  );
+  cursor: not-allowed;
+}
 table.planning th.day-group {
   border-bottom: none;
   padding-bottom: 1px;
@@ -1717,6 +1728,90 @@ table.list .type-badge.conge-type-rec {
 }
 .conge-catalog-actions-footer { margin-top: 10px; }
 .conge-catalog-actions-footer .nav { font-size: 12px; }
+
+/* Page Configuration ----------------------------------------------------- */
+.settings-section {
+  scroll-margin-top: 16px;
+}
+.settings-header .help-text { max-width: 720px; }
+.settings-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.settings-toc-link {
+  display: inline-block;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.settings-toc-link:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+.settings-hint-card {
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.settings-hint-card h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.settings-hint-card .employees-type-legend {
+  margin-bottom: 8px;
+}
+.settings-hint-card .nav.settings-goto {
+  font-size: 12px;
+  padding: 3px 10px;
+  vertical-align: baseline;
+}
+.settings-related-card h3 { margin-bottom: 8px; }
+.settings-related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.settings-related-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.settings-related-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.settings-related-icon { font-size: 20px; line-height: 1; }
+.settings-related-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings-related-desc {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
 .type-CP { background: var(--cp); }
 .type-RTT { background: var(--rtt); }
 .type-Maladie { background: var(--mal); }
@@ -2024,6 +2119,28 @@ table.employees-list td.emp-name-cell .emp-rename-input {
 table.employees-list td.emp-name-cell .emp-rename-input:focus {
   background: var(--bg-panel);
   border-color: var(--line-strong);
+}
+.emp-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.emp-contract-end-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warn);
+  background: rgba(200, 82, 63, 0.12);
+  border: 1px solid rgba(200, 82, 63, 0.35);
+  border-radius: 8px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.emp-contract-end-help {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
 }
 .employees-add-row {
   display: flex;

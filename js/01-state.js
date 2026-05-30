@@ -265,6 +265,7 @@ function migrateState(state) {
 
   if (!state.employeeInfo) state.employeeInfo = {};
   ensureEmployeeInfo(state);
+  enforceAllContractEnds(state);
 
   if (!state.contractDays) state.contractDays = {};
   ensureContractDays(state);

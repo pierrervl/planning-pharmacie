@@ -421,6 +421,7 @@ const EMPLOYEE_INFO_FIELDS = [
   { key: 'birthDate', label: 'Date de naissance', type: 'fr-date' },
   { key: 'birthPlace', label: 'Lieu de naissance', type: 'text', placeholder: 'Ville' },
   { key: 'secuNumber', label: 'N° sécurité sociale', type: 'text', mono: true, placeholder: '1 23 45 67 890 123 45' },
+  { key: 'contractEndDate', label: 'Fin de contrat', type: 'fr-date' },
 ];
 
 function makeEmptyEmployeeInfo() {
@@ -432,6 +433,7 @@ function makeEmptyEmployeeInfo() {
     birthDate: '',
     birthPlace: '',
     secuNumber: '',
+    contractEndDate: '',
   };
 }
 
@@ -577,9 +579,19 @@ function ensureContractDays(state) {
   }
 }
 
+function getEmployeeContractEndDate(emp, state = STATE) {
+  return getEmployeeInfo(emp, state).contractEndDate || '';
+}
+
+function isAfterEmployeeContractEnd(emp, dateIso, state = STATE) {
+  const end = getEmployeeContractEndDate(emp, state);
+  if (!end || !dateIso) return false;
+  return dateIso > end;
+}
+
 function formatEmployeeInfoDisplay(field, value) {
   if (!value) return '—';
-  if (field.key === 'birthDate') return frFormatNumeric(value);
+  if (field.key === 'birthDate' || field.key === 'contractEndDate') return frFormatNumeric(value);
   return value;
 }
 

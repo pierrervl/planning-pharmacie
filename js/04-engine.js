@@ -129,9 +129,11 @@ function getPlanningValue(empName, dateIso, shift) {
   return day[shift];
 }
 
-function setPlanningValue(empName, dateIso, shift, value) {
-  const day = ensurePlanningDay(empName, dateIso);
+function setPlanningValue(empName, dateIso, shift, value, state = STATE) {
+  if (isAfterEmployeeContractEnd(empName, dateIso, state)) return false;
+  const day = ensurePlanningDay(empName, dateIso, state);
   day[shift] = value;
+  return true;
 }
 
 /* Import pattern → planning pour une semaine calendaire ---------------- */
@@ -165,7 +167,7 @@ function periodHasPlanningData(startIso, endIso, employees, state = STATE) {
   return false;
 }
 
-function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 'fillEmpty' */) {
+function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 'fillEmpty' */, state = STATE) {
   let updated = 0;
   let skipped = 0;
   let d = fromISO(startIso);
@@ -173,15 +175,19 @@ function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 
   while (d <= last) {
     const iso = toISO(d);
     for (const emp of employees) {
+      if (isAfterEmployeeContractEnd(emp, iso, state)) {
+        skipped += 2;
+        continue;
+      }
       for (const shift of ['matin', 'aprem']) {
-        const patVal = patternValueForDate(emp, iso, shift);
-        const cur = getPlanningValue(emp, iso, shift);
+        const patVal = patternValueForDate(emp, iso, shift, null, null, state);
+        const day = (state.planning[emp] || {})[iso];
+        const cur = day ? day[shift] : null;
         if (mode === 'fillEmpty' && cur !== null) {
           skipped++;
           continue;
         }
-        setPlanningValue(emp, iso, shift, patVal);
-        updated++;
+        if (setPlanningValue(emp, iso, shift, patVal, state)) updated++;
       }
     }
     d = addDays(d, 1);
@@ -207,9 +213,11 @@ function applyPatternToPeriod(empName, startIso, endIso, patternName, state = ST
   const last = fromISO(end);
   while (d <= last) {
     const iso = toISO(d);
-    const day = ensurePlanningDay(empName, iso, state);
-    day.matin = patternValueForDate(empName, iso, 'matin', startIso, patternName, state);
-    day.aprem = patternValueForDate(empName, iso, 'aprem', startIso, patternName, state);
+    if (!isAfterEmployeeContractEnd(empName, iso, state)) {
+      const day = ensurePlanningDay(empName, iso, state);
+      day.matin = patternValueForDate(empName, iso, 'matin', startIso, patternName, state);
+      day.aprem = patternValueForDate(empName, iso, 'aprem', startIso, patternName, state);
+    }
     d = addDays(d, 1);
   }
 }
@@ -263,6 +271,39 @@ function clearPresenceForPeriod(empName, startIso, endIso, state = STATE) {
       }
     }
     d = addDays(d, 1);
+  }
+  return cleared;
+}
+
+/* Retire les présences (plein / spéciale) strictement après une date ----- */
+function clearPresenceAfterDate(empName, endIso, state = STATE) {
+  if (!endIso || !state.planning[empName]) return 0;
+  let cleared = 0;
+  const planning = state.planning[empName];
+  for (const iso of Object.keys(planning)) {
+    if (iso <= endIso) continue;
+    const day = planning[iso];
+    for (const shift of ['matin', 'aprem']) {
+      if (day[shift] === PLANNING_PRESENT || day[shift] === PLANNING_SPECIAL) {
+        day[shift] = null;
+        cleared++;
+      }
+    }
+    if (day.matin == null && day.aprem == null) delete planning[iso];
+  }
+  return cleared;
+}
+
+function enforceEmployeeContractEnd(empName, state = STATE) {
+  const end = getEmployeeContractEndDate(empName, state);
+  if (!end) return { cleared: 0, endDate: '' };
+  return { cleared: clearPresenceAfterDate(empName, end, state), endDate: end };
+}
+
+function enforceAllContractEnds(state = STATE) {
+  let cleared = 0;
+  for (const emp of state.employees || []) {
+    cleared += enforceEmployeeContractEnd(emp, state).cleared;
   }
   return cleared;
 }
