@@ -121,10 +121,16 @@ function buildDefaultState() {
     /* fériés personnalisés ajoutés/retirés                              */
     feriesAdd:    [],  // dates ISO ajoutées
     feriesRemove: [],  // dates ISO retirées du calcul auto
-    /* jours de garde pharmacie : [{ id, date, label }]                 */
+    /* jours de garde pharmacie : [{ id, start, end, label }]            */
     gardes:       [],
     /* type par salarié : Pharmacien/Préparateur × étudiant/salarié */
     employeeTypes: {},
+    /* coordonnées et infos personnelles : { empName: { phone, email, … } } */
+    employeeInfo: {},
+    /* jours travaillés pour contrats : { empName: [{ id, date, hours, note }] } */
+    contractDays: {},
+    pharmacyInfo: {},
+    employerInfo: {},
     /* préférences UI                                                    */
     ui: {
       currentTab:     'week',
@@ -178,6 +184,9 @@ function buildDefaultState() {
   }
 
   ensureEmployeeTypes(state);
+  ensureEmployeeInfo(state);
+  ensureContractDays(state);
+  ensureContractPartyInfo(state);
   return state;
 }
 
@@ -235,8 +244,25 @@ function migrateState(state) {
   }
 
   if (!state.gardes) state.gardes = [];
+  ensureGardes(state);
   if (!state.employeeTypes) state.employeeTypes = {};
   ensureEmployeeTypes(state);
+
+  if (!state.employeeInfo) state.employeeInfo = {};
+  ensureEmployeeInfo(state);
+
+  if (!state.contractDays) state.contractDays = {};
+  ensureContractDays(state);
+  ensureContractPartyInfo(state);
+
+  if (!state.ui.contractEmp && (state.employees || []).length) {
+    state.ui.contractEmp = state.employees[0];
+  }
+  if (!state.ui.contractDocTitle) {
+    state.ui.contractDocTitle = 'Contrat de travail — planning des journées';
+  }
+  if (state.ui.contractPharmacyName == null) state.ui.contractPharmacyName = '';
+  if (!state.ui.employeeDetailsOpen) state.ui.employeeDetailsOpen = [];
 
   if (!state.affectations) state.affectations = {};
   for (const emp of (state.employees || [])) {
@@ -303,6 +329,7 @@ function replaceEmployeeInUiArrays(oldName, newName) {
   if (STATE.ui.employeeView === oldName) STATE.ui.employeeView = newName;
   if (STATE.ui.monthEmp === oldName) STATE.ui.monthEmp = newName;
   if (STATE.ui.yearEmp === oldName) STATE.ui.yearEmp = newName;
+  if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = newName;
 }
 
 function addEmployee(name, type = 'Pharmacien salarié') {
@@ -318,6 +345,9 @@ function addEmployee(name, type = 'Pharmacien salarié') {
   STATE.affectations[n] = [];
   STATE.planning[n] = {};
   setEmployeeType(n, type);
+  setEmployeeInfo(n, makeEmptyEmployeeInfo());
+  if (!STATE.contractDays) STATE.contractDays = {};
+  STATE.contractDays[n] = [];
   if (!STATE.ui.filtersEmp.includes(n)) STATE.ui.filtersEmp.push(n);
   if (!STATE.ui.employeeChartEmps.includes(n)) STATE.ui.employeeChartEmps.push(n);
   if (!STATE.ui.employeeView) STATE.ui.employeeView = n;
@@ -339,6 +369,15 @@ function renameEmployee(oldName, newName) {
   moveEmployeeDataKey(STATE.planning, oldName, next);
   if (!STATE.employeeTypes) STATE.employeeTypes = {};
   moveEmployeeDataKey(STATE.employeeTypes, oldName, next);
+  if (!STATE.employeeInfo) STATE.employeeInfo = {};
+  moveEmployeeDataKey(STATE.employeeInfo, oldName, next);
+  if (!STATE.contractDays) STATE.contractDays = {};
+  moveEmployeeDataKey(STATE.contractDays, oldName, next);
+
+  if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = next;
+  if (STATE.ui.employeeDetailsOpen) {
+    STATE.ui.employeeDetailsOpen = STATE.ui.employeeDetailsOpen.map(e => (e === oldName ? next : e));
+  }
 
   const i = STATE.employees.indexOf(oldName);
   if (i >= 0) STATE.employees[i] = next;

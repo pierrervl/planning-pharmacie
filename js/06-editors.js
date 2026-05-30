@@ -27,7 +27,7 @@ function renderPatternsEditor(root) {
     <div class="label">Modèle de cycle — 6 semaines</div>
     <div class="help-text">
       Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A, 6 semaines-types
-      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos.
+      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · Ctrl+clic = présence spéciale (orange).
       Tous les salariés sont listés ici (filtres latéraux ignorés).
       L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
@@ -121,7 +121,7 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
   const cls = ['cell', 'editable', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos`;
+  const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos · Ctrl+clic : présence spéciale (orange)`;
   return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}"></td>`;
 }
 
@@ -186,13 +186,16 @@ function buildPatternTableBody(tbody, visibleEmps, weekNames) {
 
 function attachPatternCellHandlers(container) {
   container.querySelectorAll('td.pattern-cell[data-pat-emp]').forEach(el => {
-    el.onclick = () => {
+    el.onclick = (e) => {
       const emp = el.dataset.patEmp;
       const pname = el.dataset.patName;
       const dayIdx = parseInt(el.dataset.patDay, 10);
       const shift = el.dataset.patShift;
       const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      setPatternWeekValue(emp, pname, dayIdx, shift, cur === 1 ? 0 : 1);
+      const next = (e.ctrlKey || e.metaKey)
+        ? toggleSpecialPlanningValue(cur)
+        : cyclePlanningValue(cur);
+      setPatternWeekValue(emp, pname, dayIdx, shift, next);
       persistAndRender();
     };
   });
@@ -702,7 +705,7 @@ function renderGardesEditor(root) {
   ctrl.innerHTML = `
     <div class="label">Jours de garde</div>
     <div class="help-text">
-      Indique les dates où la pharmacie assure la garde (week-ends, jours fériés, etc.).
+      Saisissez une période (du … au …) ou un seul jour (même date début et fin).
       Les jours de garde apparaissent dans le planning avec un en-tête de colonne rouge clair.
     </div>
     <div class="spacer"></div>
@@ -710,14 +713,19 @@ function renderGardesEditor(root) {
   `;
   root.appendChild(ctrl);
 
+  const today = todayISO();
   const form = document.createElement('div');
   form.className = 'form-card';
   form.innerHTML = `
-    <h3>Ajouter un jour de garde</h3>
+    <h3>Ajouter une période de garde</h3>
     <div class="form-grid">
       <div class="field">
-        <label>Date</label>
-        <input type="text" class="fr-date" id="gd-date" data-iso="${todayISO()}" value="${frFormatNumeric(todayISO())}">
+        <label>Du</label>
+        <input type="text" class="fr-date" id="gd-start" data-iso="${today}" value="${frFormatNumeric(today)}">
+      </div>
+      <div class="field">
+        <label>Au</label>
+        <input type="text" class="fr-date" id="gd-end" data-iso="${today}" value="${frFormatNumeric(today)}">
       </div>
       <div class="field">
         <label>Libellé</label>
@@ -725,46 +733,50 @@ function renderGardesEditor(root) {
       </div>
       <button class="primary" id="gd-add">+ Ajouter</button>
     </div>
+    <p class="muted">Pour un seul jour, indiquez la même date en début et fin.</p>
   `;
   root.appendChild(form);
 
   $('#gd-add').onclick = () => {
-    const d = readFrDateInput($('#gd-date'));
+    const start = readFrDateInput($('#gd-start'));
+    const end = readFrDateInput($('#gd-end'));
     const l = ($('#gd-label').value || '').trim() || 'Garde';
-    if (!d) return;
-    const existing = STATE.gardes.find(g => g.date === d);
-    if (existing) {
-      existing.label = l;
-    } else {
-      STATE.gardes.push({
-        id: 'gd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        date: d,
-        label: l
-      });
+    if (!start || !end) {
+      toast('Dates requises (format jj/mm/aaaa).', true);
+      return;
     }
-    STATE.gardes.sort((a, b) => a.date.localeCompare(b.date));
+    const r = addGardePeriod(start, end, l);
+    if (!r.ok) {
+      toast(r.error, true);
+      return;
+    }
     persistAndRender();
-    toast('Jour de garde enregistré');
+    const dayLbl = r.days === 1 ? '1 jour' : `${r.days} jours`;
+    toast(r.overlaps
+      ? `Garde enregistrée (${dayLbl}) — chevauche une période existante`
+      : `Garde enregistrée (${dayLbl})`);
   };
 
   const card = document.createElement('div');
   card.className = 'form-card';
   const year = STATE.ui.yearShown;
   const allGardes = collectGardesForYear(year);
-  let h = `<h3>Jours de garde ${year} (${allGardes.length})</h3>`;
+  let h = `<h3>Périodes de garde ${year} (${allGardes.length})</h3>`;
   if (allGardes.length === 0) {
-    h += `<p class="muted">Aucun jour de garde pour ${year}.</p>`;
+    h += `<p class="muted">Aucune garde pour ${year}.</p>`;
   } else {
     h += `<table class="list"><thead><tr>
-      <th>Date</th><th>Jour</th><th>Libellé</th><th></th>
+      <th>Du</th><th>Au</th><th>Jours</th><th>Libellé</th><th></th>
     </tr></thead><tbody>`;
     for (const g of allGardes) {
-      const d = fromISO(g.date);
+      const days = gardePeriodDayCount(g);
+      const single = g.start === g.end;
       h += `<tr>
-        <td>${g.date}</td>
-        <td>${DAY_NAMES_LONG[d.getDay()]}</td>
-        <td>${g.label || 'Garde'}</td>
-        <td><button class="del" data-gd-rm="${g.id}">Retirer</button></td>
+        <td>${frFormatNumeric(g.start)}</td>
+        <td>${single ? '—' : frFormatNumeric(g.end)}</td>
+        <td>${days}${single ? ' (1 jour)' : ''}</td>
+        <td>${escapeHtml(g.label || 'Garde')}</td>
+        <td><button class="del" data-gd-rm="${escapeHtml(g.id)}">Retirer</button></td>
       </tr>`;
     }
     h += `</tbody></table>`;
@@ -775,8 +787,10 @@ function renderGardesEditor(root) {
   $('#gd-year').onchange = (e) => { STATE.ui.yearShown = parseInt(e.target.value, 10); persistAndRender(); };
   root.querySelectorAll('[data-gd-rm]').forEach(b => {
     b.onclick = () => {
-      STATE.gardes = STATE.gardes.filter(g => g.id !== b.dataset.gdRm);
+      if (!confirm('Retirer cette période de garde ?')) return;
+      removeGarde(b.dataset.gdRm);
       persistAndRender();
+      toast('Période retirée');
     };
   });
 }
@@ -830,7 +844,7 @@ function renderEmployeesEditor(root) {
   listCard.className = 'form-card employees-list-card';
   listCard.innerHTML = `
     <h3>Salariés (${STATE.employees.length})</h3>
-    <p class="muted">Modifiez le nom ou le type. Aperçu des couleurs ci-dessous · le type est enregistré automatiquement.</p>`;
+    <p class="muted">Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées et données personnelles (exportées dans le JSON).</p>`;
 
   if (STATE.employees.length === 0) {
     listCard.innerHTML += `<p class="muted">Aucun salarié pour l'instant.</p>`;
@@ -854,8 +868,11 @@ function renderEmployeesEditor(root) {
         </tr>
       </thead>
       <tbody>
-        ${STATE.employees.map((emp, idx) => `
-          <tr data-emp="${escapeHtml(emp)}">
+        ${STATE.employees.map((emp, idx) => {
+          const info = getEmployeeInfo(emp);
+          const open = (STATE.ui.employeeDetailsOpen || []).includes(emp);
+          return `
+          <tr class="emp-summary-row" data-emp="${escapeHtml(emp)}">
             <td class="emp-name-cell ${employeeTypeClass(emp)}">
               <input type="text" class="emp-rename-input" data-idx="${idx}"
                      value="${escapeHtml(emp)}" maxlength="60" aria-label="Nom de ${escapeHtml(emp)}">
@@ -867,8 +884,24 @@ function renderEmployeesEditor(root) {
             </td>
             <td class="emp-actions-col">
               <button type="button" class="nav emp-save-btn" data-idx="${idx}">Enregistrer</button>
+              <button type="button" class="nav emp-info-toggle" data-emp="${escapeHtml(emp)}" aria-expanded="${open}">
+                ${open ? 'Infos ▲' : 'Infos ▼'}
+              </button>
             </td>
-          </tr>`).join('')}
+          </tr>
+          <tr class="emp-details-row${open ? '' : ' hidden'}" data-emp="${escapeHtml(emp)}">
+            <td colspan="3">
+              <div class="emp-info-panel">
+                <div class="emp-info-grid">
+                  ${EMPLOYEE_INFO_FIELDS.map(f => renderEmployeeInfoFieldHtml(emp, f, info)).join('')}
+                </div>
+                <div class="emp-info-actions">
+                  <button type="button" class="primary emp-info-save" data-emp="${escapeHtml(emp)}">Enregistrer les infos</button>
+                </div>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
       </tbody>`;
     listCard.appendChild(tbl);
   }
@@ -939,6 +972,31 @@ function renderEmployeesEditor(root) {
         e.preventDefault();
         input.closest('tr').querySelector('.emp-save-btn').click();
       }
+    };
+  });
+
+  listCard.querySelectorAll('.emp-info-toggle').forEach(btn => {
+    btn.onclick = () => {
+      const emp = btn.dataset.emp;
+      if (!STATE.ui.employeeDetailsOpen) STATE.ui.employeeDetailsOpen = [];
+      const open = STATE.ui.employeeDetailsOpen.includes(emp);
+      if (open) {
+        STATE.ui.employeeDetailsOpen = STATE.ui.employeeDetailsOpen.filter(e => e !== emp);
+      } else {
+        STATE.ui.employeeDetailsOpen.push(emp);
+      }
+      persistAndRender();
+    };
+  });
+
+  listCard.querySelectorAll('.emp-info-save').forEach(btn => {
+    btn.onclick = () => {
+      const emp = btn.dataset.emp;
+      const panel = btn.closest('.emp-info-panel');
+      if (!panel) return;
+      setEmployeeInfo(emp, readEmployeeInfoFromPanel(panel));
+      saveState();
+      toast(`Informations enregistrées pour ${emp}`);
     };
   });
 }

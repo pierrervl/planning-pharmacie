@@ -1789,12 +1789,391 @@ table.employees-list .emp-rename-input {
   font-size: 13px;
 }
 table.employees-list .emp-actions-col {
-  width: 120px;
+  width: 200px;
   white-space: nowrap;
+}
+table.employees-list .emp-actions-col .nav {
+  margin-right: 4px;
 }
 table.employees-list .emp-save-btn {
   padding: 4px 10px;
   font-size: 11px;
+}
+table.employees-list .emp-info-toggle {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+tr.emp-details-row.hidden {
+  display: none;
+}
+tr.emp-details-row td {
+  padding: 0 12px 14px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+.emp-info-panel {
+  padding: 12px 0 4px;
+}
+.emp-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px 16px;
+}
+.emp-info-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.emp-info-grid label.emp-info-wide {
+  grid-column: 1 / -1;
+}
+.emp-info-grid input {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.emp-info-grid input.emp-info-mono {
+  font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+.emp-info-actions {
+  margin-top: 12px;
+}
+.emp-info-actions .primary {
+  font-size: 12px;
+  padding: 6px 14px;
+}
+
+/* =========================================================================
+   CONTRAT — jours travaillés
+   ========================================================================= */
+.contract-select-row,
+.contract-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+.contract-select-row label,
+.contract-add-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  min-width: 160px;
+}
+.contract-select-row input[type="text"],
+.contract-select-row select,
+.contract-add-row input[type="text"],
+.contract-add-row input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+.contract-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.contract-info-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-soft);
+  width: 200px;
+  padding: 6px 12px 6px 0;
+  vertical-align: top;
+}
+.contract-info-table td {
+  padding: 6px 0;
+}
+table.contract-days-table {
+  width: 100%;
+  margin-top: 8px;
+}
+table.contract-days-table tfoot th {
+  background: var(--bg-soft);
+  font-weight: 700;
+}
+.contract-actions-col {
+  width: 56px;
+  text-align: center;
+}
+.contract-print-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin: 16px 0 24px;
+}
+.contract-print-actions .primary-btn {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--r);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.contract-print-actions .primary-btn:hover {
+  filter: brightness(0.95);
+}
+.contract-party-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+  margin-bottom: 14px;
+}
+@media (max-width: 720px) {
+  .contract-party-columns { grid-template-columns: 1fr; }
+}
+.contract-party-col h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.contract-party-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.contract-party-grid label.contract-party-wide {
+  grid-column: 1 / -1;
+}
+.contract-party-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.contract-party-grid input {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+.contract-party-save {
+  font-size: 12px;
+  padding: 6px 14px;
+}
+
+#contract-print-root { display: none; }
+body.printing-contract .app { display: none !important; }
+body.printing-contract #contract-print-root {
+  display: block !important;
+  position: static;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+}
+
+.cp-doc { max-width: 100%; }
+.cp-header {
+  border-bottom: 3px solid #2e7d32;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+.cp-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.cp-brand-name {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #2e7d32;
+}
+.cp-brand-sub {
+  font-size: 9.5pt;
+  color: #555;
+  margin-top: 2px;
+}
+.cp-doc-date {
+  font-size: 9pt;
+  color: #666;
+  text-align: right;
+}
+.cp-title {
+  font-size: 16pt;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #111;
+}
+.cp-period {
+  margin: 0;
+  font-size: 9.5pt;
+  color: #555;
+}
+
+.cp-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.cp-block {
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  overflow: hidden;
+  page-break-inside: avoid;
+}
+.cp-block-head {
+  background: linear-gradient(180deg, #f4f6f4 0%, #e8ece8 100%);
+  border-bottom: 1px solid #c8c8c8;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cp-block-title {
+  font-size: 10pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2e7d32;
+}
+.cp-block-sub {
+  font-size: 9pt;
+  font-weight: 600;
+  color: #333;
+}
+.cp-block-body {
+  padding: 10px 12px;
+  background: #fff;
+}
+.cp-establishment-name {
+  font-size: 11pt;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #111;
+}
+.cp-subsection-label {
+  font-size: 8.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #777;
+  margin: 10px 0 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #ddd;
+}
+.cp-line {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 9.5pt;
+}
+.cp-line-label {
+  flex: 0 0 42%;
+  color: #666;
+}
+.cp-line-value {
+  flex: 1;
+  font-weight: 500;
+  color: #111;
+}
+.cp-empty {
+  margin: 0;
+  color: #999;
+  font-style: italic;
+}
+
+.cp-schedule {
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  page-break-inside: avoid;
+}
+.cp-schedule-head {
+  border-bottom: 1px solid #c8c8c8;
+}
+.cp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+.cp-table thead th {
+  background: #2e7d32;
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
+}
+.cp-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.cp-table tbody tr:nth-child(even) td {
+  background: #fafafa;
+}
+.cp-table tfoot td {
+  padding: 9px 10px;
+  background: #eef2ee;
+  border-top: 2px solid #2e7d32;
+}
+.cp-col-hours {
+  width: 72px;
+  text-align: right;
+  white-space: nowrap;
+}
+.cp-table thead th.cp-col-hours,
+.cp-table tbody td.cp-col-hours,
+.cp-table tfoot td.cp-col-hours {
+  text-align: right;
+}
+
+.cp-footer { page-break-inside: avoid; }
+.cp-legal {
+  font-size: 8.5pt;
+  color: #555;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+.cp-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+.cp-sig-label {
+  font-weight: 700;
+  font-size: 10pt;
+  margin: 0 0 2px;
+}
+.cp-sig-hint {
+  font-size: 9pt;
+  color: #666;
+  margin: 0 0 12px;
+}
+.cp-sig-line {
+  border-bottom: 1px solid #333;
+  height: 40px;
+  margin-bottom: 6px;
+}
+.cp-sig-date {
+  font-size: 8pt;
+  color: #888;
+  margin: 0;
 }
 
 /* =========================================================================
@@ -1878,6 +2257,22 @@ table.employees-list .emp-save-btn {
   body.printing-week .planning-wrap-print {
     overflow: visible;
     page-break-inside: avoid;
+  }
+
+  body.printing-contract .app { display: none !important; }
+  body.printing-contract #contract-print-root {
+    display: block !important;
+    position: static;
+    width: 100%;
+  }
+  body.printing-contract .cp-block,
+  body.printing-contract .cp-schedule,
+  body.printing-contract .cp-footer {
+    page-break-inside: avoid;
+  }
+  body.printing-contract .cp-table thead th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

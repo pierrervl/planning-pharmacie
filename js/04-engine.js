@@ -1,6 +1,10 @@
 /* Moteur de calcul du planning */
 'use strict';
 
+const PLANNING_REST = 0;
+const PLANNING_PRESENT = 1;
+const PLANNING_SPECIAL = 2;
+
 /* Trouve l'affectation active pour un salarié à une date donnée -------- */
 function activeAssignment(empName, dateIso) {
   const list = STATE.affectations[empName] || [];
@@ -39,8 +43,9 @@ function setPatternWeekValue(empName, pname, dayIdx, shift, value) {
 }
 
 function patternCellDisplayClass(val) {
-  if (val === 1) return 'plein';
-  if (val === 0) return 'vide rest';
+  if (val === PLANNING_SPECIAL) return 'plein special';
+  if (val === PLANNING_PRESENT) return 'plein';
+  if (val === PLANNING_REST) return 'vide rest';
   return 'vide empty';
 }
 
@@ -208,11 +213,6 @@ function applyPatternToPeriod(empName, startIso, endIso, patternName, state = ST
     d = addDays(d, 1);
   }
 }
-
-/* Cycle clic : non défini → présent → repos → présent ---------------- */
-const PLANNING_REST = 0;
-const PLANNING_PRESENT = 1;
-const PLANNING_SPECIAL = 2;
 
 function cyclePlanningValue(cur) {
   if (cur === null || cur === undefined) return PLANNING_PRESENT;
