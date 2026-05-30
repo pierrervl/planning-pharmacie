@@ -118,6 +118,8 @@ function buildDefaultState() {
     patternAnchorDate: INITIAL_DATA.patternAnchorDate,
     /* congés : [{ id, emp, start, end, type, comment }]                */
     conges: [],
+    /* modes de congés : [{ id, label, themeId }] */
+    congeTypeCatalog: [],
     /* fériés personnalisés ajoutés/retirés                              */
     feriesAdd:    [],  // dates ISO ajoutées
     feriesRemove: [],  // dates ISO retirées du calcul auto
@@ -190,6 +192,7 @@ function buildDefaultState() {
   ensureEmployeeTypeCatalog(state);
   ensureEmployeeTypes(state);
   ensureEmployeeTypeColors(state);
+  ensureCongeTypeCatalog(state);
   ensureEmployeeInfo(state);
   ensureContractDays(state);
   ensureContractPartyInfo(state);
@@ -221,7 +224,7 @@ function migrateState(state) {
   if (!state.ui) state.ui = {};
   if (!state.ui.patternLayout) state.ui.patternLayout = 'unified';
   if (!state.ui.filterTypes) {
-    state.ui.filterTypes = ['work','rest','empty','CP','RTT','Maladie','Formation','Sans solde','Récupération'];
+    state.ui.filterTypes = ['work', 'rest', 'empty'];
   } else if (!state.ui.filterTypes.includes('empty')) {
     state.ui.filterTypes.push('empty');
   }
@@ -251,6 +254,9 @@ function migrateState(state) {
 
   if (!state.gardes) state.gardes = [];
   ensureGardes(state);
+  if (!state.congeTypeCatalog) state.congeTypeCatalog = [];
+  ensureCongeTypeCatalog(state);
+  applyCongeTypeColorStyles(state);
   if (!state.employeeTypes) state.employeeTypes = {};
   ensureEmployeeTypes(state);
   ensureEmployeeTypeCatalog(state);

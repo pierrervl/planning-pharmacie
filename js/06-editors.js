@@ -468,9 +468,197 @@ function cssAttr(s) {
    12. ÉDITEUR DE CONGÉS
    ========================================================================= */
 
-const CONGE_TYPES = ['CP','RTT','Maladie','Formation','Sans solde','Récupération'];
+function renderCongeThemeSwatchPicker(selectedThemeId, hiddenInputId) {
+  const selected = getCongeThemeById(selectedThemeId).id;
+  const idAttr = hiddenInputId ? ` id="${escapeHtml(hiddenInputId)}"` : '';
+  return `
+    <div class="conge-theme-picker emp-theme-picker" role="radiogroup" aria-label="Thème">
+      ${CONGE_COLOR_THEMES.map(t => `
+        <button type="button" class="emp-theme-swatch${t.id === selected ? ' is-selected' : ''}"
+          data-theme-id="${escapeHtml(t.id)}" title="${escapeHtml(t.label)}" aria-label="${escapeHtml(t.label)}"
+          aria-pressed="${t.id === selected}">
+          <span class="emp-theme-swatch-inner" style="background:${t.bg}; border-color:${t.border};"></span>
+        </button>`).join('')}
+      <input type="hidden" class="conge-catalog-theme-value"${idAttr} value="${escapeHtml(selected)}">
+    </div>`;
+}
+
+function bindCongeThemePicker(picker, onChange) {
+  if (!picker) return;
+  const hidden = picker.querySelector('.conge-catalog-theme-value');
+  picker.querySelectorAll('.emp-theme-swatch').forEach(btn => {
+    btn.onclick = () => {
+      picker.querySelectorAll('.emp-theme-swatch').forEach(b => {
+        b.classList.remove('is-selected');
+        b.setAttribute('aria-pressed', 'false');
+      });
+      btn.classList.add('is-selected');
+      btn.setAttribute('aria-pressed', 'true');
+      if (hidden) hidden.value = btn.dataset.themeId;
+      if (onChange) onChange(btn.dataset.themeId);
+    };
+  });
+}
+
+function previewCongeThemeOnChip(chip, themeId) {
+  if (!chip) return;
+  const theme = getCongeThemeById(themeId);
+  chip.style.backgroundColor = theme.bg;
+  chip.style.borderLeftColor = theme.border;
+}
+
+function renderCongeTypeCatalogRow(entry) {
+  const used = countCongesWithTypeLabel(entry.label);
+  const def = DEFAULT_CONGE_TYPE_CATALOG.find(t => t.id === entry.id);
+  const isDefaultTheme = def && def.themeId === entry.themeId;
+  const colors = getCongeEntryColors(entry);
+  return `
+    <tr class="conge-catalog-row" data-type-id="${escapeHtml(entry.id)}">
+      <td>
+        <span class="type-badge conge-type-badge ${congeTypeCssClass(entry.id)} conge-catalog-preview">${escapeHtml(entry.label)}</span>
+      </td>
+      <td><input type="text" class="conge-catalog-label" value="${escapeHtml(entry.label)}" maxlength="40" aria-label="Libellé du mode"></td>
+      <td class="conge-catalog-theme-cell">${renderCongeThemeSwatchPicker(entry.themeId)}</td>
+      <td class="conge-catalog-used">${used ? `${used} congé${used > 1 ? 's' : ''}` : '—'}</td>
+      <td class="conge-catalog-actions">
+        <button type="button" class="nav conge-catalog-save" data-type-id="${escapeHtml(entry.id)}">Enregistrer</button>
+        <button type="button" class="nav conge-catalog-reset-theme" data-type-id="${escapeHtml(entry.id)}"${isDefaultTheme ? ' disabled' : ''}>Thème défaut</button>
+        <button type="button" class="nav del conge-catalog-delete" data-type-id="${escapeHtml(entry.id)}"${used ? ' disabled title="Mode utilisé par des congés"' : ''}>Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+function bindCongeTypeCatalogEditor(card) {
+  const readRow = (row) => ({
+    label: row.querySelector('.conge-catalog-label').value,
+    themeId: row.querySelector('.conge-catalog-theme-value')?.value,
+  });
+
+  card.querySelectorAll('.conge-catalog-row').forEach(row => {
+    const preview = row.querySelector('.conge-catalog-preview');
+    bindCongeThemePicker(row.querySelector('.conge-theme-picker'), (themeId) => {
+      previewCongeThemeOnChip(preview, themeId);
+      const def = DEFAULT_CONGE_TYPE_CATALOG.find(t => t.id === row.dataset.typeId);
+      const resetBtn = row.querySelector('.conge-catalog-reset-theme');
+      if (resetBtn) resetBtn.disabled = def && def.themeId === themeId;
+    });
+  });
+
+  card.querySelectorAll('.conge-catalog-save').forEach(btn => {
+    btn.onclick = () => {
+      const row = btn.closest('.conge-catalog-row');
+      const r = updateCongeTypeCatalogEntry(btn.dataset.typeId, readRow(row));
+      if (!r.ok) { toast(r.error, true); return; }
+      applyCongeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      toast(`Mode « ${r.entry.label} » enregistré`);
+      persistAndRender();
+    };
+  });
+
+  card.querySelectorAll('.conge-catalog-label').forEach(input => {
+    input.oninput = () => {
+      const preview = input.closest('.conge-catalog-row').querySelector('.conge-catalog-preview');
+      if (preview) preview.textContent = input.value.trim() || '…';
+    };
+  });
+
+  card.querySelectorAll('.conge-catalog-reset-theme').forEach(btn => {
+    btn.onclick = () => {
+      resetCongeTypeTheme(btn.dataset.typeId);
+      applyCongeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+    };
+  });
+
+  card.querySelectorAll('.conge-catalog-delete').forEach(btn => {
+    btn.onclick = () => {
+      const entry = getCongeTypeDefById(btn.dataset.typeId);
+      const label = entry ? entry.label : 'ce mode';
+      if (!confirm(`Supprimer le mode « ${label} » ?`)) return;
+      const r = removeCongeTypeCatalogEntry(btn.dataset.typeId);
+      if (!r.ok) { toast(r.error, true); return; }
+      applyCongeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast('Mode supprimé');
+    };
+  });
+
+  const addBtn = card.querySelector('#conge-catalog-add-btn');
+  if (addBtn) {
+    addBtn.onclick = () => {
+      const label = ($('#conge-catalog-add-label')?.value || '').trim();
+      const themeId = card.querySelector('#conge-catalog-add-theme-value')?.value;
+      const r = addCongeTypeCatalogEntry(label, themeId);
+      if (!r.ok) { toast(r.error, true); return; }
+      applyCongeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast(`Mode « ${r.entry.label} » ajouté`);
+    };
+  }
+
+  const resetAllBtn = card.querySelector('#conge-type-themes-reset-all');
+  if (resetAllBtn) {
+    resetAllBtn.onclick = () => {
+      if (!confirm('Réinitialiser les thèmes de tous les modes de congé ?')) return;
+      resetAllCongeTypeThemes();
+      applyCongeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast('Thèmes réinitialisés');
+    };
+  }
+}
 
 function renderCongesEditor(root) {
+  const catalog = getCongeTypeCatalog();
+  const defaultAddThemeId = getDefaultCongeThemeIdForIndex(catalog.length);
+
+  const catalogCard = document.createElement('div');
+  catalogCard.className = 'form-card conge-catalog-card';
+  catalogCard.innerHTML = `
+    <h3>Modes de congés</h3>
+    <p class="muted">Définissez les types d'absence et leur couleur dans le planning. Les changements s'appliquent immédiatement.</p>
+    <table class="list conge-catalog-table">
+      <thead>
+        <tr>
+          <th>Aperçu</th>
+          <th>Libellé</th>
+          <th>Thème</th>
+          <th>Utilisation</th>
+          <th class="conge-catalog-actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${catalog.map(renderCongeTypeCatalogRow).join('')}
+      </tbody>
+    </table>
+    <div class="conge-catalog-add">
+      <h4>Ajouter un mode</h4>
+      <div class="conge-catalog-add-row">
+        <label>Libellé <input type="text" id="conge-catalog-add-label" maxlength="40" placeholder="Ex. CET"></label>
+        <div class="conge-catalog-add-theme">
+          <span class="conge-catalog-add-theme-label">Thème</span>
+          <div id="conge-catalog-add-theme">${renderCongeThemeSwatchPicker(defaultAddThemeId, 'conge-catalog-add-theme-value')}</div>
+        </div>
+        <button type="button" class="primary" id="conge-catalog-add-btn">+ Ajouter</button>
+      </div>
+    </div>
+    <div class="conge-catalog-actions-footer">
+      <button type="button" class="nav" id="conge-type-themes-reset-all">Réinitialiser tous les thèmes</button>
+    </div>`;
+  root.appendChild(catalogCard);
+  bindCongeTypeCatalogEditor(catalogCard);
+  bindCongeThemePicker($('#conge-catalog-add-theme'));
+
   // formulaire d'ajout
   const form = document.createElement('div');
   form.className = 'form-card';
@@ -486,7 +674,7 @@ function renderCongesEditor(root) {
       <div class="field">
         <label>Type</label>
         <select id="cg-type">
-          ${CONGE_TYPES.map(t => `<option>${t}</option>`).join('')}
+          ${getCongeTypeLabels().map(t => `<option>${escapeHtml(t)}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -541,10 +729,10 @@ function renderCongesEditor(root) {
     </tr></thead><tbody>`;
     for (const c of STATE.conges) {
       const days = diffDays(c.start, c.end) + 1;
-      const typeCls = 'type-' + c.type.replace(' ', '-');
+      const typeCls = congeTypeBadgeClass(c.type);
       h += `<tr>
-        <td>${c.emp}</td>
-        <td><span class="type-badge ${typeCls}">${c.type}</span></td>
+        <td>${escapeHtml(c.emp)}</td>
+        <td><span class="${typeCls}">${escapeHtml(c.type)}</span></td>
         <td>${frFormatNumeric(c.start)}</td>
         <td>${frFormatNumeric(c.end)}</td>
         <td>${days}</td>

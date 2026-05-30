@@ -321,12 +321,7 @@ function statusClass(status) {
     case 'work': return 'work';
     case 'rest': return 'rest';
     case 'empty': return 'empty';
-    case 'CP': return 'cp';
-    case 'RTT': return 'rtt';
-    case 'Maladie': return 'mal';
-    case 'Formation': return 'form';
-    case 'Sans solde': return 'sso';
-    case 'Récupération': return 'rec';
-    default: return 'empty';
+    default:
+      return congeTypeCssClassForLabel(status);
   }
 }

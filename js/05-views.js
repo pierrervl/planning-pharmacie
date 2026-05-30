@@ -323,14 +323,17 @@ function attachWeekTableHandlers(wrap) {
 function buildPrintLegendEl() {
   const leg = document.createElement('div');
   leg.className = 'print-legend';
+  let congeSpans = '';
+  for (const ct of getCongeTypeCatalog()) {
+    const cls = congeTypeCssClass(ct.id);
+    congeSpans += `<span><i class="lg ${cls}"></i> ${escapeHtml(ct.label)}</span>`;
+  }
   leg.innerHTML = `
     <span><i class="lg plein"></i> Présent</span>
     <span><i class="lg special"></i> Présence spéciale</span>
     <span><i class="lg rest"></i> Repos</span>
     <span><i class="lg empty"></i> Non défini</span>
-    <span><i class="lg cp"></i> CP</span>
-    <span><i class="lg rtt"></i> RTT</span>
-    <span><i class="lg mal"></i> Maladie</span>
+    ${congeSpans}
     <span><i class="lg ferie"></i> Férié (rayures)</span>
     <span><i class="lg garde"></i> Garde (en-tête rouge clair)</span>
     <span class="print-legend-note">M = matin · A = après-midi · Effectif en bas de grille</span>`;
@@ -500,9 +503,7 @@ function cellPassesTypeFilter(c) {
   if (c.full) return f.includes('work');
   if (c.status === 'rest') return f.includes('rest');
   if (c.status === 'empty') return f.includes('empty');
-  if (['CP','RTT','Maladie','Formation','Sans solde','Récupération'].includes(c.status)) {
-    return f.includes(c.status);
-  }
+  if (isCongeTypeLabel(c.status)) return f.includes(c.status);
   return true;
 }
 
@@ -519,8 +520,9 @@ function periodOverlapDays(aStart, aEnd, bStart, bEnd) {
 
 function computePeriodTotals(emp, startIso, endIso) {
   let workShifts = 0, workDays = 0, restShifts = 0, undefinedShifts = 0;
-  let cp = 0, rtt = 0, maladie = 0, formation = 0, sansSolde = 0, recup = 0;
   let feriesOnWork = 0;
+  const byCongeType = {};
+  for (const ct of getCongeTypeCatalog()) byCongeType[ct.label] = 0;
   let d = fromISO(startIso);
   const last = fromISO(endIso);
   while (d <= last) {
@@ -532,12 +534,7 @@ function computePeriodTotals(emp, startIso, endIso) {
       if (c.full) { workShifts++; workedToday = true; }
       else if (c.status === 'rest') restShifts++;
       else if (c.status === 'empty') undefinedShifts++;
-      else if (c.status === 'CP') cp++;
-      else if (c.status === 'RTT') rtt++;
-      else if (c.status === 'Maladie') maladie++;
-      else if (c.status === 'Formation') formation++;
-      else if (c.status === 'Sans solde') sansSolde++;
-      else if (c.status === 'Récupération') recup++;
+      else if (byCongeType[c.status] !== undefined) byCongeType[c.status]++;
     }
     if (workedToday) workDays++;
     if ((cm.ferie || ca.ferie) && (cm.full || ca.full)) feriesOnWork++;
@@ -546,8 +543,13 @@ function computePeriodTotals(emp, startIso, endIso) {
   const half = (n) => Math.ceil(n / 2);
   return {
     workShifts, workDays, restShifts, undefinedShifts,
-    cp: half(cp), rtt: half(rtt), maladie: half(maladie),
-    formation: half(formation), sansSolde: half(sansSolde), recup: half(recup),
+    cp: half(byCongeType['CP'] || 0),
+    rtt: half(byCongeType['RTT'] || 0),
+    maladie: half(byCongeType['Maladie'] || 0),
+    formation: half(byCongeType['Formation'] || 0),
+    sansSolde: half(byCongeType['Sans solde'] || 0),
+    recup: half(byCongeType['Récupération'] || 0),
+    byCongeType: Object.fromEntries(Object.entries(byCongeType).map(([k, v]) => [k, half(v)])),
     feriesOnWork,
     calendarDays: diffDays(startIso, endIso) + 1
   };
@@ -927,11 +929,12 @@ function renderSidebar() {
       </select>`;
 
     h += `<div style="font-weight:600;margin-top:10px">Statuts visibles</div>`;
-    for (const t of ['work','rest','empty','CP','RTT','Maladie','Formation','Sans solde','Récupération']) {
+    for (const t of getPlanningFilterTypes()) {
       const checked = STATE.ui.filterTypes.includes(t) ? 'checked' : '';
+      const label = t === 'work' ? 'Plein (présent)' : t === 'rest' ? 'Repos (vide)' : t === 'empty' ? 'Non défini (vide)' : t;
       h += `<div class="row">
-        <input type="checkbox" id="ft-${cssId(t)}" ${checked} data-type="${t}">
-        <label for="ft-${cssId(t)}">${t === 'work' ? 'Plein (présent)' : t === 'rest' ? 'Repos (vide)' : t === 'empty' ? 'Non défini (vide)' : t}</label>
+        <input type="checkbox" id="ft-${cssId(t)}" ${checked} data-type="${escapeHtml(t)}">
+        <label for="ft-${cssId(t)}">${escapeHtml(label)}</label>
       </div>`;
     }
     h += `</div>`;
@@ -943,14 +946,12 @@ function renderSidebar() {
     <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
     <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
     <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
-    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>
-    <div class="legend-item"><span class="sw" style="background:var(--cp)"></span> Vide — congés payés</div>
-    <div class="legend-item"><span class="sw" style="background:var(--rtt)"></span> Vide — RTT</div>
-    <div class="legend-item"><span class="sw" style="background:var(--mal)"></span> Vide — maladie</div>
-    <div class="legend-item"><span class="sw" style="background:var(--form)"></span> Vide — formation</div>
-    <div class="legend-item"><span class="sw" style="background:var(--sso)"></span> Vide — sans solde</div>
-    <div class="legend-item"><span class="sw" style="background:var(--rec)"></span> Vide — récupération</div>
-  </div>`;
+    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>`;
+  for (const ct of getCongeTypeCatalog()) {
+    const color = getCongeEntryColors(ct).bg;
+    h += `<div class="legend-item"><span class="sw" style="background:${color}"></span> Vide — ${escapeHtml(ct.label)}</div>`;
+  }
+  h += `  </div>`;
 
   side.innerHTML = h;
 
