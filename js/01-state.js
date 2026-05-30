@@ -121,6 +121,10 @@ function buildDefaultState() {
     /* fériés personnalisés ajoutés/retirés                              */
     feriesAdd:    [],  // dates ISO ajoutées
     feriesRemove: [],  // dates ISO retirées du calcul auto
+    /* jours de garde pharmacie : [{ id, date, label }]                 */
+    gardes:       [],
+    /* type par salarié : Pharmacien/Préparateur × étudiant/salarié */
+    employeeTypes: {},
     /* préférences UI                                                    */
     ui: {
       currentTab:     'week',
@@ -173,6 +177,7 @@ function buildDefaultState() {
     }
   }
 
+  ensureEmployeeTypes(state);
   return state;
 }
 
@@ -228,6 +233,10 @@ function migrateState(state) {
   if (!state.patternAnchorDate || state.patternAnchorDate === '2026-04-21') {
     state.patternAnchorDate = INITIAL_DATA.patternAnchorDate;
   }
+
+  if (!state.gardes) state.gardes = [];
+  if (!state.employeeTypes) state.employeeTypes = {};
+  ensureEmployeeTypes(state);
 
   if (!state.affectations) state.affectations = {};
   for (const emp of (state.employees || [])) {
@@ -296,7 +305,7 @@ function replaceEmployeeInUiArrays(oldName, newName) {
   if (STATE.ui.yearEmp === oldName) STATE.ui.yearEmp = newName;
 }
 
-function addEmployee(name) {
+function addEmployee(name, type = 'Pharmacien salarié') {
   const n = normalizeEmployeeName(name);
   const err = validateEmployeeName(n);
   if (err) return { ok: false, error: err };
@@ -308,6 +317,7 @@ function addEmployee(name) {
   }
   STATE.affectations[n] = [];
   STATE.planning[n] = {};
+  setEmployeeType(n, type);
   if (!STATE.ui.filtersEmp.includes(n)) STATE.ui.filtersEmp.push(n);
   if (!STATE.ui.employeeChartEmps.includes(n)) STATE.ui.employeeChartEmps.push(n);
   if (!STATE.ui.employeeView) STATE.ui.employeeView = n;
@@ -327,6 +337,8 @@ function renameEmployee(oldName, newName) {
   moveEmployeeDataKey(STATE.patterns, oldName, next);
   moveEmployeeDataKey(STATE.affectations, oldName, next);
   moveEmployeeDataKey(STATE.planning, oldName, next);
+  if (!STATE.employeeTypes) STATE.employeeTypes = {};
+  moveEmployeeDataKey(STATE.employeeTypes, oldName, next);
 
   const i = STATE.employees.indexOf(oldName);
   if (i >= 0) STATE.employees[i] = next;

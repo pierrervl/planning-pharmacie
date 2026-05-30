@@ -5,8 +5,34 @@
    15. UTILITAIRES UI & PERSISTANCE
    ========================================================================= */
 
+let sessionInitialized = false;
+let suppressDirtyTracking = false;
+let sessionNeedsExport = false;
+let exitExportDialogOpen = false;
+let allowPageLeave = false;
+
+function markSessionDirty() {
+  if (!suppressDirtyTracking) sessionNeedsExport = true;
+  updateExportButtonState();
+}
+
+function markSessionExported() {
+  sessionNeedsExport = false;
+  updateExportButtonState();
+}
+
+function updateExportButtonState() {
+  const btn = $('#btn-export-json');
+  if (!btn) return;
+  btn.classList.toggle('needs-export', sessionNeedsExport);
+  btn.title = sessionNeedsExport
+    ? 'Exporter JSON — modifications non sauvegardées'
+    : `Enregistrer planning_AAAA-MM-JJ_HH-MM.json dans ${JSON_BACKUP_DIR_NAME}/`;
+}
+
 function persistAndRender() {
   saveState();
+  if (sessionInitialized) markSessionDirty();
   render();
 }
 
@@ -281,9 +307,14 @@ function applyImportedJSON(obj, filename) {
   if (!STATE.conges) STATE.conges = [];
   if (!STATE.feriesAdd) STATE.feriesAdd = [];
   if (!STATE.feriesRemove) STATE.feriesRemove = [];
+  if (!STATE.gardes) STATE.gardes = [];
+  if (!STATE.employeeTypes) STATE.employeeTypes = {};
   if (!STATE.ui) STATE.ui = buildDefaultState().ui;
   migrateState(STATE);
+  suppressDirtyTracking = true;
   persistAndRender();
+  suppressDirtyTracking = false;
+  markSessionExported();
   toast(`Données importées (${filename})`);
 }
 
@@ -305,7 +336,7 @@ function exportJSON() {
   void exportJSONAsync();
 }
 
-async function exportJSONAsync() {
+async function exportJSONAsync({ silent = false } = {}) {
   const text = JSON.stringify(STATE, null, 2);
 
   if (window.showDirectoryPicker) {
@@ -314,8 +345,9 @@ async function exportJSONAsync() {
       if (dirHandle) {
         const filename = await resolveUniqueExportFilename(dirHandle);
         await writeJsonToDirHandle(dirHandle, filename, text);
-        toast(`Enregistré : ${JSON_BACKUP_DIR_NAME}/${filename}`);
-        return;
+        markSessionExported();
+        if (!silent) toast(`Enregistré : ${JSON_BACKUP_DIR_NAME}/${filename}`);
+        return true;
       }
     } catch (err) {
       console.warn('Export direct impossible, repli téléchargement.', err);
@@ -324,7 +356,9 @@ async function exportJSONAsync() {
 
   const filename = planningExportFilename();
   downloadJsonFile(filename, text);
-  toast(`Téléchargé — placez le fichier dans ${JSON_BACKUP_DIR_NAME}/`);
+  markSessionExported();
+  if (!silent) toast(`Téléchargé — placez le fichier dans ${JSON_BACKUP_DIR_NAME}/`);
+  return true;
 }
 
 function importJSON(file) {
@@ -360,10 +394,10 @@ async function pickImportJsonFile(startInDir) {
   });
 }
 
-async function importFromDirectoryHandle(dirHandle, { forcePickFolder = false } = {}) {
+async function importFromDirectoryHandle(dirHandle, { forcePickFolder = false, startup = false } = {}) {
   if (!dirHandle) return false;
   if (!(await verifyDirPermission(dirHandle))) {
-    toast('Accès au dossier refusé — choisissez-le à nouveau', true);
+    if (!startup) toast('Accès au dossier refusé — choisissez-le à nouveau', true);
     return false;
   }
 
@@ -371,7 +405,7 @@ async function importFromDirectoryHandle(dirHandle, { forcePickFolder = false } 
 
   const ranked = await collectPlanningJsonFromDirHandle(dirHandle);
   if (!ranked.length) {
-    toast('Aucun fichier planning_*.json dans ce dossier', true);
+    if (!startup) toast('Aucun fichier planning_*.json dans ce dossier', true);
     return false;
   }
 
@@ -386,7 +420,7 @@ async function importFromDirectoryHandle(dirHandle, { forcePickFolder = false } 
           return;
         }
         if (action === 'pickFolder') {
-          resolve(await startImportJSON({ forcePickFolder: true }));
+          resolve(await startImportJSON({ forcePickFolder: true, startup }));
           return;
         }
         if (action === 'pickFile') {
@@ -428,38 +462,160 @@ function importFromFileList(fileList) {
   });
 }
 
-async function startImportJSON({ forcePickFolder = false } = {}) {
+async function startImportJSON({ forcePickFolder = false, startup = false } = {}) {
   if (window.showDirectoryPicker) {
     try {
       if (!forcePickFolder) {
         const stored = await loadStoredDirHandle();
-        if (stored && (await importFromDirectoryHandle(stored))) return;
+        if (stored && (await importFromDirectoryHandle(stored, { startup }))) return true;
       }
 
-      toast(`Choisissez le dossier « ${JSON_BACKUP_DIR_NAME}/ » du projet`);
+      if (!startup) toast(`Choisissez le dossier « ${JSON_BACKUP_DIR_NAME}/ » du projet`);
       const dirHandle = await pickJsonDirectoryHandle();
-      if (!dirHandle) return;
-      await importFromDirectoryHandle(dirHandle);
-      return;
+      if (!dirHandle) return false;
+      return !!(await importFromDirectoryHandle(dirHandle, { startup }));
     } catch (err) {
       console.warn('Import dossier (API fichiers) indisponible, repli sélecteur classique.', err);
     }
   }
 
-  toast(`Choisissez le dossier « ${JSON_BACKUP_DIR_NAME}/ » du projet`);
+  if (!startup) toast(`Choisissez le dossier « ${JSON_BACKUP_DIR_NAME}/ » du projet`);
   const folderInput = $('#folder-import');
   if (folderInput) {
-    folderInput.onchange = (e) => {
-      const files = e.target.files;
-      e.target.value = '';
-      folderInput.onchange = null;
-      if (files && files.length) importFromFileList(files);
-    };
-    folderInput.click();
-    return;
+    return await new Promise((resolve) => {
+      folderInput.onchange = (e) => {
+        const files = e.target.files;
+        e.target.value = '';
+        folderInput.onchange = null;
+        if (files && files.length) {
+          importFromFileList(files);
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      };
+      folderInput.click();
+    });
   }
 
-  pickImportJsonFile().then(f => { if (f) readFileAndApplyImport(f); });
+  const file = await pickImportJsonFile();
+  if (file) readFileAndApplyImport(file);
+  return !!file;
+}
+
+function showStartupImportDialog({ onChoose }) {
+  const old = document.querySelector('.import-dialog-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'import-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="import-dialog" role="dialog" aria-labelledby="startup-import-dlg-title">
+      <h3 id="startup-import-dlg-title">Ouverture — charger la sauvegarde</h3>
+      <p>
+        À chaque ouverture, importez la dernière sauvegarde JSON depuis le dossier
+        <code>${JSON_BACKUP_DIR_NAME}/</code> pour travailler sur les données à jour.
+        <br><br>
+        À la fermeture, une exportation sera demandée si des modifications ont été faites.
+      </p>
+      <div class="import-dialog-btns">
+        <button type="button" class="primary" data-action="import">Importer la dernière sauvegarde</button>
+        <button type="button" class="nav muted-btn" data-action="skip">Continuer sans importer</button>
+      </div>
+    </div>`;
+
+  overlay.querySelectorAll('[data-action]').forEach(b => {
+    b.onclick = () => {
+      overlay.remove();
+      onChoose(b.dataset.action);
+    };
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function showExitExportDialog({ onChoose }) {
+  const old = document.querySelector('.import-dialog-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'import-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="import-dialog" role="dialog" aria-labelledby="exit-export-dlg-title">
+      <h3 id="exit-export-dlg-title">Fermeture — exporter les modifications</h3>
+      <p>
+        Des modifications n'ont pas encore été exportées en JSON.
+        Exportez maintenant avant de quitter pour ne rien perdre.
+      </p>
+      <div class="import-dialog-btns">
+        <button type="button" class="primary" data-action="export">Exporter JSON</button>
+        <button type="button" class="nav muted-btn" data-action="leave">Quitter sans exporter</button>
+        <button type="button" class="nav" data-action="stay">Rester sur la page</button>
+      </div>
+    </div>`;
+
+  overlay.querySelectorAll('[data-action]').forEach(b => {
+    b.onclick = () => {
+      overlay.remove();
+      onChoose(b.dataset.action);
+    };
+  });
+
+  document.body.appendChild(overlay);
+}
+
+async function promptStartupImport() {
+  return new Promise((resolve) => {
+    showStartupImportDialog({
+      onChoose: async (action) => {
+        if (action === 'skip') {
+          markSessionDirty();
+          toast('Session locale — pensez à exporter à la fermeture');
+          resolve(false);
+          return;
+        }
+        const imported = await startImportJSON({ startup: true });
+        if (!imported) markSessionDirty();
+        resolve(imported);
+      }
+    });
+  });
+}
+
+function setupSessionLifecycle() {
+  window.addEventListener('beforeunload', (e) => {
+    if (!sessionNeedsExport || allowPageLeave || exitExportDialogOpen) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  window.addEventListener('pagehide', () => {
+    if (!sessionNeedsExport || allowPageLeave) return;
+    void exportJSONAsync({ silent: true });
+  });
+}
+
+function promptExitExport() {
+  if (!sessionNeedsExport || exitExportDialogOpen) return;
+  exitExportDialogOpen = true;
+  showExitExportDialog({
+    onChoose: async (action) => {
+      exitExportDialogOpen = false;
+      if (action === 'stay') return;
+      if (action === 'export') {
+        await exportJSONAsync();
+        if (!sessionNeedsExport) {
+          allowPageLeave = true;
+          toast('Export terminé — vous pouvez fermer la page');
+        }
+        return;
+      }
+      if (action === 'leave') {
+        allowPageLeave = true;
+        window.close();
+      }
+    }
+  });
 }
 
 /* ===========================================================================
@@ -561,7 +717,10 @@ function resetAll() {
   if (!confirm('Confirmer une seconde fois : tout sera perdu.')) return;
   localStorage.removeItem(STORAGE_KEY);
   STATE = buildDefaultState();
+  suppressDirtyTracking = true;
   persistAndRender();
+  suppressDirtyTracking = false;
+  markSessionDirty();
   toast('Données réinitialisées');
 }
 
@@ -570,7 +729,16 @@ function resetAll() {
    ========================================================================= */
 
 function initApp() {
-  // onglets
+  $$('#nav-groups button').forEach(b => {
+    b.onclick = () => {
+      const tabs = TAB_GROUPS[b.dataset.group];
+      if (!tabs) return;
+      if (!tabs.includes(STATE.ui.currentTab)) {
+        STATE.ui.currentTab = tabs[0];
+      }
+      persistAndRender();
+    };
+  });
   $$('#tabs button').forEach(b => {
     b.onclick = () => {
       STATE.ui.currentTab = b.dataset.tab;
@@ -581,6 +749,7 @@ function initApp() {
   // boutons top
   $('#btn-export-json').onclick = exportJSON;
   $('#btn-import-json').onclick = () => startImportJSON();
+  updateExportButtonState();
   $('#btn-print').onclick = () => {
     if (STATE.ui.currentTab === 'week') printWeekPeriod();
     else window.print();
@@ -602,6 +771,17 @@ function initApp() {
 
   // rendu initial
   render();
+  sessionInitialized = true;
+  setupSessionLifecycle();
+  void promptStartupImport();
+
+  // tentative d'export à la fermeture (Ctrl+W / fermeture onglet)
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'w' || !(e.ctrlKey || e.metaKey)) return;
+    if (!sessionNeedsExport) return;
+    e.preventDefault();
+    promptExitExport();
+  });
 }
 
 // Lance dès que le DOM est prêt

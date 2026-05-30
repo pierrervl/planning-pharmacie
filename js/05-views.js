@@ -8,13 +8,36 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-function render() {
-  // active l'onglet
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'feries', 'gardes'];
+
+const TAB_GROUPS = {
+  planning: ['week', 'patterns'],
+  analyse:  ['emp-overview', 'emp-detail'],
+  equipe:   ['conges', 'employees'],
+  journees: ['feries', 'gardes'],
+};
+
+function groupForTab(tab) {
+  for (const [group, tabs] of Object.entries(TAB_GROUPS)) {
+    if (tabs.includes(tab)) return group;
+  }
+  return 'planning';
+}
+
+function syncNavTabs() {
+  const group = groupForTab(STATE.ui.currentTab);
+  $$('#nav-groups button').forEach(b => {
+    b.classList.toggle('active', b.dataset.group === group);
+  });
   $$('#tabs button').forEach(b => {
+    const inGroup = b.dataset.group === group;
+    b.hidden = !inGroup;
     b.classList.toggle('active', b.dataset.tab === STATE.ui.currentTab);
   });
+}
 
-  const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'feries'];
+function render() {
+  syncNavTabs();
   if (!VALID_TABS.includes(STATE.ui.currentTab)) {
     STATE.ui.currentTab = STATE.ui.currentTab === 'employee' ? 'emp-detail' : 'week';
   }
@@ -29,6 +52,7 @@ function render() {
     case 'employees':      renderEmployeesEditor(content); break;
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
+    case 'gardes':         renderGardesEditor(content); break;
   }
   renderSidebar();
   initFrDateInputs(content);
@@ -83,9 +107,10 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   if (!passesFilter) cls.push('filtered-out');
   if (c.ferie) cls.push('ferie');
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const hint = editable ? ' — clic : plein ↔ repos' : '';
+  const hint = editable ? ' — clic : plein ↔ repos · Ctrl+clic : présence spéciale (orange)' : '';
   const title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}` +
-                (c.ferie ? ` (${c.ferieLabel})` : '') + hint;
+                (c.ferie ? ` (${c.ferieLabel})` : '') +
+                (c.garde ? ` (${c.gardeLabel})` : '') + hint;
   const data = editable ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
   return `<td class="${cls.join(' ')}"${data} title="${title}"></td>`;
 }
@@ -179,9 +204,11 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   days.forEach((d, dayIdx) => {
     const iso = toISO(d);
     const fr = getFerieLabel(iso);
+    const gd = getGardeLabel(iso);
     const today = (iso === todayISO());
     const cls = ['day-header', 'day-group', weekParityClass(d)];
     if (fr) cls.push('is-ferie');
+    if (gd) cls.push('is-garde');
     if (today) cls.push('is-today');
     if (dayIdx % 7 === 0 && dayIdx > 0) cls.push('week-start');
     trDays.innerHTML += `
@@ -189,6 +216,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
         <span class="date-lbl">${DAY_NAMES_ABBR[d.getDay()]}</span>
         <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
         ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
+        ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
       </th>`;
   });
   thead.appendChild(trDays);
@@ -207,7 +235,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   for (const emp of visibleEmps) {
     const tr = document.createElement('tr');
     tr.className = 'emp-row';
-    tr.innerHTML = `<td class="empname" title="${emp}">${forPrint ? emp : shortEmpName(emp)}</td>`;
+    tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${emp} — ${getEmployeeType(emp)}">${forPrint ? emp : shortEmpName(emp)}</td>`;
     days.forEach((d, dayIdx) => {
       const iso = toISO(d);
       const weekBoundary = dayIdx % 7 === 0 && dayIdx > 0;
@@ -248,12 +276,15 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
 
 function attachWeekTableHandlers(wrap) {
   wrap.querySelectorAll('td.cell.editable[data-emp]').forEach(el => {
-    el.onclick = () => {
+    el.onclick = (e) => {
       const emp = el.dataset.emp;
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
       const cur = getPlanningValue(emp, iso, shift);
-      setPlanningValue(emp, iso, shift, cyclePlanningValue(cur));
+      const next = (e.ctrlKey || e.metaKey)
+        ? toggleSpecialPlanningValue(cur)
+        : cyclePlanningValue(cur);
+      setPlanningValue(emp, iso, shift, next);
       persistAndRender();
     };
   });
@@ -287,12 +318,14 @@ function buildPrintLegendEl() {
   leg.className = 'print-legend';
   leg.innerHTML = `
     <span><i class="lg plein"></i> Présent</span>
+    <span><i class="lg special"></i> Présence spéciale</span>
     <span><i class="lg rest"></i> Repos</span>
     <span><i class="lg empty"></i> Non défini</span>
     <span><i class="lg cp"></i> CP</span>
     <span><i class="lg rtt"></i> RTT</span>
     <span><i class="lg mal"></i> Maladie</span>
     <span><i class="lg ferie"></i> Férié (rayures)</span>
+    <span><i class="lg garde"></i> Garde (en-tête rouge clair)</span>
     <span class="print-legend-note">M = matin · A = après-midi · Effectif en bas de grille</span>`;
   return leg;
 }
@@ -393,7 +426,7 @@ function renderWeekView(root) {
     <div class="week-num">${numWeeks} semaines · S${isoWeek}–S${getISOWeek(lastDay)} · ${isoYear}</div>
     <div class="spacer"></div>
     <label>Aller à : <input type="text" class="fr-date" id="wk-jump" data-iso="${STATE.ui.currentDate}" value="${frFormatNumeric(STATE.ui.currentDate)}"></label>
-    <span class="help-text no-print">Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ vide</span>
+    <span class="help-text no-print">Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · Ctrl+clic = présence spéciale (orange)</span>
   `;
   root.appendChild(ctrl);
 
@@ -898,9 +931,11 @@ function renderSidebar() {
   h += `<div class="side-section">
     <h3>Légende</h3>
     <div class="legend-item"><span class="sw" style="background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">×</span> Plein (présent)</div>
+    <div class="legend-item"><span class="sw sw-special">×</span> Présence spéciale (Ctrl+clic)</div>
     <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
     <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
     <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
+    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>
     <div class="legend-item"><span class="sw" style="background:var(--cp)"></span> Vide — congés payés</div>
     <div class="legend-item"><span class="sw" style="background:var(--rtt)"></span> Vide — RTT</div>
     <div class="legend-item"><span class="sw" style="background:var(--mal)"></span> Vide — maladie</div>

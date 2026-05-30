@@ -173,9 +173,23 @@ function applyPatternToPeriod(empName, startIso, endIso, patternName, state = ST
 }
 
 /* Cycle clic : non défini → présent → repos → présent ---------------- */
+const PLANNING_REST = 0;
+const PLANNING_PRESENT = 1;
+const PLANNING_SPECIAL = 2;
+
 function cyclePlanningValue(cur) {
-  if (cur === null || cur === undefined) return 1;
-  return cur === 1 ? 0 : 1;
+  if (cur === null || cur === undefined) return PLANNING_PRESENT;
+  if (cur === PLANNING_PRESENT) return PLANNING_REST;
+  if (cur === PLANNING_SPECIAL) return PLANNING_REST;
+  return PLANNING_PRESENT;
+}
+
+function toggleSpecialPlanningValue(cur) {
+  return cur === PLANNING_SPECIAL ? PLANNING_PRESENT : PLANNING_SPECIAL;
+}
+
+function isPlanningPresent(val) {
+  return val === PLANNING_PRESENT || val === PLANNING_SPECIAL;
 }
 
 /* Trouve un congé qui couvre cette date pour ce salarié ----------------- */
@@ -186,14 +200,37 @@ function congeForDate(empName, dateIso) {
   return null;
 }
 
+/* Remet à repos (0) les présences sur une période pour un salarié -------- */
+function clearPresenceForPeriod(empName, startIso, endIso, state = STATE) {
+  let cleared = 0;
+  let d = fromISO(startIso);
+  const last = fromISO(endIso);
+  while (d <= last) {
+    const iso = toISO(d);
+    const day = (state.planning[empName] || {})[iso];
+    if (day) {
+      for (const shift of ['matin', 'aprem']) {
+        if (day[shift] === PLANNING_PRESENT || day[shift] === PLANNING_SPECIAL) {
+          day[shift] = PLANNING_REST;
+          cleared++;
+        }
+      }
+    }
+    d = addDays(d, 1);
+  }
+  return cleared;
+}
+
 /* CALCUL FINAL d'une cellule :
    plein (présent) ou vide ; repos / congés = couleur de fond si vide
    status sert aux filtres : 'work' | 'rest' | 'empty' | 'CP' | …
    --------------------------------------------------------------------- */
 function computeCell(empName, dateIso, shift) {
   const fLbl = getFerieLabel(dateIso);
+  const gLbl = getGardeLabel(dateIso);
   const val = getPlanningValue(empName, dateIso, shift);
-  const full = val === 1;
+  const full = isPlanningPresent(val);
+  const special = val === PLANNING_SPECIAL;
   const cg = full ? null : congeForDate(empName, dateIso);
 
   let status = 'empty';
@@ -201,27 +238,31 @@ function computeCell(empName, dateIso, shift) {
     status = 'work';
   } else if (cg) {
     status = cg.type;
-  } else if (val === 0) {
+  } else if (val === PLANNING_REST) {
     status = 'rest';
   }
 
   return {
     full,
+    special,
     status,
     label: '',
     ferie: !!fLbl,
     ferieLabel: fLbl ? shortFerieLabel(fLbl) : null,
+    garde: !!gLbl,
+    gardeLabel: gLbl ? shortGardeLabel(gLbl) : null,
     raw: val
   };
 }
 
 /* Classes CSS d'affichage (plein ou vide + variante couleur) ---------- */
 function cellDisplayClass(c) {
-  if (c.full) return 'plein';
+  if (c.full) return c.special ? 'plein special' : 'plein';
   return 'vide ' + statusClass(c.status);
 }
 
 function cellStatusLabel(c) {
+  if (c.special) return 'Présent spécial';
   if (c.full) return 'Présent';
   if (c.status === 'rest') return 'Repos';
   if (c.status === 'empty') return 'Non défini';

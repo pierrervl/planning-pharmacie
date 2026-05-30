@@ -419,10 +419,13 @@ function renderCongesEditor(root) {
     };
     if (!c.start || !c.end) { alert('Dates requises (format jj/mm/aaaa).'); return; }
     if (c.end < c.start) { alert('La date de fin doit être >= début.'); return; }
+    const cleared = clearPresenceForPeriod(c.emp, c.start, c.end);
     STATE.conges.push(c);
     STATE.conges.sort((a,b) => a.start.localeCompare(b.start));
     persistAndRender();
-    toast('Congé ajouté');
+    toast(cleared > 0
+      ? `Congé ajouté — ${cleared} présence${cleared > 1 ? 's' : ''} retirée${cleared > 1 ? 's' : ''}`
+      : 'Congé ajouté');
   };
 
   // liste existante
@@ -602,10 +605,123 @@ function collectFeriesForYear(year) {
 }
 
 /* ===========================================================================
+   14. ÉDITEUR DE JOURS DE GARDE
+   ========================================================================= */
+
+function renderGardesEditor(root) {
+  const ctrl = document.createElement('div');
+  ctrl.className = 'controls';
+  ctrl.innerHTML = `
+    <div class="label">Jours de garde</div>
+    <div class="help-text">
+      Indique les dates où la pharmacie assure la garde (week-ends, jours fériés, etc.).
+      Les jours de garde apparaissent dans le planning avec un en-tête de colonne rouge clair.
+    </div>
+    <div class="spacer"></div>
+    <label>Année : <input type="number" id="gd-year" value="${STATE.ui.yearShown}" min="2020" max="2100" style="width:90px"></label>
+  `;
+  root.appendChild(ctrl);
+
+  const form = document.createElement('div');
+  form.className = 'form-card';
+  form.innerHTML = `
+    <h3>Ajouter un jour de garde</h3>
+    <div class="form-grid">
+      <div class="field">
+        <label>Date</label>
+        <input type="text" class="fr-date" id="gd-date" data-iso="${todayISO()}" value="${frFormatNumeric(todayISO())}">
+      </div>
+      <div class="field">
+        <label>Libellé</label>
+        <input type="text" id="gd-label" placeholder="ex : Garde de week-end">
+      </div>
+      <button class="primary" id="gd-add">+ Ajouter</button>
+    </div>
+  `;
+  root.appendChild(form);
+
+  $('#gd-add').onclick = () => {
+    const d = readFrDateInput($('#gd-date'));
+    const l = ($('#gd-label').value || '').trim() || 'Garde';
+    if (!d) return;
+    const existing = STATE.gardes.find(g => g.date === d);
+    if (existing) {
+      existing.label = l;
+    } else {
+      STATE.gardes.push({
+        id: 'gd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        date: d,
+        label: l
+      });
+    }
+    STATE.gardes.sort((a, b) => a.date.localeCompare(b.date));
+    persistAndRender();
+    toast('Jour de garde enregistré');
+  };
+
+  const card = document.createElement('div');
+  card.className = 'form-card';
+  const year = STATE.ui.yearShown;
+  const allGardes = collectGardesForYear(year);
+  let h = `<h3>Jours de garde ${year} (${allGardes.length})</h3>`;
+  if (allGardes.length === 0) {
+    h += `<p class="muted">Aucun jour de garde pour ${year}.</p>`;
+  } else {
+    h += `<table class="list"><thead><tr>
+      <th>Date</th><th>Jour</th><th>Libellé</th><th></th>
+    </tr></thead><tbody>`;
+    for (const g of allGardes) {
+      const d = fromISO(g.date);
+      h += `<tr>
+        <td>${g.date}</td>
+        <td>${DAY_NAMES_LONG[d.getDay()]}</td>
+        <td>${g.label || 'Garde'}</td>
+        <td><button class="del" data-gd-rm="${g.id}">Retirer</button></td>
+      </tr>`;
+    }
+    h += `</tbody></table>`;
+  }
+  card.innerHTML = h;
+  root.appendChild(card);
+
+  $('#gd-year').onchange = (e) => { STATE.ui.yearShown = parseInt(e.target.value, 10); persistAndRender(); };
+  root.querySelectorAll('[data-gd-rm]').forEach(b => {
+    b.onclick = () => {
+      STATE.gardes = STATE.gardes.filter(g => g.id !== b.dataset.gdRm);
+      persistAndRender();
+    };
+  });
+}
+
+/* ===========================================================================
    ÉDITEUR ÉQUIPE — ajout / renommage salariés
    ========================================================================= */
 
 function renderEmployeesEditor(root) {
+  const legendCard = document.createElement('div');
+  legendCard.className = 'form-card employees-legend-card';
+  legendCard.innerHTML = `
+    <h3>Types de salariés</h3>
+    <div class="employees-type-legend">
+      <div class="employees-type-group">
+        <span class="employees-type-group-label">Pharmacien — vert</span>
+        <div class="employees-type-group-chips">
+          <span class="employees-type-chip emp-type-pharm-etudiant">Pharmacien étudiant</span>
+          <span class="employees-type-chip emp-type-pharm-salarie">Pharmacien salarié</span>
+          <span class="employees-type-chip emp-type-pharm-remplacant">Pharmacien remplaçant</span>
+        </div>
+      </div>
+      <div class="employees-type-group">
+        <span class="employees-type-group-label">Préparateur — violet</span>
+        <div class="employees-type-group-chips">
+          <span class="employees-type-chip emp-type-prep-etudiant">Préparateur étudiant</span>
+          <span class="employees-type-chip emp-type-prep-salarie">Préparateur salarié</span>
+        </div>
+      </div>
+    </div>
+    <p class="muted">Étudiant = teinte claire · Salarié = teinte plus soutenue. Couleur visible sur le nom en vue Semaine.</p>`;
+  root.appendChild(legendCard);
+
   const addCard = document.createElement('div');
   addCard.className = 'form-card employees-add-card';
   addCard.innerHTML = `
@@ -613,6 +729,11 @@ function renderEmployeesEditor(root) {
     <p class="muted">Le nouveau salarié apparaît dans le planning avec des patterns vides (6 semaines-types).</p>
     <div class="employees-add-row">
       <label>Nom <input type="text" id="emp-add-name" placeholder="Prénom ou nom complet" maxlength="60"></label>
+      <label>Type
+        <select id="emp-add-type" class="emp-type-select ${employeeTypeSelectClass('Pharmacien salarié')}">
+          ${renderEmployeeTypeOptions('Pharmacien salarié')}
+        </select>
+      </label>
       <button type="button" class="primary" id="emp-add-btn">+ Ajouter</button>
     </div>`;
   root.appendChild(addCard);
@@ -621,26 +742,40 @@ function renderEmployeesEditor(root) {
   listCard.className = 'form-card employees-list-card';
   listCard.innerHTML = `
     <h3>Salariés (${STATE.employees.length})</h3>
-    <p class="muted">Modifiez un nom puis cliquez « Enregistrer ». Patterns, planning et congés sont conservés.</p>`;
+    <p class="muted">Modifiez le nom ou le type. Aperçu des couleurs ci-dessous · le type est enregistré automatiquement.</p>`;
 
   if (STATE.employees.length === 0) {
     listCard.innerHTML += `<p class="muted">Aucun salarié pour l'instant.</p>`;
   } else {
+    listCard.innerHTML += `
+      <div class="employees-team-preview" aria-label="Aperçu couleurs de l'équipe">
+        ${STATE.employees.map(emp => {
+          const type = getEmployeeType(emp);
+          return `<span class="employees-team-chip ${employeeTypeClass(emp)}" title="${escapeHtml(type)}">${escapeHtml(emp)}</span>`;
+        }).join('')}
+      </div>`;
+
     const tbl = document.createElement('table');
     tbl.className = 'list employees-list';
     tbl.innerHTML = `
       <thead>
         <tr>
           <th>Nom</th>
+          <th>Type</th>
           <th class="emp-actions-col">Actions</th>
         </tr>
       </thead>
       <tbody>
         ${STATE.employees.map((emp, idx) => `
-          <tr>
-            <td>
+          <tr data-emp="${escapeHtml(emp)}">
+            <td class="emp-name-cell ${employeeTypeClass(emp)}">
               <input type="text" class="emp-rename-input" data-idx="${idx}"
                      value="${escapeHtml(emp)}" maxlength="60" aria-label="Nom de ${escapeHtml(emp)}">
+            </td>
+            <td>
+              <select class="emp-type-select ${employeeTypeSelectClass(getEmployeeType(emp))}" data-emp="${escapeHtml(emp)}" aria-label="Type de ${escapeHtml(emp)}">
+                ${renderEmployeeTypeOptions(getEmployeeType(emp))}
+              </select>
             </td>
             <td class="emp-actions-col">
               <button type="button" class="nav emp-save-btn" data-idx="${idx}">Enregistrer</button>
@@ -653,7 +788,8 @@ function renderEmployeesEditor(root) {
 
   const submitAdd = () => {
     const input = $('#emp-add-name');
-    const r = addEmployee(input.value);
+    const type = $('#emp-add-type').value;
+    const r = addEmployee(input.value, type);
     if (!r.ok) {
       toast(r.error, true);
       return;
@@ -670,6 +806,22 @@ function renderEmployeesEditor(root) {
     }
   };
 
+  listCard.querySelectorAll('.emp-type-select').forEach(sel => {
+    syncEmployeeTypeSelectStyle(sel);
+    sel.onchange = () => {
+      syncEmployeeTypeSelectStyle(sel);
+      syncEmployeeListRowColors(sel.closest('tr'), sel.value);
+      setEmployeeType(sel.dataset.emp, sel.value);
+      persistAndRender();
+      toast(`Type « ${sel.value} » enregistré pour ${sel.dataset.emp}`);
+    };
+  });
+
+  const addTypeSel = $('#emp-add-type');
+  if (addTypeSel) {
+    addTypeSel.onchange = () => syncEmployeeTypeSelectStyle(addTypeSel);
+  }
+
   listCard.querySelectorAll('.emp-save-btn').forEach(btn => {
     btn.onclick = () => {
       const idx = parseInt(btn.dataset.idx, 10);
@@ -682,6 +834,11 @@ function renderEmployeesEditor(root) {
         toast(r.error, true);
         input.value = oldName;
         return;
+      }
+      const typeSel = row.querySelector('.emp-type-select');
+      if (typeSel && r.name !== oldName) {
+        typeSel.dataset.emp = r.name;
+        typeSel.setAttribute('aria-label', `Type de ${r.name}`);
       }
       toast(r.name === oldName ? 'Aucun changement' : `Renommé en « ${r.name} »`);
       persistAndRender();

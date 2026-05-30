@@ -22,15 +22,24 @@
     </div>
   </header>
 
-  <nav class="tabs" id="tabs">
-    <button data-tab="week"    class="active">📅 Semaine</button>
-    <button data-tab="emp-overview">📊 Vue d'ensemble</button>
-    <button data-tab="emp-detail">👤 Salarié</button>
-    <button data-tab="patterns">🧩 Patterns</button>
-    <button data-tab="employees">👥 Équipe</button>
-    <button data-tab="conges">🌴 Congés</button>
-    <button data-tab="feries">🎉 Jours fériés</button>
-  </nav>
+  <div class="nav-shell">
+    <nav class="nav-groups" id="nav-groups">
+      <button type="button" data-group="planning" class="active">Planning</button>
+      <button type="button" data-group="equipe">Équipe</button>
+      <button type="button" data-group="journees">Journées spéciales</button>
+      <button type="button" data-group="analyse">Analyse</button>
+    </nav>
+    <nav class="nav-subtabs" id="tabs">
+      <button type="button" data-tab="week" data-group="planning" class="active">📅 Semaine</button>
+      <button type="button" data-tab="patterns" data-group="planning">🧩 Patterns</button>
+      <button type="button" data-tab="emp-overview" data-group="analyse">📊 Vue d'ensemble</button>
+      <button type="button" data-tab="emp-detail" data-group="analyse">👤 Salarié</button>
+      <button type="button" data-tab="conges" data-group="equipe">🌴 Congés</button>
+      <button type="button" data-tab="employees" data-group="equipe">👥 Équipe</button>
+      <button type="button" data-tab="feries" data-group="journees">🎉 Jours fériés</button>
+      <button type="button" data-tab="gardes" data-group="journees">🏥 Jours de garde</button>
+    </nav>
+  </div>
 
   <div class="main">
     <main class="content" id="content"></main>
@@ -42,8 +51,10 @@
 <!-- Ordre de chargement important (dépendances globales) -->
 <script src="js/02-dates.js"></script>
 <script src="js/04-engine.js"></script>
-<script src="js/01-state.js"></script>
 <script src="js/03-feries.js"></script>
+<script src="js/03-gardes.js"></script>
+<script src="js/03-employees.js"></script>
+<script src="js/01-state.js"></script>
 <script src="js/05-views.js"></script>
 <script src="js/06-editors.js"></script>
 <script src="js/07-app.js"></script>

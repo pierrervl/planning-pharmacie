@@ -17,6 +17,7 @@
   --rest-soft:   #e6e3d8;
 
   --cp:           #e89846;       /* orange congés payés */
+  --presence-special: #e89846;  /* orange présence spéciale (Ctrl+clic) */
   --rtt:          #7fb8d4;       /* bleu clair RTT */
   --mal:          #c8523f;       /* rouge maladie */
   --form:         #9b6fb0;       /* violet formation */
@@ -26,6 +27,9 @@
   --ferie:        #faf8f0;       /* fond doux jour férié */
   --ferie-stripe: rgba(160, 150, 120, 0.22);
   --ferie-text:   #6a6560;
+
+  --garde:        #ffcdd2;       /* rouge clair — fond en-tête jour de garde */
+  --garde-border: #e57373;
 
   --warn:         #c8523f;
   --ok:           #1f5f4a;
@@ -99,20 +103,59 @@ header.topbar button {
   transition: background 0.15s;
 }
 header.topbar button:hover { background: rgba(255,255,255,0.1); }
+header.topbar button.needs-export {
+  background: rgba(200, 82, 63, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  animation: export-pulse 1.6s ease-in-out infinite;
+}
+@keyframes export-pulse {
+  0%, 100% { background: rgba(200, 82, 63, 0.35); }
+  50% { background: rgba(200, 82, 63, 0.55); }
+}
 
-/* Barre d'onglets */
-nav.tabs {
+/* Navigation à deux niveaux (groupes + sous-onglets) */
+.nav-shell {
   background: var(--bg-panel);
   border-bottom: 1px solid var(--line);
+}
+nav.nav-groups {
+  display: flex;
+  gap: 0;
+  padding: 0 12px;
+  overflow-x: auto;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+nav.nav-groups button {
+  background: none;
+  border: none;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+nav.nav-groups button:hover { color: var(--ink); }
+nav.nav-groups button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--bg-panel);
+}
+nav.nav-subtabs {
   display: flex;
   gap: 0;
   padding: 0 12px;
   overflow-x: auto;
 }
-nav.tabs button {
+nav.nav-subtabs button {
   background: none;
   border: none;
-  padding: 12px 16px;
+  padding: 11px 16px;
   cursor: pointer;
   font-size: 13px;
   color: var(--ink-soft);
@@ -120,8 +163,9 @@ nav.tabs button {
   white-space: nowrap;
   transition: color 0.15s, border-color 0.15s;
 }
-nav.tabs button:hover { color: var(--ink); }
-nav.tabs button.active {
+nav.nav-subtabs button[hidden] { display: none; }
+nav.nav-subtabs button:hover { color: var(--ink); }
+nav.nav-subtabs button.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
   font-weight: 600;
@@ -256,6 +300,26 @@ table.planning thead th.empname {
   letter-spacing: 0.04em;
   color: var(--ink-mute);
   vertical-align: bottom;
+}
+table.planning td.empname.emp-type-pharm-etudiant {
+  background-color: #e8f5e9;
+  border-left: 3px solid #81c784;
+}
+table.planning td.empname.emp-type-pharm-salarie {
+  background-color: #c8e6c9;
+  border-left: 3px solid #2e7d32;
+}
+table.planning td.empname.emp-type-pharm-remplacant {
+  background-color: #dcedc8;
+  border-left: 3px solid #689f38;
+}
+table.planning td.empname.emp-type-prep-etudiant {
+  background-color: #f3e5f5;
+  border-left: 3px solid #ce93d8;
+}
+table.planning td.empname.emp-type-prep-salarie {
+  background-color: #e1bee7;
+  border-left: 3px solid #7b1fa2;
 }
 table.planning td.cell {
   min-width: 26px;
@@ -420,6 +484,15 @@ body.printing-week #week-print-root {
   flex-shrink: 0;
 }
 .print-legend .lg.plein { background: var(--plein); }
+.print-legend .lg.special {
+  background: var(--presence-special);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 9px;
+}
 .print-legend .lg.rest  { background: var(--rest-soft); }
 .print-legend .lg.empty { background: #f0eee6; }
 .print-legend .lg.cp    { background: var(--cp); }
@@ -433,6 +506,10 @@ body.printing-week #week-print-root {
     #fff 2px,
     #fff 4px
   );
+}
+.print-legend .lg.garde {
+  background: var(--garde);
+  box-shadow: inset 0 0 0 1px var(--garde-border);
 }
 .print-legend-note {
   flex-basis: 100%;
@@ -558,10 +635,10 @@ table.planning th.week-band.week-even { background: var(--week-even-head); }
 table.planning th.week-band.week-odd  { background: var(--week-odd-head); }
 table.planning th.week-import.week-even { background: var(--week-even-head); }
 table.planning th.week-import.week-odd  { background: var(--week-odd-head); }
-table.planning th.day-header.week-even:not(.is-ferie) {
+table.planning th.day-header.week-even:not(.is-ferie):not(.is-garde) {
   background-color: var(--week-even-head);
 }
-table.planning th.day-header.week-odd:not(.is-ferie) {
+table.planning th.day-header.week-odd:not(.is-ferie):not(.is-garde) {
   background-color: var(--week-odd-head);
 }
 table.planning th.shift-col.week-even { background-color: var(--week-even-bg); }
@@ -580,6 +657,10 @@ table.planning tbody td.week-odd.vide.empty { background: #ccc6b8; }
 table.planning tbody td.week-even.plein,
 table.planning tbody td.week-odd.plein {
   background: var(--accent);
+}
+table.planning tbody td.week-even.plein.special,
+table.planning tbody td.week-odd.plein.special {
+  background: var(--presence-special);
 }
 table.planning tbody td.week-even.vide.cp,
 table.planning tbody td.week-odd.vide.cp     { background: var(--cp); }
@@ -632,6 +713,10 @@ table.planning td.sum-cell {
   background: var(--accent);
   border-color: var(--accent);
   position: relative;
+}
+.cell.plein.special, .pcell.plein.special {
+  background: var(--presence-special);
+  border-color: var(--presence-special);
 }
 .cell.plein::after, .pcell.plein::after {
   content: '×';
@@ -696,6 +781,9 @@ table.planning td.sum-cell {
 .cell.ferie.plein::after, .pcell.ferie.plein::after {
   z-index: 1;
 }
+.cell.ferie.plein.special::after, .pcell.ferie.plein.special::after {
+  z-index: 1;
+}
 
 /* Indicateur jour férié dans en-tête */
 th.day-header.is-ferie {
@@ -727,6 +815,34 @@ th.day-header .ferie-name {
   font-style: italic;
   color: var(--ferie-text);
   margin-top: 2px;
+}
+th.day-header.is-garde {
+  background-color: var(--garde) !important;
+  color: var(--ink);
+  box-shadow: inset 0 -3px 0 var(--garde-border);
+}
+th.day-header.is-ferie.is-garde {
+  background-color: var(--garde) !important;
+  color: var(--ink);
+}
+th.day-header.is-garde .date-lbl {
+  color: var(--ink-mute);
+}
+th.day-header.is-garde .date-num {
+  color: var(--ink);
+}
+th.day-header.is-garde .ferie-name {
+  color: var(--ink-soft);
+}
+th.day-header .garde-name {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 2px;
+}
+th.day-header.is-garde.is-today {
+  box-shadow: inset 0 -4px 0 var(--accent), inset 0 -7px 0 var(--garde-border);
 }
 
 /* =========================================================================
@@ -1502,8 +1618,108 @@ table.list button.del {
 }
 
 .employees-add-card,
-.employees-list-card {
+.employees-list-card,
+.employees-legend-card {
   margin-bottom: 14px;
+}
+.employees-type-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-bottom: 6px;
+}
+.employees-type-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.employees-type-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-mute);
+}
+.employees-type-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.employees-type-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  border-left: 3px solid transparent;
+}
+.employees-type-chip.emp-type-pharm-etudiant { background: #e8f5e9; border-left-color: #81c784; }
+.employees-type-chip.emp-type-pharm-salarie  { background: #c8e6c9; border-left-color: #2e7d32; }
+.employees-type-chip.emp-type-pharm-remplacant { background: #dcedc8; border-left-color: #689f38; }
+.employees-type-chip.emp-type-prep-etudiant  { background: #f3e5f5; border-left-color: #ce93d8; }
+.employees-type-chip.emp-type-prep-salarie   { background: #e1bee7; border-left-color: #7b1fa2; }
+select.emp-type-select {
+  min-width: 190px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line-strong);
+  border-left-width: 4px;
+  border-radius: var(--r);
+  cursor: pointer;
+  color: var(--ink);
+}
+select.emp-type-select.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
+select.emp-type-select.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
+select.emp-type-select.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
+select.emp-type-select.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
+select.emp-type-select.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+select.emp-type-select option {
+  font-weight: 600;
+  padding: 6px;
+}
+.employees-team-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+}
+.employees-team-chip {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  border-left: 4px solid transparent;
+  color: var(--ink);
+}
+.employees-team-chip.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
+.employees-team-chip.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
+.employees-team-chip.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
+.employees-team-chip.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
+.employees-team-chip.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+table.employees-list td.emp-name-cell {
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-left-color: transparent;
+}
+table.employees-list td.emp-name-cell.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
+table.employees-list td.emp-name-cell.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
+table.employees-list td.emp-name-cell.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
+table.employees-list td.emp-name-cell.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
+table.employees-list td.emp-name-cell.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+table.employees-list td.emp-name-cell .emp-rename-input {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+table.employees-list td.emp-name-cell .emp-rename-input:focus {
+  background: var(--bg-panel);
+  border-color: var(--line-strong);
 }
 .employees-add-row {
   display: flex;
@@ -1565,6 +1781,19 @@ table.employees-list .emp-save-btn {
     var(--ferie-stripe) 6px
   );
 }
+.legend-item .sw-garde {
+  background: var(--garde);
+  box-shadow: inset 0 0 0 1px var(--garde-border);
+}
+.legend-item .sw-special {
+  background: var(--presence-special);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 10px;
+}
 .totals-table {
   width: 100%;
   border-collapse: collapse;
@@ -1587,7 +1816,7 @@ table.employees-list .emp-save-btn {
    IMPRESSION
    ========================================================================= */
 @media print {
-  header.topbar, nav.tabs, aside.side, .controls, .no-print, .import-dialog-overlay, .fr-calendar-popup { display: none !important; }
+  header.topbar, .nav-shell, aside.side, .controls, .no-print, .import-dialog-overlay, .fr-calendar-popup { display: none !important; }
   body { background: #fff; }
   .app { display: block; }
   main.content { padding: 0; overflow: visible; }
