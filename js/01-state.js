@@ -125,6 +125,10 @@ function buildDefaultState() {
     gardes:       [],
     /* type par salarié : Pharmacien/Préparateur × étudiant/salarié */
     employeeTypes: {},
+    /* catalogue des types : [{ id, label, group, bg, border }] */
+    employeeTypeCatalog: [],
+    /* legacy — migré vers employeeTypeCatalog */
+    employeeTypeColors: {},
     /* coordonnées et infos personnelles : { empName: { phone, email, … } } */
     employeeInfo: {},
     /* jours travaillés pour contrats : { empName: [{ id, date, hours, note }] } */
@@ -183,7 +187,9 @@ function buildDefaultState() {
     }
   }
 
+  ensureEmployeeTypeCatalog(state);
   ensureEmployeeTypes(state);
+  ensureEmployeeTypeColors(state);
   ensureEmployeeInfo(state);
   ensureContractDays(state);
   ensureContractPartyInfo(state);
@@ -247,6 +253,9 @@ function migrateState(state) {
   ensureGardes(state);
   if (!state.employeeTypes) state.employeeTypes = {};
   ensureEmployeeTypes(state);
+  ensureEmployeeTypeCatalog(state);
+  ensureEmployeeTypeColors(state);
+  applyEmployeeTypeColorStyles(state);
 
   if (!state.employeeInfo) state.employeeInfo = {};
   ensureEmployeeInfo(state);
@@ -332,7 +341,7 @@ function replaceEmployeeInUiArrays(oldName, newName) {
   if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = newName;
 }
 
-function addEmployee(name, type = 'Pharmacien salarié') {
+function addEmployee(name, typeRef) {
   const n = normalizeEmployeeName(name);
   const err = validateEmployeeName(n);
   if (err) return { ok: false, error: err };
@@ -344,7 +353,7 @@ function addEmployee(name, type = 'Pharmacien salarié') {
   }
   STATE.affectations[n] = [];
   STATE.planning[n] = {};
-  setEmployeeType(n, type);
+  setEmployeeType(n, typeRef || getDefaultEmployeeTypeId());
   setEmployeeInfo(n, makeEmptyEmployeeInfo());
   if (!STATE.contractDays) STATE.contractDays = {};
   STATE.contractDays[n] = [];
@@ -388,4 +397,16 @@ function renameEmployee(oldName, newName) {
 
   replaceEmployeeInUiArrays(oldName, next);
   return { ok: true, name: next };
+}
+
+function reorderEmployee(fromIndex, toIndex) {
+  const list = STATE.employees;
+  const n = list.length;
+  if (fromIndex === toIndex) return { ok: true };
+  if (fromIndex < 0 || fromIndex >= n || toIndex < 0 || toIndex >= n) {
+    return { ok: false, error: 'Position invalide.' };
+  }
+  const [emp] = list.splice(fromIndex, 1);
+  list.splice(toIndex, 0, emp);
+  return { ok: true };
 }

@@ -733,6 +733,7 @@ function resetAll() {
    ========================================================================= */
 
 function initApp() {
+  applyEmployeeTypeColorStyles();
   $$('#nav-groups button').forEach(b => {
     b.onclick = () => {
       const tabs = TAB_GROUPS[b.dataset.group];

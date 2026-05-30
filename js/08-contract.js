@@ -224,8 +224,9 @@ function renderContractEditor(root) {
 }
 
 function buildPrintInfoLine(row) {
+  const wide = !!row.wide;
   return `
-    <div class="cp-line">
+    <div class="cp-line${wide ? ' cp-line-wide' : ''}">
       <span class="cp-line-label">${escapeHtml(row.label)}</span>
       <span class="cp-line-value">${escapeHtml(row.value)}</span>
     </div>`;

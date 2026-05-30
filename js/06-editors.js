@@ -799,30 +799,234 @@ function renderGardesEditor(root) {
    ÉDITEUR ÉQUIPE — ajout / renommage salariés
    ========================================================================= */
 
+function renderThemeSwatchPicker(selectedThemeId, hiddenInputId) {
+  const selected = getThemeById(selectedThemeId).id;
+  const idAttr = hiddenInputId ? ` id="${escapeHtml(hiddenInputId)}"` : '';
+  return `
+    <div class="emp-theme-picker" role="radiogroup" aria-label="Thème">
+      ${EMPLOYEE_TYPE_THEMES.map(t => `
+        <button type="button" class="emp-theme-swatch${t.id === selected ? ' is-selected' : ''}"
+          data-theme-id="${escapeHtml(t.id)}" title="${escapeHtml(t.label)}" aria-label="${escapeHtml(t.label)}"
+          aria-pressed="${t.id === selected}">
+          <span class="emp-theme-swatch-inner" style="background:${t.bg}; border-color:${t.border};"></span>
+        </button>`).join('')}
+      <input type="hidden" class="emp-catalog-theme-value"${idAttr} value="${escapeHtml(selected)}">
+    </div>`;
+}
+
+function previewThemeOnChip(chip, themeId) {
+  if (!chip) return;
+  const theme = getThemeById(themeId);
+  chip.style.backgroundColor = theme.bg;
+  chip.style.borderLeftColor = theme.border;
+}
+
+function bindThemePicker(picker, onChange) {
+  if (!picker) return;
+  const hidden = picker.querySelector('.emp-catalog-theme-value');
+  picker.querySelectorAll('.emp-theme-swatch').forEach(btn => {
+    btn.onclick = () => {
+      picker.querySelectorAll('.emp-theme-swatch').forEach(b => {
+        b.classList.remove('is-selected');
+        b.setAttribute('aria-pressed', 'false');
+      });
+      btn.classList.add('is-selected');
+      btn.setAttribute('aria-pressed', 'true');
+      if (hidden) hidden.value = btn.dataset.themeId;
+      if (onChange) onChange(btn.dataset.themeId);
+    };
+  });
+}
+
+function renderEmployeeTypeCatalogRow(entry) {
+  const used = countEmployeesWithTypeId(entry.id);
+  const def = DEFAULT_EMPLOYEE_TYPE_CATALOG.find(t => t.id === entry.id);
+  const isDefaultTheme = def && def.themeId === entry.themeId;
+  const cls = employeeTypeClassForId(entry.id);
+  return `
+    <tr class="emp-catalog-row" data-type-id="${escapeHtml(entry.id)}">
+      <td>
+        <span class="employees-type-chip ${cls} emp-catalog-preview">${escapeHtml(entry.label)}</span>
+      </td>
+      <td><input type="text" class="emp-catalog-label" value="${escapeHtml(entry.label)}" maxlength="60" aria-label="Libellé du type"></td>
+      <td><input type="text" class="emp-catalog-group" value="${escapeHtml(entry.group)}" maxlength="40" aria-label="Groupe du type"></td>
+      <td class="emp-catalog-theme-cell">${renderThemeSwatchPicker(entry.themeId)}</td>
+      <td class="emp-catalog-used">${used ? `${used} salarié${used > 1 ? 's' : ''}` : '—'}</td>
+      <td class="emp-catalog-actions">
+        <button type="button" class="nav emp-catalog-save" data-type-id="${escapeHtml(entry.id)}">Enregistrer</button>
+        <button type="button" class="nav emp-catalog-reset-theme" data-type-id="${escapeHtml(entry.id)}"${isDefaultTheme ? ' disabled' : ''}>Thème défaut</button>
+        <button type="button" class="nav del emp-catalog-delete" data-type-id="${escapeHtml(entry.id)}"${used ? ' disabled title="Type assigné à des salariés"' : ''}>Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+function renderEmployeeTypeLegendGroups() {
+  return getEmployeeTypeGroups().map(group => {
+    const types = getEmployeeTypeCatalog().filter(t => (t.group || 'Autres') === group);
+    return `
+      <div class="employees-type-group">
+        <span class="employees-type-group-label">${escapeHtml(group)}</span>
+        <div class="employees-type-group-chips">
+          ${types.map(t => `<span class="employees-type-chip ${employeeTypeClassForId(t.id)}">${escapeHtml(t.label)}</span>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function bindEmployeeTypeCatalogEditor(card) {
+  const readRow = (row) => ({
+    label: row.querySelector('.emp-catalog-label').value,
+    group: row.querySelector('.emp-catalog-group').value,
+    themeId: row.querySelector('.emp-catalog-theme-value')?.value,
+  });
+
+  card.querySelectorAll('.emp-catalog-row').forEach(row => {
+    const preview = row.querySelector('.emp-catalog-preview');
+    bindThemePicker(row.querySelector('.emp-theme-picker'), (themeId) => {
+      previewThemeOnChip(preview, themeId);
+      const resetBtn = row.querySelector('.emp-catalog-reset-theme');
+      const def = DEFAULT_EMPLOYEE_TYPE_CATALOG.find(t => t.id === row.dataset.typeId);
+      if (resetBtn) resetBtn.disabled = def && def.themeId === themeId;
+    });
+  });
+
+  card.querySelectorAll('.emp-catalog-save').forEach(btn => {
+    btn.onclick = () => {
+      const row = btn.closest('.emp-catalog-row');
+      const data = readRow(row);
+      const r = updateEmployeeTypeCatalogEntry(btn.dataset.typeId, data);
+      if (!r.ok) {
+        toast(r.error, true);
+        return;
+      }
+      applyEmployeeTypeColorStyles();
+      refreshEmployeeTypeOptionStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      toast(`Type « ${r.entry.label} » enregistré`);
+      persistAndRender();
+    };
+  });
+
+  card.querySelectorAll('.emp-catalog-label, .emp-catalog-group').forEach(input => {
+    input.oninput = () => {
+      const row = input.closest('.emp-catalog-row');
+      const preview = row.querySelector('.emp-catalog-preview');
+      if (preview && input.classList.contains('emp-catalog-label')) {
+        preview.textContent = input.value.trim() || '…';
+      }
+    };
+  });
+
+  card.querySelectorAll('.emp-catalog-reset-theme').forEach(btn => {
+    btn.onclick = () => {
+      resetEmployeeTypeTheme(btn.dataset.typeId);
+      applyEmployeeTypeColorStyles();
+      refreshEmployeeTypeOptionStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+    };
+  });
+
+  card.querySelectorAll('.emp-catalog-delete').forEach(btn => {
+    btn.onclick = () => {
+      const typeDef = getEmployeeTypeDefById(btn.dataset.typeId);
+      const label = typeDef ? typeDef.label : 'ce type';
+      if (!confirm(`Supprimer le type « ${label} » ?`)) return;
+      const r = removeEmployeeTypeCatalogEntry(btn.dataset.typeId);
+      if (!r.ok) {
+        toast(r.error, true);
+        return;
+      }
+      applyEmployeeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast('Type supprimé');
+    };
+  });
+
+  const addBtn = card.querySelector('#emp-catalog-add-btn');
+  if (addBtn) {
+    addBtn.onclick = () => {
+      const label = ($('#emp-catalog-add-label')?.value || '').trim();
+      const group = ($('#emp-catalog-add-group')?.value || '').trim();
+      const themeId = card.querySelector('#emp-catalog-add-theme-value')?.value;
+      const r = addEmployeeTypeCatalogEntry(label, group, themeId);
+      if (!r.ok) {
+        toast(r.error, true);
+        return;
+      }
+      applyEmployeeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast(`Type « ${r.entry.label} » ajouté`);
+    };
+  }
+
+  const resetAllBtn = card.querySelector('#emp-type-themes-reset-all');
+  if (resetAllBtn) {
+    resetAllBtn.onclick = () => {
+      if (!confirm('Réinitialiser les thèmes de tous les types ?')) return;
+      resetAllEmployeeTypeThemes();
+      applyEmployeeTypeColorStyles();
+      saveState();
+      if (sessionInitialized) markSessionDirty();
+      persistAndRender();
+      toast('Thèmes réinitialisés');
+    };
+  }
+}
+
 function renderEmployeesEditor(root) {
+  const catalog = getEmployeeTypeCatalog();
+  const defaultTypeId = getDefaultEmployeeTypeId();
+  const defaultAddThemeId = getDefaultThemeIdForCatalogIndex(catalog.length);
+
   const legendCard = document.createElement('div');
   legendCard.className = 'form-card employees-legend-card';
   legendCard.innerHTML = `
     <h3>Types de salariés</h3>
-    <div class="employees-type-legend">
-      <div class="employees-type-group">
-        <span class="employees-type-group-label">Pharmacien — vert</span>
-        <div class="employees-type-group-chips">
-          <span class="employees-type-chip emp-type-pharm-etudiant">Pharmacien étudiant</span>
-          <span class="employees-type-chip emp-type-pharm-salarie">Pharmacien salarié</span>
-          <span class="employees-type-chip emp-type-pharm-remplacant">Pharmacien remplaçant</span>
+    <div class="employees-type-legend">${renderEmployeeTypeLegendGroups()}</div>
+    <p class="muted">Couleur visible sur le nom en vue Semaine. Choisissez un thème pour chaque type, modifiez les libellés ou ajoutez de nouveaux types.</p>
+    <div class="employees-type-catalog">
+      <h4>Gestion des types</h4>
+      <table class="list emp-catalog-table">
+        <thead>
+          <tr>
+            <th>Aperçu</th>
+            <th>Libellé</th>
+            <th>Groupe</th>
+            <th>Thème</th>
+            <th>Utilisation</th>
+            <th class="emp-catalog-actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${catalog.map(renderEmployeeTypeCatalogRow).join('')}
+        </tbody>
+      </table>
+      <div class="emp-catalog-add">
+        <h4>Ajouter un type</h4>
+        <div class="emp-catalog-add-row">
+          <label>Libellé <input type="text" id="emp-catalog-add-label" maxlength="60" placeholder="Ex. Auxiliaire"></label>
+          <label>Groupe <input type="text" id="emp-catalog-add-group" maxlength="40" placeholder="Ex. Autre" value="Autre"></label>
+          <div class="emp-catalog-add-theme">
+            <span class="emp-catalog-add-theme-label">Thème</span>
+            <div id="emp-catalog-add-theme">${renderThemeSwatchPicker(defaultAddThemeId, 'emp-catalog-add-theme-value')}</div>
+          </div>
+          <button type="button" class="primary" id="emp-catalog-add-btn">+ Ajouter</button>
         </div>
       </div>
-      <div class="employees-type-group">
-        <span class="employees-type-group-label">Préparateur — violet</span>
-        <div class="employees-type-group-chips">
-          <span class="employees-type-chip emp-type-prep-etudiant">Préparateur étudiant</span>
-          <span class="employees-type-chip emp-type-prep-salarie">Préparateur salarié</span>
-        </div>
+      <div class="employees-type-colors-actions">
+        <button type="button" class="nav" id="emp-type-themes-reset-all">Réinitialiser tous les thèmes</button>
       </div>
-    </div>
-    <p class="muted">Étudiant = teinte claire · Salarié = teinte plus soutenue. Couleur visible sur le nom en vue Semaine.</p>`;
+    </div>`;
   root.appendChild(legendCard);
+  bindEmployeeTypeCatalogEditor(legendCard);
+  bindThemePicker($('#emp-catalog-add-theme'));
 
   const addCard = document.createElement('div');
   addCard.className = 'form-card employees-add-card';
@@ -832,8 +1036,8 @@ function renderEmployeesEditor(root) {
     <div class="employees-add-row">
       <label>Nom <input type="text" id="emp-add-name" placeholder="Prénom ou nom complet" maxlength="60"></label>
       <label>Type
-        <select id="emp-add-type" class="emp-type-select ${employeeTypeSelectClass('Pharmacien salarié')}">
-          ${renderEmployeeTypeOptions('Pharmacien salarié')}
+        <select id="emp-add-type" class="emp-type-select ${employeeTypeSelectClass(defaultTypeId)}">
+          ${renderEmployeeTypeOptions(defaultTypeId)}
         </select>
       </label>
       <button type="button" class="primary" id="emp-add-btn">+ Ajouter</button>
@@ -844,7 +1048,7 @@ function renderEmployeesEditor(root) {
   listCard.className = 'form-card employees-list-card';
   listCard.innerHTML = `
     <h3>Salariés (${STATE.employees.length})</h3>
-    <p class="muted">Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées et données personnelles (exportées dans le JSON).</p>`;
+    <p class="muted">Glissez la poignée ⋮⋮ ou utilisez ↑ / ↓ pour définir l'ordre d'affichage (planning, listes). Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées et données personnelles (exportées dans le JSON).</p>`;
 
   if (STATE.employees.length === 0) {
     listCard.innerHTML += `<p class="muted">Aucun salarié pour l'instant.</p>`;
@@ -862,6 +1066,7 @@ function renderEmployeesEditor(root) {
     tbl.innerHTML = `
       <thead>
         <tr>
+          <th class="emp-order-col" title="Glisser pour réordonner">Ordre</th>
           <th>Nom</th>
           <th>Type</th>
           <th class="emp-actions-col">Actions</th>
@@ -871,15 +1076,23 @@ function renderEmployeesEditor(root) {
         ${STATE.employees.map((emp, idx) => {
           const info = getEmployeeInfo(emp);
           const open = (STATE.ui.employeeDetailsOpen || []).includes(emp);
+          const last = idx === STATE.employees.length - 1;
           return `
-          <tr class="emp-summary-row" data-emp="${escapeHtml(emp)}">
+          <tr class="emp-summary-row" data-emp="${escapeHtml(emp)}" data-emp-idx="${idx}">
+            <td class="emp-order-col">
+              <span class="emp-drag-handle" draggable="true" title="Glisser pour déplacer" aria-label="Déplacer ${escapeHtml(emp)}">⋮⋮</span>
+              <div class="emp-order-buttons">
+                <button type="button" class="emp-move-btn" data-dir="up" data-idx="${idx}"${idx === 0 ? ' disabled' : ''} aria-label="Monter ${escapeHtml(emp)}">↑</button>
+                <button type="button" class="emp-move-btn" data-dir="down" data-idx="${idx}"${last ? ' disabled' : ''} aria-label="Descendre ${escapeHtml(emp)}">↓</button>
+              </div>
+            </td>
             <td class="emp-name-cell ${employeeTypeClass(emp)}">
               <input type="text" class="emp-rename-input" data-idx="${idx}"
                      value="${escapeHtml(emp)}" maxlength="60" aria-label="Nom de ${escapeHtml(emp)}">
             </td>
             <td>
-              <select class="emp-type-select ${employeeTypeSelectClass(getEmployeeType(emp))}" data-emp="${escapeHtml(emp)}" aria-label="Type de ${escapeHtml(emp)}">
-                ${renderEmployeeTypeOptions(getEmployeeType(emp))}
+              <select class="emp-type-select ${employeeTypeSelectClass(getEmployeeTypeId(emp))}" data-emp="${escapeHtml(emp)}" aria-label="Type de ${escapeHtml(emp)}">
+                ${renderEmployeeTypeOptions(getEmployeeTypeId(emp))}
               </select>
             </td>
             <td class="emp-actions-col">
@@ -890,7 +1103,7 @@ function renderEmployeesEditor(root) {
             </td>
           </tr>
           <tr class="emp-details-row${open ? '' : ' hidden'}" data-emp="${escapeHtml(emp)}">
-            <td colspan="3">
+            <td colspan="4">
               <div class="emp-info-panel">
                 <div class="emp-info-grid">
                   ${EMPLOYEE_INFO_FIELDS.map(f => renderEmployeeInfoFieldHtml(emp, f, info)).join('')}
@@ -904,6 +1117,7 @@ function renderEmployeesEditor(root) {
         }).join('')}
       </tbody>`;
     listCard.appendChild(tbl);
+    bindEmployeeListReorder(listCard);
   }
   root.appendChild(listCard);
 
@@ -934,7 +1148,7 @@ function renderEmployeesEditor(root) {
       syncEmployeeListRowColors(sel.closest('tr'), sel.value);
       setEmployeeType(sel.dataset.emp, sel.value);
       persistAndRender();
-      toast(`Type « ${sel.value} » enregistré pour ${sel.dataset.emp}`);
+      toast(`Type « ${getEmployeeTypeLabelById(sel.value)} » enregistré pour ${sel.dataset.emp}`);
     };
   });
 
@@ -997,6 +1211,70 @@ function renderEmployeesEditor(root) {
       setEmployeeInfo(emp, readEmployeeInfoFromPanel(panel));
       saveState();
       toast(`Informations enregistrées pour ${emp}`);
+    };
+  });
+}
+
+function bindEmployeeListReorder(listCard) {
+  const tbody = listCard.querySelector('table.employees-list tbody');
+  if (!tbody) return;
+
+  let dragFromIdx = null;
+
+  tbody.querySelectorAll('.emp-drag-handle').forEach(handle => {
+    handle.addEventListener('dragstart', (e) => {
+      const row = handle.closest('.emp-summary-row');
+      if (!row) return;
+      dragFromIdx = parseInt(row.dataset.empIdx, 10);
+      row.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(dragFromIdx));
+    });
+    handle.addEventListener('dragend', () => {
+      dragFromIdx = null;
+      tbody.querySelectorAll('.emp-summary-row').forEach(r => {
+        r.classList.remove('is-dragging', 'emp-drop-target');
+      });
+    });
+  });
+
+  tbody.querySelectorAll('.emp-summary-row').forEach(row => {
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      tbody.querySelectorAll('.emp-summary-row.emp-drop-target').forEach(r => {
+        if (r !== row) r.classList.remove('emp-drop-target');
+      });
+      row.classList.add('emp-drop-target');
+    });
+    row.addEventListener('dragleave', (e) => {
+      if (!row.contains(e.relatedTarget)) row.classList.remove('emp-drop-target');
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('emp-drop-target');
+      const fromIdx = dragFromIdx != null
+        ? dragFromIdx
+        : parseInt(e.dataTransfer.getData('text/plain'), 10);
+      const toIdx = parseInt(row.dataset.empIdx, 10);
+      if (Number.isNaN(fromIdx) || Number.isNaN(toIdx) || fromIdx === toIdx) return;
+      const r = reorderEmployee(fromIdx, toIdx);
+      if (!r.ok) {
+        toast(r.error || 'Réordonnancement impossible.', true);
+        return;
+      }
+      persistAndRender();
+    });
+  });
+
+  listCard.querySelectorAll('.emp-move-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const idx = parseInt(btn.dataset.idx, 10);
+      const toIdx = btn.dataset.dir === 'up' ? idx - 1 : idx + 1;
+      if (toIdx < 0 || toIdx >= STATE.employees.length) return;
+      reorderEmployee(idx, toIdx);
+      persistAndRender();
     };
   });
 }

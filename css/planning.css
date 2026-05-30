@@ -34,6 +34,17 @@
   --warn:         #c8523f;
   --ok:           #1f5f4a;
 
+  --emp-type-pharm-etudiant-bg:     #e8f5e9;
+  --emp-type-pharm-etudiant-border: #81c784;
+  --emp-type-pharm-salarie-bg:      #c8e6c9;
+  --emp-type-pharm-salarie-border:  #2e7d32;
+  --emp-type-pharm-remplacant-bg:   #dcedc8;
+  --emp-type-pharm-remplacant-border: #689f38;
+  --emp-type-prep-etudiant-bg:      #f3e5f5;
+  --emp-type-prep-etudiant-border:  #ce93d8;
+  --emp-type-prep-salarie-bg:       #e1bee7;
+  --emp-type-prep-salarie-border:   #7b1fa2;
+
   --r:            6px;            /* border-radius standard */
   --shadow:       0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
   --week-even-bg:   #ffffff;
@@ -302,24 +313,24 @@ table.planning thead th.empname {
   vertical-align: bottom;
 }
 table.planning td.empname.emp-type-pharm-etudiant {
-  background-color: #e8f5e9;
-  border-left: 3px solid #81c784;
+  background-color: var(--emp-type-pharm-etudiant-bg);
+  border-left: 3px solid var(--emp-type-pharm-etudiant-border);
 }
 table.planning td.empname.emp-type-pharm-salarie {
-  background-color: #c8e6c9;
-  border-left: 3px solid #2e7d32;
+  background-color: var(--emp-type-pharm-salarie-bg);
+  border-left: 3px solid var(--emp-type-pharm-salarie-border);
 }
 table.planning td.empname.emp-type-pharm-remplacant {
-  background-color: #dcedc8;
-  border-left: 3px solid #689f38;
+  background-color: var(--emp-type-pharm-remplacant-bg);
+  border-left: 3px solid var(--emp-type-pharm-remplacant-border);
 }
 table.planning td.empname.emp-type-prep-etudiant {
-  background-color: #f3e5f5;
-  border-left: 3px solid #ce93d8;
+  background-color: var(--emp-type-prep-etudiant-bg);
+  border-left: 3px solid var(--emp-type-prep-etudiant-border);
 }
 table.planning td.empname.emp-type-prep-salarie {
-  background-color: #e1bee7;
-  border-left: 3px solid #7b1fa2;
+  background-color: var(--emp-type-prep-salarie-bg);
+  border-left: 3px solid var(--emp-type-prep-salarie-border);
 }
 table.planning td.cell {
   min-width: 26px;
@@ -1688,11 +1699,199 @@ table.list button.del {
   font-size: 12px;
   border-left: 3px solid transparent;
 }
-.employees-type-chip.emp-type-pharm-etudiant { background: #e8f5e9; border-left-color: #81c784; }
-.employees-type-chip.emp-type-pharm-salarie  { background: #c8e6c9; border-left-color: #2e7d32; }
-.employees-type-chip.emp-type-pharm-remplacant { background: #dcedc8; border-left-color: #689f38; }
-.employees-type-chip.emp-type-prep-etudiant  { background: #f3e5f5; border-left-color: #ce93d8; }
-.employees-type-chip.emp-type-prep-salarie   { background: #e1bee7; border-left-color: #7b1fa2; }
+.employees-type-chip.emp-type-pharm-etudiant { background: var(--emp-type-pharm-etudiant-bg); border-left-color: var(--emp-type-pharm-etudiant-border); }
+.employees-type-chip.emp-type-pharm-salarie  { background: var(--emp-type-pharm-salarie-bg); border-left-color: var(--emp-type-pharm-salarie-border); }
+.employees-type-chip.emp-type-pharm-remplacant { background: var(--emp-type-pharm-remplacant-bg); border-left-color: var(--emp-type-pharm-remplacant-border); }
+.employees-type-chip.emp-type-prep-etudiant  { background: var(--emp-type-prep-etudiant-bg); border-left-color: var(--emp-type-prep-etudiant-border); }
+.employees-type-chip.emp-type-prep-salarie   { background: var(--emp-type-prep-salarie-bg); border-left-color: var(--emp-type-prep-salarie-border); }
+.employees-type-colors {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.employees-type-colors h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.employees-type-color-group {
+  margin-bottom: 12px;
+}
+.employees-type-color-group-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.employees-type-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+}
+.employees-type-color-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.employees-type-color-field input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  cursor: pointer;
+  background: var(--bg-panel);
+}
+.employees-type-colors-actions {
+  margin-top: 10px;
+}
+.employees-type-colors-actions .nav {
+  font-size: 12px;
+}
+.employees-type-catalog {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.employees-type-catalog > h4 {
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+table.emp-catalog-table {
+  width: 100%;
+  margin-bottom: 16px;
+}
+table.emp-catalog-table th,
+table.emp-catalog-table td {
+  vertical-align: middle;
+  font-size: 12px;
+}
+table.emp-catalog-table .emp-catalog-label,
+table.emp-catalog-table .emp-catalog-group {
+  width: 100%;
+  min-width: 120px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+table.emp-catalog-table input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  cursor: pointer;
+  background: var(--bg-panel);
+}
+.emp-catalog-preview {
+  white-space: nowrap;
+}
+.emp-catalog-used {
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.emp-catalog-actions-col {
+  width: 220px;
+}
+.emp-catalog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.emp-catalog-actions .nav {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.emp-catalog-add {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.emp-catalog-add h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.emp-catalog-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+.emp-catalog-add-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.emp-catalog-add-row input[type="text"] {
+  min-width: 140px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 12px;
+}
+.emp-catalog-add-row input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.emp-catalog-theme-cell {
+  min-width: 180px;
+}
+.emp-theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 240px;
+}
+.emp-theme-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 1px;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.emp-theme-swatch:hover {
+  border-color: var(--line-strong);
+}
+.emp-theme-swatch.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.emp-theme-swatch-inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  border-left: 3px solid;
+  box-sizing: border-box;
+}
+.emp-catalog-add-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+.emp-catalog-add-theme-label {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
 select.emp-type-select {
   min-width: 190px;
   padding: 6px 8px;
@@ -1704,11 +1903,11 @@ select.emp-type-select {
   cursor: pointer;
   color: var(--ink);
 }
-select.emp-type-select.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
-select.emp-type-select.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
-select.emp-type-select.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
-select.emp-type-select.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
-select.emp-type-select.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+select.emp-type-select.emp-type-pharm-etudiant  { background-color: var(--emp-type-pharm-etudiant-bg); border-left-color: var(--emp-type-pharm-etudiant-border); }
+select.emp-type-select.emp-type-pharm-salarie   { background-color: var(--emp-type-pharm-salarie-bg); border-left-color: var(--emp-type-pharm-salarie-border); }
+select.emp-type-select.emp-type-pharm-remplacant { background-color: var(--emp-type-pharm-remplacant-bg); border-left-color: var(--emp-type-pharm-remplacant-border); }
+select.emp-type-select.emp-type-prep-etudiant   { background-color: var(--emp-type-prep-etudiant-bg); border-left-color: var(--emp-type-prep-etudiant-border); }
+select.emp-type-select.emp-type-prep-salarie    { background-color: var(--emp-type-prep-salarie-bg); border-left-color: var(--emp-type-prep-salarie-border); }
 select.emp-type-select option {
   font-weight: 600;
   padding: 6px;
@@ -1732,21 +1931,21 @@ select.emp-type-select option {
   border-left: 4px solid transparent;
   color: var(--ink);
 }
-.employees-team-chip.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
-.employees-team-chip.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
-.employees-team-chip.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
-.employees-team-chip.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
-.employees-team-chip.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+.employees-team-chip.emp-type-pharm-etudiant  { background-color: var(--emp-type-pharm-etudiant-bg); border-left-color: var(--emp-type-pharm-etudiant-border); }
+.employees-team-chip.emp-type-pharm-salarie   { background-color: var(--emp-type-pharm-salarie-bg); border-left-color: var(--emp-type-pharm-salarie-border); }
+.employees-team-chip.emp-type-pharm-remplacant { background-color: var(--emp-type-pharm-remplacant-bg); border-left-color: var(--emp-type-pharm-remplacant-border); }
+.employees-team-chip.emp-type-prep-etudiant   { background-color: var(--emp-type-prep-etudiant-bg); border-left-color: var(--emp-type-prep-etudiant-border); }
+.employees-team-chip.emp-type-prep-salarie    { background-color: var(--emp-type-prep-salarie-bg); border-left-color: var(--emp-type-prep-salarie-border); }
 table.employees-list td.emp-name-cell {
   border-left-width: 4px;
   border-left-style: solid;
   border-left-color: transparent;
 }
-table.employees-list td.emp-name-cell.emp-type-pharm-etudiant  { background-color: #e8f5e9; border-left-color: #81c784; }
-table.employees-list td.emp-name-cell.emp-type-pharm-salarie   { background-color: #c8e6c9; border-left-color: #2e7d32; }
-table.employees-list td.emp-name-cell.emp-type-pharm-remplacant { background-color: #dcedc8; border-left-color: #689f38; }
-table.employees-list td.emp-name-cell.emp-type-prep-etudiant   { background-color: #f3e5f5; border-left-color: #ce93d8; }
-table.employees-list td.emp-name-cell.emp-type-prep-salarie    { background-color: #e1bee7; border-left-color: #7b1fa2; }
+table.employees-list td.emp-name-cell.emp-type-pharm-etudiant  { background-color: var(--emp-type-pharm-etudiant-bg); border-left-color: var(--emp-type-pharm-etudiant-border); }
+table.employees-list td.emp-name-cell.emp-type-pharm-salarie   { background-color: var(--emp-type-pharm-salarie-bg); border-left-color: var(--emp-type-pharm-salarie-border); }
+table.employees-list td.emp-name-cell.emp-type-pharm-remplacant { background-color: var(--emp-type-pharm-remplacant-bg); border-left-color: var(--emp-type-pharm-remplacant-border); }
+table.employees-list td.emp-name-cell.emp-type-prep-etudiant   { background-color: var(--emp-type-prep-etudiant-bg); border-left-color: var(--emp-type-prep-etudiant-border); }
+table.employees-list td.emp-name-cell.emp-type-prep-salarie    { background-color: var(--emp-type-prep-salarie-bg); border-left-color: var(--emp-type-prep-salarie-border); }
 table.employees-list td.emp-name-cell .emp-rename-input {
   background: transparent;
   border-color: rgba(0, 0, 0, 0.12);
@@ -1787,6 +1986,63 @@ table.employees-list .emp-rename-input {
   border-radius: var(--r);
   background: var(--bg-panel);
   font-size: 13px;
+}
+table.employees-list .emp-order-col {
+  width: 56px;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.employees-list .emp-drag-handle {
+  display: inline-block;
+  cursor: grab;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: -2px;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: var(--r);
+}
+table.employees-list .emp-drag-handle:hover {
+  color: var(--ink);
+  background: var(--bg-soft);
+}
+table.employees-list .emp-drag-handle:active {
+  cursor: grabbing;
+}
+table.employees-list .emp-order-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin-top: 4px;
+}
+table.employees-list .emp-move-btn {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--bg-panel);
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+table.employees-list .emp-move-btn:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: var(--ink);
+}
+table.employees-list .emp-move-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+table.employees-list tr.emp-summary-row.is-dragging {
+  opacity: 0.45;
+}
+table.employees-list tr.emp-summary-row.emp-drop-target td {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 table.employees-list .emp-actions-col {
   width: 200px;
@@ -2007,6 +2263,10 @@ body.printing-contract #contract-print-root {
   font-size: 9.5pt;
   color: #555;
   margin-top: 2px;
+  max-width: 120mm;
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .cp-doc-date {
   font-size: 9pt;
@@ -2082,15 +2342,38 @@ body.printing-contract #contract-print-root {
   gap: 8px;
   margin: 4px 0;
   font-size: 9.5pt;
+  align-items: flex-start;
 }
 .cp-line-label {
-  flex: 0 0 42%;
+  flex: 0 0 32%;
   color: #666;
+  min-width: 0;
 }
 .cp-line-value {
   flex: 1;
+  min-width: 0;
   font-weight: 500;
   color: #111;
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.cp-line-wide {
+  flex-direction: column;
+  gap: 2px;
+  margin: 7px 0;
+}
+.cp-line-wide .cp-line-label {
+  flex: none;
+  width: auto;
+  font-size: 8.5pt;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.cp-line-wide .cp-line-value {
+  width: 100%;
+  font-size: 9.5pt;
 }
 .cp-empty {
   margin: 0;
@@ -2265,7 +2548,10 @@ body.printing-contract #contract-print-root {
     position: static;
     width: 100%;
   }
-  body.printing-contract .cp-block,
+  body.printing-contract .cp-block {
+    overflow: visible;
+    page-break-inside: avoid;
+  }
   body.printing-contract .cp-schedule,
   body.printing-contract .cp-footer {
     page-break-inside: avoid;
