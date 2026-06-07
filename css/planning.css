@@ -2413,9 +2413,143 @@ table.contract-days-table tfoot th {
   padding: 6px 14px;
 }
 
+/* CDI — semaines de demi-journées -------------------------------------- */
+.cdi-weeks-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 8px;
+}
+.cdi-weeks-head h3 { margin: 0; }
+.cdi-total-summary { margin-right: auto; }
+.cdi-weeks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+.cdi-week-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  background: var(--bg-soft);
+}
+.cdi-week-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+.cdi-week-label-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  flex: 1;
+  min-width: 160px;
+}
+.cdi-week-label-input {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+.cdi-week-summary { font-size: 12px; }
+.cdi-week-grid-wrap { overflow-x: auto; }
+table.cdi-week-grid {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 420px;
+}
+table.cdi-week-grid th,
+table.cdi-week-grid td {
+  border: 1px solid var(--line);
+  text-align: center;
+  padding: 0;
+}
+table.cdi-week-grid thead th {
+  background: var(--bg-panel);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+}
+.cdi-shift-label {
+  width: 28px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-panel);
+  color: var(--ink-soft);
+}
+td.cdi-cell {
+  width: 36px;
+  height: 32px;
+  cursor: pointer;
+  background: #f0eee6;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+td.cdi-cell:hover {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+td.cdi-cell.worked {
+  background: var(--accent);
+}
+.cdi-preview-week {
+  margin-top: 14px;
+}
+.cdi-preview-week h4 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+table.cdi-preview-table th,
+table.cdi-preview-table td {
+  text-align: center;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.cdi-preview-cell.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+.cdi-pdf-week {
+  margin-bottom: 18px;
+  page-break-inside: avoid;
+}
+.cdi-pdf-week-title {
+  font-size: 12pt;
+  margin: 0 0 2px;
+}
+.cdi-pdf-week-sub {
+  font-size: 9pt;
+  color: #555;
+  margin: 0 0 8px;
+}
+.cdi-pdf-cell.on {
+  font-weight: 600;
+  color: #2e7d32;
+}
+
 #contract-print-root { display: none; }
 body.printing-contract .app { display: none !important; }
 body.printing-contract #contract-print-root {
+  display: block !important;
+  position: static;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+}
+
+#cdi-print-root { display: none; }
+body.printing-cdi .app { display: none !important; }
+body.printing-cdi #cdi-print-root {
   display: block !important;
   position: static;
   width: 100%;

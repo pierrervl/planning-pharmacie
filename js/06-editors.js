@@ -1608,6 +1608,11 @@ function renderSettingsEditor(root) {
         <span class="settings-related-label">Contrats PDF</span>
         <span class="settings-related-desc">Journées travaillées par salarié</span>
       </button>
+      <button type="button" class="settings-related-item settings-goto" data-tab="cdi">
+        <span class="settings-related-icon">📋</span>
+        <span class="settings-related-label">CDI</span>
+        <span class="settings-related-desc">Semaines de demi-journées travaillées</span>
+      </button>
     </div>`;
   root.appendChild(related);
   bindSettingsNavLinks(related);

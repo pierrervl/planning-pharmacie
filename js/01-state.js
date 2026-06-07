@@ -135,6 +135,8 @@ function buildDefaultState() {
     employeeInfo: {},
     /* jours travaillés pour contrats : { empName: [{ id, date, hours, note }] } */
     contractDays: {},
+    /* semaines CDI (demi-journées) : { empName: [{ id, label, days: [{matin, aprem}×7] }] } */
+    cdiWeeks: {},
     pharmacyInfo: {},
     employerInfo: {},
     /* préférences UI                                                    */
@@ -195,6 +197,7 @@ function buildDefaultState() {
   ensureCongeTypeCatalog(state);
   ensureEmployeeInfo(state);
   ensureContractDays(state);
+  ensureCdiWeeks(state);
   ensureContractPartyInfo(state);
   return state;
 }
@@ -269,10 +272,18 @@ function migrateState(state) {
 
   if (!state.contractDays) state.contractDays = {};
   ensureContractDays(state);
+  if (!state.cdiWeeks) state.cdiWeeks = {};
+  ensureCdiWeeks(state);
   ensureContractPartyInfo(state);
 
   if (!state.ui.contractEmp && (state.employees || []).length) {
     state.ui.contractEmp = state.employees[0];
+  }
+  if (!state.ui.cdiEmp && (state.employees || []).length) {
+    state.ui.cdiEmp = state.employees[0];
+  }
+  if (!state.ui.cdiDocTitle) {
+    state.ui.cdiDocTitle = 'Planning CDI — demi-journées travaillées';
   }
   if (!state.ui.contractDocTitle) {
     state.ui.contractDocTitle = 'Contrat de travail — planning des journées';
@@ -346,6 +357,7 @@ function replaceEmployeeInUiArrays(oldName, newName) {
   if (STATE.ui.monthEmp === oldName) STATE.ui.monthEmp = newName;
   if (STATE.ui.yearEmp === oldName) STATE.ui.yearEmp = newName;
   if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = newName;
+  if (STATE.ui.cdiEmp === oldName) STATE.ui.cdiEmp = newName;
 }
 
 function addEmployee(name, typeRef) {
@@ -364,6 +376,8 @@ function addEmployee(name, typeRef) {
   setEmployeeInfo(n, makeEmptyEmployeeInfo());
   if (!STATE.contractDays) STATE.contractDays = {};
   STATE.contractDays[n] = [];
+  if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
+  STATE.cdiWeeks[n] = [];
   if (!STATE.ui.filtersEmp.includes(n)) STATE.ui.filtersEmp.push(n);
   if (!STATE.ui.employeeChartEmps.includes(n)) STATE.ui.employeeChartEmps.push(n);
   if (!STATE.ui.employeeView) STATE.ui.employeeView = n;
@@ -389,8 +403,11 @@ function renameEmployee(oldName, newName) {
   moveEmployeeDataKey(STATE.employeeInfo, oldName, next);
   if (!STATE.contractDays) STATE.contractDays = {};
   moveEmployeeDataKey(STATE.contractDays, oldName, next);
+  if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
+  moveEmployeeDataKey(STATE.cdiWeeks, oldName, next);
 
   if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = next;
+  if (STATE.ui.cdiEmp === oldName) STATE.ui.cdiEmp = next;
   if (STATE.ui.employeeDetailsOpen) {
     STATE.ui.employeeDetailsOpen = STATE.ui.employeeDetailsOpen.map(e => (e === oldName ? next : e));
   }

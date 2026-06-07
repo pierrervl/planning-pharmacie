@@ -8,12 +8,12 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'contract', 'feries', 'gardes', 'settings'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'settings'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns'],
   analyse:  ['emp-overview', 'emp-detail'],
-  equipe:   ['conges', 'employees', 'contract'],
+  equipe:   ['conges', 'employees', 'contract', 'cdi'],
   journees: ['feries', 'gardes'],
   config:   ['settings'],
 };
@@ -58,6 +58,7 @@ function render() {
     case 'patterns':       renderPatternsEditor(content); break;
     case 'employees':      renderEmployeesEditor(content); break;
     case 'contract':       renderContractEditor(content); break;
+    case 'cdi':            renderCdiEditor(content); break;
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
@@ -933,6 +934,7 @@ function renderSidebar() {
     || STATE.ui.currentTab === 'emp-detail'
     || STATE.ui.currentTab === 'employees'
     || STATE.ui.currentTab === 'contract'
+    || STATE.ui.currentTab === 'cdi'
     || STATE.ui.currentTab === 'settings';
 
   if (!isEmployeeTab) {

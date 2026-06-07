@@ -311,6 +311,7 @@ function applyImportedJSON(obj, filename) {
   if (!STATE.employeeTypes) STATE.employeeTypes = {};
   if (!STATE.employeeInfo) STATE.employeeInfo = {};
   if (!STATE.contractDays) STATE.contractDays = {};
+  if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
   if (!STATE.pharmacyInfo) STATE.pharmacyInfo = {};
   if (!STATE.employerInfo) STATE.employerInfo = {};
   if (!STATE.ui) STATE.ui = buildDefaultState().ui;
@@ -759,6 +760,7 @@ function initApp() {
   $('#btn-print').onclick = () => {
     if (STATE.ui.currentTab === 'week') printWeekPeriod();
     else if (STATE.ui.currentTab === 'contract') printContractPdf();
+    else if (STATE.ui.currentTab === 'cdi') printCdiPdf();
     else window.print();
   };
   $('#btn-export-png').onclick = exportPNG;
