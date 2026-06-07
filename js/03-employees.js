@@ -579,6 +579,29 @@ function ensureContractDays(state) {
   }
 }
 
+function getContractDescription(emp, state) {
+  if (!state) state = typeof STATE !== 'undefined' ? STATE : { contractDescriptions: {} };
+  if (!state.contractDescriptions) state.contractDescriptions = {};
+  return state.contractDescriptions[emp] || '';
+}
+
+function setContractDescription(emp, text, state) {
+  if (!state) state = typeof STATE !== 'undefined' ? STATE : null;
+  if (!state) return;
+  if (!state.contractDescriptions) state.contractDescriptions = {};
+  state.contractDescriptions[emp] = String(text || '').trim();
+}
+
+function ensureContractDescriptions(state) {
+  if (!state.contractDescriptions) state.contractDescriptions = {};
+  for (const emp of state.employees || []) {
+    if (state.contractDescriptions[emp] == null) state.contractDescriptions[emp] = '';
+  }
+  for (const name of Object.keys(state.contractDescriptions)) {
+    if (!(state.employees || []).includes(name)) delete state.contractDescriptions[name];
+  }
+}
+
 function getEmployeeContractEndDate(emp, state = STATE) {
   return getEmployeeInfo(emp, state).contractEndDate || '';
 }

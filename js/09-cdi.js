@@ -88,6 +88,8 @@ function bindCdiWeekGrids(root, emp) {
 function persistCdiMetaFromDom() {
   STATE.ui.cdiDocTitle = ($('#cdi-doc-title')?.value || '').trim()
     || 'Planning CDI — demi-journées travaillées';
+  const emp = STATE.ui.cdiEmp;
+  if (emp) setCdiDescription(emp, $('#cdi-doc-comment')?.value || '');
   saveState();
 }
 
@@ -109,6 +111,7 @@ function renderCdiEditor(root) {
   const weeks = getCdiWeeks(emp);
   const totalHalf = countCdiTotalHalfDays(weeks);
   const docTitle = STATE.ui.cdiDocTitle || 'Planning CDI — demi-journées travaillées';
+  const docComment = getCdiDescription(emp);
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls cdi-controls no-print';
@@ -134,6 +137,10 @@ function renderCdiEditor(root) {
       <label>Titre du document
         <input type="text" id="cdi-doc-title" value="${escapeHtml(docTitle)}" maxlength="120">
       </label>
+      <label class="contract-description-field">Description du contrat
+        <textarea id="cdi-doc-comment" rows="4" maxlength="2000"
+          placeholder="Objet du contrat CDI, contexte, modalités particulières…">${escapeHtml(docComment)}</textarea>
+      </label>
     </div>`;
   root.appendChild(metaCard);
 
@@ -146,6 +153,13 @@ function renderCdiEditor(root) {
       <tbody>${buildEmployeeInfoRowsHtml(emp)}</tbody>
     </table>`;
   root.appendChild(infoCard);
+
+  if (docComment) {
+    const commentPreview = document.createElement('div');
+    commentPreview.className = 'form-card doc-comment-preview-card';
+    commentPreview.innerHTML = buildDocCommentPreviewHtml(docComment);
+    root.appendChild(commentPreview);
+  }
 
   const weeksCard = document.createElement('div');
   weeksCard.className = 'form-card cdi-weeks-card no-print';
@@ -210,6 +224,8 @@ function renderCdiEditor(root) {
   };
 
   $('#cdi-doc-title').onchange = persistCdiMetaFromDom;
+  $('#cdi-doc-comment')?.addEventListener('change', persistCdiMetaFromDom);
+  $('#cdi-doc-comment')?.addEventListener('blur', persistCdiMetaFromDom);
 
   $('#cdi-week-add').onclick = () => {
     const r = addCdiWeek(emp);
@@ -243,6 +259,7 @@ function printCdiPdf() {
 
   const totalHalf = countCdiTotalHalfDays(weeks);
   const docTitle = STATE.ui.cdiDocTitle || 'Planning CDI — demi-journées travaillées';
+  const docComment = getCdiDescription(emp);
   const pharmacy = getPharmacyInfo();
   const employer = getEmployerInfo();
   const empInfo = getEmployeeInfo(emp);
@@ -306,6 +323,8 @@ function printCdiPdf() {
           ...partyInfoLines(EMPLOYEE_INFO_FIELDS, empInfo),
         ])}
       </div>
+
+      ${buildDocCommentPrintHtml(docComment)}
 
       <section class="cp-schedule cdi-pdf-schedule">
         <div class="cp-block-head cp-schedule-head">

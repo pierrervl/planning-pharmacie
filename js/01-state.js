@@ -135,8 +135,10 @@ function buildDefaultState() {
     employeeInfo: {},
     /* jours travaillés pour contrats : { empName: [{ id, date, hours, note }] } */
     contractDays: {},
+    contractDescriptions: {},
     /* semaines CDI (demi-journées) : { empName: [{ id, label, days: [{matin, aprem}×7] }] } */
     cdiWeeks: {},
+    cdiDescriptions: {},
     pharmacyInfo: {},
     employerInfo: {},
     /* préférences UI                                                    */
@@ -197,7 +199,9 @@ function buildDefaultState() {
   ensureCongeTypeCatalog(state);
   ensureEmployeeInfo(state);
   ensureContractDays(state);
+  ensureContractDescriptions(state);
   ensureCdiWeeks(state);
+  ensureCdiDescriptions(state);
   ensureContractPartyInfo(state);
   return state;
 }
@@ -272,8 +276,12 @@ function migrateState(state) {
 
   if (!state.contractDays) state.contractDays = {};
   ensureContractDays(state);
+  if (!state.contractDescriptions) state.contractDescriptions = {};
+  ensureContractDescriptions(state);
   if (!state.cdiWeeks) state.cdiWeeks = {};
   ensureCdiWeeks(state);
+  if (!state.cdiDescriptions) state.cdiDescriptions = {};
+  ensureCdiDescriptions(state);
   ensureContractPartyInfo(state);
 
   if (!state.ui.contractEmp && (state.employees || []).length) {
@@ -376,8 +384,12 @@ function addEmployee(name, typeRef) {
   setEmployeeInfo(n, makeEmptyEmployeeInfo());
   if (!STATE.contractDays) STATE.contractDays = {};
   STATE.contractDays[n] = [];
+  if (!STATE.contractDescriptions) STATE.contractDescriptions = {};
+  STATE.contractDescriptions[n] = '';
   if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
   STATE.cdiWeeks[n] = [];
+  if (!STATE.cdiDescriptions) STATE.cdiDescriptions = {};
+  STATE.cdiDescriptions[n] = '';
   if (!STATE.ui.filtersEmp.includes(n)) STATE.ui.filtersEmp.push(n);
   if (!STATE.ui.employeeChartEmps.includes(n)) STATE.ui.employeeChartEmps.push(n);
   if (!STATE.ui.employeeView) STATE.ui.employeeView = n;
@@ -403,8 +415,12 @@ function renameEmployee(oldName, newName) {
   moveEmployeeDataKey(STATE.employeeInfo, oldName, next);
   if (!STATE.contractDays) STATE.contractDays = {};
   moveEmployeeDataKey(STATE.contractDays, oldName, next);
+  if (!STATE.contractDescriptions) STATE.contractDescriptions = {};
+  moveEmployeeDataKey(STATE.contractDescriptions, oldName, next);
   if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
   moveEmployeeDataKey(STATE.cdiWeeks, oldName, next);
+  if (!STATE.cdiDescriptions) STATE.cdiDescriptions = {};
+  moveEmployeeDataKey(STATE.cdiDescriptions, oldName, next);
 
   if (STATE.ui.contractEmp === oldName) STATE.ui.contractEmp = next;
   if (STATE.ui.cdiEmp === oldName) STATE.ui.cdiEmp = next;

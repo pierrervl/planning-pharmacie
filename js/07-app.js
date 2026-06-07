@@ -311,7 +311,9 @@ function applyImportedJSON(obj, filename) {
   if (!STATE.employeeTypes) STATE.employeeTypes = {};
   if (!STATE.employeeInfo) STATE.employeeInfo = {};
   if (!STATE.contractDays) STATE.contractDays = {};
+  if (!STATE.contractDescriptions) STATE.contractDescriptions = {};
   if (!STATE.cdiWeeks) STATE.cdiWeeks = {};
+  if (!STATE.cdiDescriptions) STATE.cdiDescriptions = {};
   if (!STATE.pharmacyInfo) STATE.pharmacyInfo = {};
   if (!STATE.employerInfo) STATE.employerInfo = {};
   if (!STATE.ui) STATE.ui = buildDefaultState().ui;

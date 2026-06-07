@@ -111,3 +111,26 @@ function ensureCdiWeeks(state) {
     if (!(state.employees || []).includes(name)) delete state.cdiWeeks[name];
   }
 }
+
+function getCdiDescription(emp, state) {
+  if (!state) state = typeof STATE !== 'undefined' ? STATE : { cdiDescriptions: {} };
+  if (!state.cdiDescriptions) state.cdiDescriptions = {};
+  return state.cdiDescriptions[emp] || '';
+}
+
+function setCdiDescription(emp, text, state) {
+  if (!state) state = typeof STATE !== 'undefined' ? STATE : null;
+  if (!state) return;
+  if (!state.cdiDescriptions) state.cdiDescriptions = {};
+  state.cdiDescriptions[emp] = String(text || '').trim();
+}
+
+function ensureCdiDescriptions(state) {
+  if (!state.cdiDescriptions) state.cdiDescriptions = {};
+  for (const emp of state.employees || []) {
+    if (state.cdiDescriptions[emp] == null) state.cdiDescriptions[emp] = '';
+  }
+  for (const name of Object.keys(state.cdiDescriptions)) {
+    if (!(state.employees || []).includes(name)) delete state.cdiDescriptions[name];
+  }
+}

@@ -2314,6 +2314,7 @@ tr.emp-details-row td {
 }
 .contract-select-row input[type="text"],
 .contract-select-row select,
+.contract-select-row textarea,
 .contract-add-row input[type="text"],
 .contract-add-row input[type="number"] {
   padding: 6px 8px;
@@ -2321,6 +2322,49 @@ tr.emp-details-row td {
   border-radius: var(--r);
   background: var(--bg-panel);
   font-size: 13px;
+}
+.contract-description-field {
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+.contract-description-field textarea {
+  width: 100%;
+  min-height: 88px;
+  line-height: 1.45;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.doc-comment-preview-card,
+.doc-comment-preview {
+  margin-bottom: 0;
+}
+.doc-comment-preview h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.doc-comment-preview-body p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.cp-comment-block {
+  margin: 0 0 18px;
+  page-break-inside: avoid;
+}
+.cp-comment-body {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  font-size: 9.5pt;
+  line-height: 1.5;
+}
+.cp-comment-body p {
+  margin: 0 0 8px;
+}
+.cp-comment-body p:last-child {
+  margin-bottom: 0;
 }
 .contract-info-table {
   width: 100%;

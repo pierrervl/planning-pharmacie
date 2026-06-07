@@ -16,6 +16,8 @@ function buildEmployeeInfoRowsHtml(emp) {
 function persistContractMetaFromDom() {
   STATE.ui.contractDocTitle = ($('#contract-doc-title')?.value || '').trim()
     || 'Planning des journées de travail';
+  const emp = STATE.ui.contractEmp;
+  if (emp) setContractDescription(emp, $('#contract-doc-comment')?.value || '');
   const partyPanel = $('#contract-party-panel');
   if (partyPanel) {
     setPharmacyInfo(readPartyInfoFromPanel(partyPanel, 'pharmacy', PHARMACY_INFO_FIELDS));
@@ -62,6 +64,30 @@ function mountContractPartySection(root, options = {}) {
   return partyCard;
 }
 
+function buildDocCommentPrintHtml(text, title = 'Description du contrat') {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  return `
+    <section class="cp-comment-block">
+      <div class="cp-block-head">
+        <span class="cp-block-title">${escapeHtml(title)}</span>
+      </div>
+      <div class="cp-comment-body">
+        ${t.split(/\r?\n+/).filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('')}
+      </div>
+    </section>`;
+}
+
+function buildDocCommentPreviewHtml(text, title = 'Description du contrat') {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  return `
+    <div class="doc-comment-preview">
+      <h4>${escapeHtml(title)}</h4>
+      <div class="doc-comment-preview-body">${t.split(/\r?\n+/).filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>
+    </div>`;
+}
+
 function renderContractEditor(root) {
   if (STATE.employees.length === 0) {
     root.innerHTML = `
@@ -80,6 +106,7 @@ function renderContractEditor(root) {
   const days = sortContractDays(getContractDays(emp));
   const totalH = contractDaysTotalHours(days);
   const docTitle = STATE.ui.contractDocTitle || 'Planning des journées de travail';
+  const docComment = getContractDescription(emp);
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls contract-controls no-print';
@@ -107,6 +134,10 @@ function renderContractEditor(root) {
       <label>Titre du document
         <input type="text" id="contract-doc-title" value="${escapeHtml(docTitle)}" maxlength="120">
       </label>
+      <label class="contract-description-field">Description du contrat
+        <textarea id="contract-doc-comment" rows="4" maxlength="2000"
+          placeholder="Objet du contrat, contexte, modalités particulières…">${escapeHtml(docComment)}</textarea>
+      </label>
     </div>`;
   root.appendChild(metaCard);
 
@@ -128,6 +159,13 @@ function renderContractEditor(root) {
       <tbody>${buildEmployeeInfoRowsHtml(emp)}</tbody>
     </table>`;
   root.appendChild(infoCard);
+
+  if (docComment) {
+    const commentPreview = document.createElement('div');
+    commentPreview.className = 'form-card doc-comment-preview-card';
+    commentPreview.innerHTML = buildDocCommentPreviewHtml(docComment);
+    root.appendChild(commentPreview);
+  }
 
   const addCard = document.createElement('div');
   addCard.className = 'form-card contract-add-card no-print';
@@ -204,6 +242,8 @@ function renderContractEditor(root) {
   };
 
   $('#contract-doc-title').onchange = persistContractMetaFromDom;
+  $('#contract-doc-comment')?.addEventListener('change', persistContractMetaFromDom);
+  $('#contract-doc-comment')?.addEventListener('blur', persistContractMetaFromDom);
 
   const submitDay = () => {
     persistContractMetaFromDom();
@@ -308,6 +348,7 @@ function printContractPdf() {
 
   const totalH = contractDaysTotalHours(days);
   const docTitle = STATE.ui.contractDocTitle || 'Planning des journées de travail';
+  const docComment = getContractDescription(emp);
   const pharmacy = getPharmacyInfo();
   const employer = getEmployerInfo();
   const empInfo = getEmployeeInfo(emp);
@@ -350,6 +391,8 @@ function printContractPdf() {
           ...partyInfoLines(EMPLOYEE_INFO_FIELDS, empInfo),
         ])}
       </div>
+
+      ${buildDocCommentPrintHtml(docComment)}
 
       <section class="cp-schedule">
         <div class="cp-block-head cp-schedule-head">
