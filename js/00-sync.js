@@ -11,8 +11,12 @@ const SYNC_DEBOUNCE_MS = 600;
 function canSyncToCloud() {
   if (!isSupabaseConfigured() || !isAuthenticated()) return false;
   if (isAdmin()) return true;
-  if (isStaff()) return !!getLinkedEmployeeName();
+  if (isStaff()) return true;
   return false;
+}
+
+function canPushPersonalToCloud() {
+  return isStaff() && !!getLinkedEmployeeName();
 }
 
 function setSyncStatus(text, kind = '') {
@@ -137,7 +141,7 @@ async function pushPlanningToCloud() {
 }
 
 async function pushPersonalDataToCloud() {
-  if (!isStaff()) return;
+  if (!canPushPersonalToCloud()) return;
   const empName = getLinkedEmployeeName();
   if (!empName) return;
   await ensureAuthClient();
@@ -202,9 +206,28 @@ async function forceCloudSync() {
   syncTimer = null;
   syncPending = false;
   setSyncStatus('Synchronisation…', 'pending');
-  await performCloudSync();
-  if (typeof markCloudSynced === 'function') markCloudSynced();
-  if (typeof toast === 'function') toast('Synchronisation cloud terminée');
+  try {
+    if (isStaff() && !isAdmin()) {
+      await loadPlanningFromCloud();
+      if (typeof saveState === 'function') saveState();
+      await pushPersonalDataToCloud();
+      if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+      if (typeof render === 'function') render();
+    } else {
+      await performCloudSync();
+    }
+    if (typeof markCloudSynced === 'function') markCloudSynced();
+    if (typeof toast === 'function') {
+      toast(isStaff() && !isAdmin()
+        ? 'Planning récupéré depuis le cloud'
+        : 'Synchronisation cloud terminée');
+    }
+  } catch (e) {
+    console.error('Sync cloud échouée', e);
+    setSyncStatus('Erreur sync', 'error');
+    if (typeof toast === 'function') toast('Synchronisation cloud échouée', true);
+    throw e;
+  }
 }
 
 function setupCloudAutoSave() {
@@ -223,11 +246,18 @@ async function bootstrapCloudData() {
 
 async function syncAfterAuth() {
   if (!isAuthenticated()) return;
-  void bootstrapCloudData()
-    .then(async () => {
-      if (isAdmin()) await forceCloudSync();
-      else await flushCloudSync();
-      if (typeof render === 'function') render();
-    })
-    .catch((e) => console.error('Sync post-connexion échouée', e));
+  try {
+    await bootstrapCloudData();
+    if (typeof saveState === 'function') saveState();
+    if (isAdmin()) {
+      await performCloudSync();
+    } else if (isStaff()) {
+      await pushPersonalDataToCloud();
+    }
+    if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+    if (typeof render === 'function') render();
+    if (typeof markCloudSynced === 'function') markCloudSynced();
+  } catch (e) {
+    console.error('Sync post-connexion échouée', e);
+  }
 }

@@ -284,6 +284,7 @@ async function signIn(email, password) {
     if (typeof toast === 'function') toast(`Connecté — ${getAuthDisplayName()}`);
     if (data.user) refreshProfileInBackground(data.user);
     if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+    if (typeof syncAfterAuth === 'function') void syncAfterAuth();
     return data;
   } finally {
     authHandlersPaused = false;

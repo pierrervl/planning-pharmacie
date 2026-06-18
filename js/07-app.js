@@ -49,11 +49,15 @@ function updateCloudButtonState() {
   if (connected) {
     loginBtn.classList.add('hidden');
     syncBtn.classList.remove('hidden');
-    syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync);
-    syncBtn.textContent = '☁ Synchroniser';
-    syncBtn.title = sessionNeedsCloudSync
-      ? 'Modifications non enregistrées sur le cloud — cliquez pour synchroniser'
-      : 'Planning à jour sur Supabase';
+    const staffPull = typeof isStaff === 'function' && isStaff()
+      && !(typeof isAdmin === 'function' && isAdmin());
+    syncBtn.classList.toggle('needs-cloud-sync', !staffPull && sessionNeedsCloudSync);
+    syncBtn.textContent = staffPull ? '☁ Récupérer' : '☁ Synchroniser';
+    syncBtn.title = staffPull
+      ? 'Récupérer le planning à jour depuis le cloud'
+      : (sessionNeedsCloudSync
+        ? 'Modifications non enregistrées sur le cloud — cliquez pour synchroniser'
+        : 'Planning à jour sur Supabase');
   } else {
     syncBtn.classList.add('hidden');
     loginBtn.classList.remove('hidden');
@@ -848,6 +852,10 @@ async function bootstrapApp() {
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
       if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
       if (typeof render === 'function') render();
+      if (typeof isAuthenticated === 'function' && isAuthenticated()
+        && typeof syncAfterAuth === 'function') {
+        void syncAfterAuth();
+      }
     });
   }
 }
