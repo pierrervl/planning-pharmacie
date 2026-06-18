@@ -4,6 +4,11 @@
 const PLANNING_REST = 0;
 const PLANNING_PRESENT = 1;
 const PLANNING_SPECIAL = 2;
+const PLANNING_SPECIAL_RED = 3;
+
+function isPlanningSpecialVal(val) {
+  return val === PLANNING_SPECIAL || val === PLANNING_SPECIAL_RED;
+}
 
 /* Trouve l'affectation active pour un salarié à une date donnée -------- */
 function activeAssignment(empName, dateIso) {
@@ -25,7 +30,7 @@ function ensurePatternWeek(empName, pname, state = STATE) {
   if (!state.patterns[empName][pname]) {
     state.patterns[empName][pname] = makeEmptyPattern();
   } else {
-    state.patterns[empName][pname] = normalizePatternWeek(state.patterns[empName][pname]);
+    state.patterns[empName][pname] = normalizePatternWeek(state.patterns[empName][pname], state);
   }
   return state.patterns[empName][pname];
 }
@@ -40,9 +45,154 @@ function getPatternWeekValue(empName, pname, dayIdx, shift, state = STATE) {
 function setPatternWeekValue(empName, pname, dayIdx, shift, value) {
   const pat = ensurePatternWeek(empName, pname);
   pat[dayIdx][shift] = value;
+  if (!isPlanningSpecialVal(value)) {
+    clearPatternCellSlot(empName, pname, dayIdx, shift);
+  }
+}
+
+const PATTERN_SHIFT_DEFAULT_SLOTS = {
+  matin: { start: '08:00', end: '12:30' },
+  aprem: { start: '14:00', end: '19:30' },
+};
+
+function padTimePart(n) {
+  return String(n).padStart(2, '0');
+}
+
+function normalizeTimeInput(raw) {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim().toLowerCase().replace(/\s/g, '');
+  let m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    if (h >= 0 && h <= 23 && min >= 0 && min <= 59) return `${padTimePart(h)}:${padTimePart(min)}`;
+  }
+  m = /^(\d{1,2})h(\d{2})?$/.exec(s);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    if (h >= 0 && h <= 23 && min >= 0 && min <= 59) return `${padTimePart(h)}:${padTimePart(min)}`;
+  }
+  return null;
+}
+
+function formatPatternTime(timeStr) {
+  const t = normalizeTimeInput(timeStr);
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hn = parseInt(h, 10);
+  return m === '00' ? `${hn}h` : `${hn}h${m}`;
+}
+
+function timeToMinutes(timeStr) {
+  const t = normalizeTimeInput(timeStr);
+  if (!t) return null;
+  const [h, m] = t.split(':').map(x => parseInt(x, 10));
+  return h * 60 + m;
+}
+
+function minutesToTime(mins) {
+  if (!Number.isFinite(mins) || mins < 0 || mins >= 24 * 60) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${padTimePart(h)}:${padTimePart(m)}`;
+}
+
+function hoursBetweenTimes(start, end) {
+  const a = timeToMinutes(start);
+  const b = timeToMinutes(end);
+  if (a == null || b == null || b <= a) return null;
+  const mins = b - a;
+  if (mins > 12 * 60) return null;
+  return Math.round(mins * 100 / 60) / 100;
+}
+
+function ensurePatternShiftDefaults(state = STATE) {
+  if (!state.patternShiftDefaults) {
+    state.patternShiftDefaults = JSON.parse(JSON.stringify(PATTERN_SHIFT_DEFAULT_SLOTS));
+    return state.patternShiftDefaults;
+  }
+  const d = state.patternShiftDefaults;
+  if (typeof d.matin === 'number' || typeof d.aprem === 'number') {
+    state.patternShiftDefaults = JSON.parse(JSON.stringify(PATTERN_SHIFT_DEFAULT_SLOTS));
+    return state.patternShiftDefaults;
+  }
+  for (const shift of ['matin', 'aprem']) {
+    if (!d[shift] || typeof d[shift] !== 'object') {
+      d[shift] = { ...PATTERN_SHIFT_DEFAULT_SLOTS[shift] };
+    } else {
+      d[shift] = {
+        start: normalizeTimeInput(d[shift].start) || PATTERN_SHIFT_DEFAULT_SLOTS[shift].start,
+        end: normalizeTimeInput(d[shift].end) || PATTERN_SHIFT_DEFAULT_SLOTS[shift].end,
+      };
+    }
+  }
+  return state.patternShiftDefaults;
+}
+
+function patternCellStartKey(shift) {
+  return shift === 'matin' ? 'matinStart' : 'apremStart';
+}
+
+function patternCellEndKey(shift) {
+  return shift === 'matin' ? 'matinEnd' : 'apremEnd';
+}
+
+function getPatternShiftDefaultSlot(shift, state = STATE) {
+  const d = ensurePatternShiftDefaults(state);
+  return { ...d[shift] };
+}
+
+function getPatternCellSlot(empName, pname, dayIdx, shift, state = STATE) {
+  const pat = ensurePatternWeek(empName, pname, state);
+  const cell = pat[dayIdx] || {};
+  const def = getPatternShiftDefaultSlot(shift, state);
+  const start = normalizeTimeInput(cell[patternCellStartKey(shift)]) || def.start;
+  const end = normalizeTimeInput(cell[patternCellEndKey(shift)]) || def.end;
+  return { start, end };
+}
+
+function getPatternCellHours(empName, pname, dayIdx, shift, state = STATE) {
+  const slot = getPatternCellSlot(empName, pname, dayIdx, shift, state);
+  return hoursBetweenTimes(slot.start, slot.end);
+}
+
+function clearPatternCellSlot(empName, pname, dayIdx, shift, state = STATE) {
+  const pat = ensurePatternWeek(empName, pname, state);
+  pat[dayIdx][patternCellStartKey(shift)] = null;
+  pat[dayIdx][patternCellEndKey(shift)] = null;
+}
+
+function setPatternCellSlot(empName, pname, dayIdx, shift, start, end, state = STATE) {
+  const s = normalizeTimeInput(start);
+  const e = normalizeTimeInput(end);
+  if (!s || !e || hoursBetweenTimes(s, e) == null) return false;
+  const pat = ensurePatternWeek(empName, pname, state);
+  const def = getPatternShiftDefaultSlot(shift, state);
+  const sKey = patternCellStartKey(shift);
+  const eKey = patternCellEndKey(shift);
+  if (s === def.start && e === def.end) {
+    pat[dayIdx][sKey] = null;
+    pat[dayIdx][eKey] = null;
+  } else {
+    pat[dayIdx][sKey] = s;
+    pat[dayIdx][eKey] = e;
+  }
+  return true;
+}
+
+function setPatternShiftDefaultSlot(shift, start, end, state = STATE) {
+  const s = normalizeTimeInput(start);
+  const e = normalizeTimeInput(end);
+  if (!s || !e || hoursBetweenTimes(s, e) == null) return false;
+  ensurePatternShiftDefaults(state);
+  state.patternShiftDefaults[shift] = { start: s, end: e };
+  return true;
 }
 
 function patternCellDisplayClass(val) {
+  if (val === PLANNING_SPECIAL_RED) return 'plein special-red';
   if (val === PLANNING_SPECIAL) return 'plein special';
   if (val === PLANNING_PRESENT) return 'plein';
   if (val === PLANNING_REST) return 'vide rest';
@@ -134,6 +284,63 @@ function setPlanningValue(empName, dateIso, shift, value, state = STATE) {
   if (isAfterEmployeeContractEnd(empName, dateIso, state)) return false;
   const day = ensurePlanningDay(empName, dateIso, state);
   day[shift] = value;
+  if (!isPlanningSpecialVal(value)) {
+    clearPlanningCellSlot(empName, dateIso, shift, state);
+  }
+  return true;
+}
+
+function copyPatternSlotToPlanning(empName, dateIso, shift, state = STATE) {
+  const dayIdx = weekDayIndex(fromISO(dateIso));
+  const pname = getPatternWeekNameForDate(dateIso, state);
+  const pat = ensurePatternWeek(empName, pname, state);
+  const cell = pat[dayIdx] || {};
+  const day = ensurePlanningDay(empName, dateIso, state);
+  day[patternCellStartKey(shift)] = cell[patternCellStartKey(shift)] || null;
+  day[patternCellEndKey(shift)] = cell[patternCellEndKey(shift)] || null;
+}
+
+function getPlanningCellSlot(empName, dateIso, shift, state = STATE) {
+  const day = (state.planning[empName] || {})[dateIso];
+  const sKey = patternCellStartKey(shift);
+  const eKey = patternCellEndKey(shift);
+  const start = day ? normalizeTimeInput(day[sKey]) : null;
+  const end = day ? normalizeTimeInput(day[eKey]) : null;
+  if (start && end) return { start, end };
+
+  const dayIdx = weekDayIndex(fromISO(dateIso));
+  const pname = getPatternWeekNameForDate(dateIso, state);
+  return getPatternCellSlot(empName, pname, dayIdx, shift, state);
+}
+
+function getPlanningCellHours(empName, dateIso, shift, state = STATE) {
+  const slot = getPlanningCellSlot(empName, dateIso, shift, state);
+  return hoursBetweenTimes(slot.start, slot.end);
+}
+
+function clearPlanningCellSlot(empName, dateIso, shift, state = STATE) {
+  const day = ensurePlanningDay(empName, dateIso, state);
+  day[patternCellStartKey(shift)] = null;
+  day[patternCellEndKey(shift)] = null;
+}
+
+function setPlanningCellSlot(empName, dateIso, shift, start, end, state = STATE) {
+  const s = normalizeTimeInput(start);
+  const e = normalizeTimeInput(end);
+  if (!s || !e || hoursBetweenTimes(s, e) == null) return false;
+  const day = ensurePlanningDay(empName, dateIso, state);
+  const dayIdx = weekDayIndex(fromISO(dateIso));
+  const pname = getPatternWeekNameForDate(dateIso, state);
+  const patSlot = getPatternCellSlot(empName, pname, dayIdx, shift, state);
+  const sKey = patternCellStartKey(shift);
+  const eKey = patternCellEndKey(shift);
+  if (s === patSlot.start && e === patSlot.end) {
+    day[sKey] = null;
+    day[eKey] = null;
+  } else {
+    day[sKey] = s;
+    day[eKey] = e;
+  }
   return true;
 }
 
@@ -188,7 +395,10 @@ function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 
           skipped++;
           continue;
         }
-        if (setPlanningValue(emp, iso, shift, patVal, state)) updated++;
+        if (setPlanningValue(emp, iso, shift, patVal, state)) {
+          copyPatternSlotToPlanning(emp, iso, shift, state);
+          updated++;
+        }
       }
     }
     d = addDays(d, 1);
@@ -218,6 +428,8 @@ function applyPatternToPeriod(empName, startIso, endIso, patternName, state = ST
       const day = ensurePlanningDay(empName, iso, state);
       day.matin = patternValueForDate(empName, iso, 'matin', startIso, patternName, state);
       day.aprem = patternValueForDate(empName, iso, 'aprem', startIso, patternName, state);
+      copyPatternSlotToPlanning(empName, iso, 'matin', state);
+      copyPatternSlotToPlanning(empName, iso, 'aprem', state);
     }
     d = addDays(d, 1);
   }
@@ -226,25 +438,23 @@ function applyPatternToPeriod(empName, startIso, endIso, patternName, state = ST
 function cyclePlanningValue(cur) {
   if (cur === null || cur === undefined) return PLANNING_PRESENT;
   if (cur === PLANNING_PRESENT) return PLANNING_REST;
-  if (cur === PLANNING_SPECIAL) return PLANNING_REST;
+  if (isPlanningSpecialVal(cur)) return PLANNING_REST;
   return PLANNING_PRESENT;
 }
 
-function toggleSpecialPlanningValue(cur) {
-  return cur === PLANNING_SPECIAL ? PLANNING_PRESENT : PLANNING_SPECIAL;
+function nextPlanningValueOnRightClick(cur) {
+  if (cur === PLANNING_SPECIAL) return PLANNING_SPECIAL_RED;
+  if (cur === PLANNING_SPECIAL_RED) return PLANNING_PRESENT;
+  return PLANNING_SPECIAL;
 }
 
 function nextPlanningValueOnLeftClick(cur, e) {
-  if (e.ctrlKey || e.metaKey) return toggleSpecialPlanningValue(cur);
+  if (e.ctrlKey || e.metaKey) return nextPlanningValueOnRightClick(cur);
   return cyclePlanningValue(cur);
 }
 
-function nextPlanningValueOnRightClick(cur) {
-  return toggleSpecialPlanningValue(cur);
-}
-
 function isPlanningPresent(val) {
-  return val === PLANNING_PRESENT || val === PLANNING_SPECIAL;
+  return val === PLANNING_PRESENT || isPlanningSpecialVal(val);
 }
 
 /* Trouve un congé qui couvre cette date pour ce salarié ----------------- */
@@ -265,7 +475,7 @@ function clearPresenceForPeriod(empName, startIso, endIso, state = STATE) {
     const day = (state.planning[empName] || {})[iso];
     if (day) {
       for (const shift of ['matin', 'aprem']) {
-        if (day[shift] === PLANNING_PRESENT || day[shift] === PLANNING_SPECIAL) {
+        if (isPlanningPresent(day[shift])) {
           day[shift] = PLANNING_REST;
           cleared++;
         }
@@ -285,7 +495,7 @@ function clearPresenceAfterDate(empName, endIso, state = STATE) {
     if (iso <= endIso) continue;
     const day = planning[iso];
     for (const shift of ['matin', 'aprem']) {
-      if (day[shift] === PLANNING_PRESENT || day[shift] === PLANNING_SPECIAL) {
+      if (isPlanningPresent(day[shift])) {
         day[shift] = null;
         cleared++;
       }
@@ -319,6 +529,7 @@ function computeCell(empName, dateIso, shift) {
   const val = getPlanningValue(empName, dateIso, shift);
   const full = isPlanningPresent(val);
   const special = val === PLANNING_SPECIAL;
+  const specialRed = val === PLANNING_SPECIAL_RED;
   const cg = full ? null : congeForDate(empName, dateIso);
 
   let status = 'empty';
@@ -333,6 +544,7 @@ function computeCell(empName, dateIso, shift) {
   return {
     full,
     special,
+    specialRed,
     status,
     label: '',
     ferie: !!fLbl,
@@ -345,12 +557,17 @@ function computeCell(empName, dateIso, shift) {
 
 /* Classes CSS d'affichage (plein ou vide + variante couleur) ---------- */
 function cellDisplayClass(c) {
-  if (c.full) return c.special ? 'plein special' : 'plein';
+  if (c.full) {
+    if (c.specialRed) return 'plein special-red';
+    if (c.special) return 'plein special';
+    return 'plein';
+  }
   return 'vide ' + statusClass(c.status);
 }
 
 function cellStatusLabel(c) {
-  if (c.special) return 'Présent spécial';
+  if (c.specialRed) return 'Présence spéciale rouge';
+  if (c.special) return 'Présence spéciale orange';
   if (c.full) return 'Présent';
   if (c.status === 'rest') return 'Repos';
   if (c.status === 'empty') return 'Non défini';

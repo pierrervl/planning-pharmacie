@@ -9,14 +9,71 @@ const AUTH = {
   listeners: [],
 };
 
+let authHandlersPaused = false;
+const AUTH_SIGNIN_TIMEOUT_MS = 15000;
+const PROFILE_LOAD_TIMEOUT_MS = 8000;
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_resolve, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function fallbackProfileFromUser(user) {
+  return {
+    id: user.id,
+    email: user.email || '',
+    full_name: user.user_metadata?.full_name || user.email || '',
+    role: user.user_metadata?.role || 'admin',
+    employee_name: user.user_metadata?.employee_name || null,
+  };
+}
+
+function refreshProfileInBackground(user) {
+  if (!user) return;
+  void withTimeout(loadProfile(user.id), PROFILE_LOAD_TIMEOUT_MS)
+    .then((profile) => {
+      if (profile) {
+        AUTH.profile = profile;
+        renderAuthBar();
+      }
+    })
+    .catch((e) => console.warn('Profil cloud non chargé', e));
+}
+
 function isSupabaseConfigured() {
   const cfg = window.SUPABASE_CONFIG;
   return !!(cfg && cfg.url && cfg.anonKey && cfg.anonKey !== 'VOTRE_CLE_ANON_ICI');
 }
 
+function waitForSupabaseLib(timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    if (window.supabase && typeof window.supabase.createClient === 'function') {
+      resolve();
+      return;
+    }
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (window.supabase && typeof window.supabase.createClient === 'function') {
+        clearInterval(timer);
+        resolve();
+      } else if (Date.now() - started > timeoutMs) {
+        clearInterval(timer);
+        reject(new Error('Bibliothèque Supabase non chargée. Ouvrez la page via http://localhost:8080 (pas en file://) et vérifiez votre connexion internet.'));
+      }
+    }, 50);
+  });
+}
+
 function initSupabaseClient() {
   if (!isSupabaseConfigured()) return null;
   if (AUTH.client) return AUTH.client;
+  if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+    throw new Error('Bibliothèque Supabase non chargée. Vérifiez votre connexion internet.');
+  }
   AUTH.client = window.supabase.createClient(
     window.SUPABASE_CONFIG.url,
     window.SUPABASE_CONFIG.anonKey,
@@ -31,6 +88,18 @@ function initSupabaseClient() {
   return AUTH.client;
 }
 
+async function ensureAuthClient() {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase non configuré — renseignez js/00-config.js');
+  }
+  await waitForSupabaseLib();
+  if (!AUTH.client) initSupabaseClient();
+  if (!AUTH.client) {
+    throw new Error('Impossible d\'initialiser Supabase. Rechargez la page.');
+  }
+  return AUTH.client;
+}
+
 function onAuthChange(fn) {
   AUTH.listeners.push(fn);
 }
@@ -42,28 +111,76 @@ function notifyAuthChange() {
 }
 
 async function loadProfile(userId) {
-  const { data, error } = await AUTH.client
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
+  await ensureAuthClient();
+  const { data, error } = await withTimeout(
+    AUTH.client.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    PROFILE_LOAD_TIMEOUT_MS,
+    'Chargement du profil expiré'
+  );
   if (error) throw error;
   AUTH.profile = data;
   return data;
 }
 
+async function ensureUserProfile(user) {
+  if (!user) return null;
+  AUTH.profile = fallbackProfileFromUser(user);
+  refreshProfileInBackground(user);
+  return AUTH.profile;
+}
+
+function enableAuthFormButtons(overlay) {
+  const loginBtn = overlay.querySelector('#auth-form-login .auth-submit');
+  const signupBtn = overlay.querySelector('#auth-form-signup .auth-submit');
+  if (loginBtn) {
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Se connecter';
+  }
+  if (signupBtn) {
+    signupBtn.disabled = false;
+    signupBtn.textContent = 'Créer un compte';
+  }
+}
+
+async function prepareAuthOverlay(overlay) {
+  const initErrEl = overlay.querySelector('#auth-init-error');
+  try {
+    if (AUTH.client) {
+      enableAuthFormButtons(overlay);
+      return;
+    }
+    await ensureAuthClient();
+    enableAuthFormButtons(overlay);
+  } catch (err) {
+    initErrEl.textContent = err.message || String(err);
+    initErrEl.hidden = false;
+    overlay.querySelectorAll('.auth-submit').forEach(btn => {
+      btn.disabled = true;
+      btn.textContent = 'Supabase indisponible';
+    });
+  }
+}
+
 async function refreshAuthSession() {
   if (!AUTH.client) return null;
-  const { data: { session }, error } = await AUTH.client.auth.getSession();
-  if (error) throw error;
-  AUTH.session = session;
-  if (session?.user) {
-    await loadProfile(session.user.id);
-  } else {
+  try {
+    const { data: { session }, error } = await AUTH.client.auth.getSession();
+    if (error) throw error;
+    AUTH.session = session;
+    if (session?.user) {
+      if (!AUTH.profile) AUTH.profile = fallbackProfileFromUser(session.user);
+      refreshProfileInBackground(session.user);
+    } else {
+      AUTH.profile = null;
+    }
+    notifyAuthChange();
+    return session;
+  } catch (e) {
+    console.warn('Session Supabase non récupérée', e);
+    AUTH.session = null;
     AUTH.profile = null;
+    return null;
   }
-  notifyAuthChange();
-  return session;
 }
 
 function isAuthenticated() {
@@ -79,14 +196,14 @@ function isEmployee() {
 }
 
 function canEditPlanning() {
+  if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  if (!isAuthenticated()) return false;
   return isAdmin();
 }
 
 function canEditEmployeeData(empName) {
+  if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  if (!isAuthenticated()) return false;
   if (isAdmin()) return true;
   if (isEmployee()) return getLinkedEmployeeName() === empName;
   return false;
@@ -102,31 +219,65 @@ function getAuthDisplayName() {
 }
 
 async function signIn(email, password) {
-  const { data, error } = await AUTH.client.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  AUTH.session = data.session;
-  if (data.user) await loadProfile(data.user.id);
-  notifyAuthChange();
-  return data;
+  authHandlersPaused = true;
+  try {
+    const client = await ensureAuthClient();
+    const { data, error } = await withTimeout(
+      client.auth.signInWithPassword({
+        email: String(email || '').trim(),
+        password: String(password || ''),
+      }),
+      AUTH_SIGNIN_TIMEOUT_MS,
+      'Connexion expirée (15 s). Vérifiez internet et ajoutez http://localhost:8080 dans Supabase → Authentication → URL Configuration.'
+    );
+    if (error) throw error;
+    if (!data.session) throw new Error('Session absente — confirmez votre email si Supabase l\'exige.');
+    AUTH.session = data.session;
+    if (data.user) AUTH.profile = fallbackProfileFromUser(data.user);
+    notifyAuthChange();
+    renderAuthBar();
+    if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+    if (typeof render === 'function') render();
+    if (typeof toast === 'function') toast(`Connecté — ${getAuthDisplayName()}`);
+    if (data.user) refreshProfileInBackground(data.user);
+    if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+    return data;
+  } finally {
+    authHandlersPaused = false;
+  }
 }
 
 async function signUp({ email, password, fullName, employeeName, role }) {
-  const meta = { full_name: fullName || '' };
-  if (employeeName) meta.employee_name = employeeName;
-  if (role === 'admin' || role === 'employee') meta.role = role;
+  authHandlersPaused = true;
+  try {
+    const client = await ensureAuthClient();
+    const meta = { full_name: fullName || '' };
+    if (employeeName) meta.employee_name = employeeName;
+    if (role === 'admin' || role === 'employee') meta.role = role;
 
-  const { data, error } = await AUTH.client.auth.signUp({
-    email,
-    password,
-    options: { data: meta },
-  });
-  if (error) throw error;
-  if (data.session) {
-    AUTH.session = data.session;
-    await loadProfile(data.user.id);
-    notifyAuthChange();
+    const { data, error } = await withTimeout(
+      client.auth.signUp({
+        email: String(email || '').trim(),
+        password: String(password || ''),
+        options: { data: meta },
+      }),
+      AUTH_SIGNIN_TIMEOUT_MS,
+      'Inscription expirée (15 s). Vérifiez votre connexion internet.'
+    );
+    if (error) throw error;
+    if (data.session) {
+      AUTH.session = data.session;
+      if (data.user) AUTH.profile = fallbackProfileFromUser(data.user);
+      notifyAuthChange();
+      renderAuthBar();
+      if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+      if (typeof toast === 'function') toast(`Compte créé — ${getAuthDisplayName()}`);
+      if (data.user) refreshProfileInBackground(data.user);
+    }
+    return data;
+  } finally {
+    authHandlersPaused = false;
   }
-  return data;
 }
 
 async function signOut() {
@@ -135,6 +286,10 @@ async function signOut() {
   AUTH.session = null;
   AUTH.profile = null;
   notifyAuthChange();
+  document.body.classList.remove('read-only-mode', 'employee-mode');
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  renderAuthBar();
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
 }
 
 async function updateProfile(updates) {
@@ -177,26 +332,31 @@ async function listProfiles() {
 async function initAuth() {
   if (!isSupabaseConfigured()) {
     AUTH.ready = true;
-    return { configured: false };
+    return { configured: false, error: null };
   }
-  initSupabaseClient();
-  AUTH.client.auth.onAuthStateChange(async (_event, session) => {
-    AUTH.session = session;
-    if (session?.user) {
-      try {
-        await loadProfile(session.user.id);
-      } catch (e) {
-        console.warn('Profil introuvable', e);
+  try {
+    await waitForSupabaseLib();
+    initSupabaseClient();
+    AUTH.client.auth.onAuthStateChange((_event, session) => {
+      if (authHandlersPaused) return;
+      AUTH.session = session;
+      if (session?.user) {
+        if (!AUTH.profile) AUTH.profile = fallbackProfileFromUser(session.user);
+        refreshProfileInBackground(session.user);
+      } else {
         AUTH.profile = null;
       }
-    } else {
-      AUTH.profile = null;
-    }
-    notifyAuthChange();
-  });
-  await refreshAuthSession();
-  AUTH.ready = true;
-  return { configured: true, session: AUTH.session };
+      notifyAuthChange();
+      renderAuthBar();
+    });
+    await refreshAuthSession();
+    AUTH.ready = true;
+    return { configured: true, session: AUTH.session, error: null };
+  } catch (e) {
+    console.error('Init Supabase échouée', e);
+    AUTH.ready = true;
+    return { configured: true, session: null, error: e };
+  }
 }
 
 /* Interface de connexion --------------------------------------------------- */
@@ -208,14 +368,15 @@ function removeAuthOverlay() {
 
 function showAuthOverlay({ mode = 'login' } = {}) {
   removeAuthOverlay();
-  document.body.classList.add('auth-locked');
 
   const overlay = document.createElement('div');
   overlay.className = 'auth-overlay';
   overlay.innerHTML = `
     <div class="auth-card" role="dialog" aria-labelledby="auth-title">
+      <button type="button" class="auth-close" id="auth-close" title="Fermer">✕</button>
       <h2 id="auth-title">Planning Personnel</h2>
-      <p class="auth-sub">Connectez-vous pour accéder au planning de la pharmacie.</p>
+      <p class="auth-sub">Connectez-vous pour synchroniser le planning avec Supabase.</p>
+      <p class="auth-error" id="auth-init-error" hidden></p>
       <div class="auth-tabs">
         <button type="button" class="auth-tab ${mode === 'login' ? 'active' : ''}" data-auth-tab="login">Connexion</button>
         <button type="button" class="auth-tab ${mode === 'signup' ? 'active' : ''}" data-auth-tab="signup">Inscription</button>
@@ -224,7 +385,7 @@ function showAuthOverlay({ mode = 'login' } = {}) {
         <label>Email<input type="email" name="email" required autocomplete="email"></label>
         <label>Mot de passe<input type="password" name="password" required autocomplete="current-password" minlength="6"></label>
         <p class="auth-error" id="auth-error-login" hidden></p>
-        <button type="submit" class="primary auth-submit">Se connecter</button>
+        <button type="submit" class="primary auth-submit" disabled>Chargement Supabase…</button>
       </form>
       <form class="auth-form" id="auth-form-signup" ${mode !== 'signup' ? 'hidden' : ''}>
         <label>Nom complet<input type="text" name="fullName" autocomplete="name"></label>
@@ -234,11 +395,23 @@ function showAuthOverlay({ mode = 'login' } = {}) {
         <datalist id="auth-employee-list"></datalist>
         <p class="auth-hint">Le premier compte créé devient administrateur. Les suivants sont des employés.</p>
         <p class="auth-error" id="auth-error-signup" hidden></p>
-        <button type="submit" class="primary auth-submit">Créer un compte</button>
+        <button type="submit" class="primary auth-submit" disabled>Chargement Supabase…</button>
       </form>
+      <button type="button" class="auth-skip" id="auth-skip">Continuer sans connexion</button>
     </div>`;
 
   document.body.appendChild(overlay);
+
+  const authCard = overlay.querySelector('.auth-card');
+  if (authCard) authCard.onclick = (e) => e.stopPropagation();
+
+  overlay.querySelector('#auth-close').onclick = removeAuthOverlay;
+  overlay.querySelector('#auth-skip').onclick = removeAuthOverlay;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) removeAuthOverlay();
+  };
+
+  void prepareAuthOverlay(overlay);
 
   const employeeList = overlay.querySelector('#auth-employee-list');
   if (employeeList && typeof STATE !== 'undefined') {
@@ -261,23 +434,35 @@ function showAuthOverlay({ mode = 'login' } = {}) {
 
   overlay.querySelector('#auth-form-login').onsubmit = async (e) => {
     e.preventDefault();
+    const form = e.target;
     const errEl = overlay.querySelector('#auth-error-login');
+    const submitBtn = form.querySelector('.auth-submit');
     errEl.hidden = true;
-    const fd = new FormData(e.target);
+    const fd = new FormData(form);
+    const prevLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Connexion…';
     try {
       await signIn(fd.get('email'), fd.get('password'));
       removeAuthOverlay();
     } catch (err) {
       errEl.textContent = authErrorMessage(err);
       errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
     }
   };
 
   overlay.querySelector('#auth-form-signup').onsubmit = async (e) => {
     e.preventDefault();
+    const form = e.target;
     const errEl = overlay.querySelector('#auth-error-signup');
+    const submitBtn = form.querySelector('.auth-submit');
     errEl.hidden = true;
-    const fd = new FormData(e.target);
+    const fd = new FormData(form);
+    const prevLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Création…';
     try {
       const result = await signUp({
         email: fd.get('email'),
@@ -287,15 +472,20 @@ function showAuthOverlay({ mode = 'login' } = {}) {
       });
       if (result.session) {
         removeAuthOverlay();
+        if (typeof render === 'function') render();
       } else {
         errEl.textContent = 'Compte créé — vérifiez votre email pour confirmer l\'inscription.';
         errEl.hidden = false;
         errEl.style.color = 'var(--ok)';
+        submitBtn.disabled = false;
+        submitBtn.textContent = prevLabel;
       }
     } catch (err) {
       errEl.textContent = authErrorMessage(err);
       errEl.hidden = false;
       errEl.style.color = '';
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
     }
   };
 }
@@ -304,8 +494,39 @@ function authErrorMessage(err) {
   const msg = err?.message || String(err);
   if (/invalid login credentials/i.test(msg)) return 'Email ou mot de passe incorrect.';
   if (/already registered/i.test(msg)) return 'Cet email est déjà utilisé.';
+  if (/expir/i.test(msg)) return msg;
   if (/password/i.test(msg) && /short|least/i.test(msg)) return 'Mot de passe trop court (6 caractères minimum).';
   return msg;
+}
+
+function bindCloudLoginButtons() {
+  const loginBtn = document.getElementById('btn-cloud-login');
+  const syncBtn = document.getElementById('btn-cloud-sync');
+  if (loginBtn) {
+    loginBtn.onclick = () => showAuthOverlay({ mode: 'login' });
+  }
+  if (syncBtn && !syncBtn.dataset.bound) {
+    syncBtn.dataset.bound = '1';
+    syncBtn.onclick = async () => {
+      if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
+        showAuthOverlay({ mode: 'login' });
+        return;
+      }
+      syncBtn.disabled = true;
+      const prev = syncBtn.textContent;
+      syncBtn.textContent = '☁ Synchronisation…';
+      try {
+        await forceCloudSync();
+      } catch (e) {
+        if (typeof toast === 'function') toast('Sync cloud échouée', true);
+      } finally {
+        syncBtn.disabled = false;
+        if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+        else syncBtn.textContent = prev;
+      }
+    };
+  }
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
 }
 
 function renderAuthBar() {
@@ -314,6 +535,7 @@ function renderAuthBar() {
     bar?.remove();
     return;
   }
+
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'auth-bar';
@@ -321,14 +543,15 @@ function renderAuthBar() {
     const topbar = document.querySelector('header.topbar');
     if (topbar) topbar.after(bar);
   }
+  bar.classList.remove('auth-bar-placeholder');
+  bindCloudLoginButtons();
 
-  if (!isAuthenticated()) {
-    bar.innerHTML = `
-      <span class="auth-bar-status muted">Non connecté — données locales uniquement</span>
-      <button type="button" class="auth-bar-btn primary" id="auth-bar-login">Se connecter</button>`;
-    bar.querySelector('#auth-bar-login').onclick = () => showAuthOverlay({ mode: 'login' });
+  if (!AUTH.client || !isAuthenticated()) {
+    bar.hidden = true;
     return;
   }
+
+  bar.hidden = false;
 
   const roleLabel = isAdmin() ? 'Administrateur' : 'Employé';
   const empLink = getLinkedEmployeeName() ? ` · ${escapeHtml(getLinkedEmployeeName())}` : '';
@@ -339,29 +562,29 @@ function renderAuthBar() {
     </span>
     <span class="auth-bar-actions">
       <span class="sync-status" id="sync-status"></span>
-      ${isAdmin() ? '<button type="button" class="auth-bar-btn" id="auth-bar-sync" title="Synchroniser maintenant">☁ Sync</button>' : ''}
       <button type="button" class="auth-bar-btn" id="auth-bar-logout">Déconnexion</button>
     </span>`;
 
   bar.querySelector('#auth-bar-logout').onclick = async () => {
     await signOut();
     renderAuthBar();
-    showAuthOverlay({ mode: 'login' });
+    if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
   };
 
-  const syncBtn = bar.querySelector('#auth-bar-sync');
-  if (syncBtn) {
-    syncBtn.onclick = () => void forceCloudSync();
-  }
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
 }
 
 function applyEmployeeViewRestrictions() {
   if (!isEmployee()) {
-    document.body.classList.remove('read-only-mode');
+    document.body.classList.remove('employee-mode');
+    document.querySelectorAll('#tabs button, #nav-groups button').forEach(btn => {
+      btn.style.display = '';
+    });
     return;
   }
 
-  document.body.classList.add('read-only-mode');
+  document.body.classList.add('employee-mode');
+
   const empName = getLinkedEmployeeName();
   if (empName && STATE.employees.includes(empName)) {
     STATE.ui.filtersEmp = [empName];
@@ -373,18 +596,26 @@ function applyEmployeeViewRestrictions() {
     STATE.ui.employeeChartEmps = [empName];
   }
 
-  /* Onglets réservés à l'admin */
-  const adminOnlyTabs = ['patterns', 'employees', 'settings', 'feries', 'gardes', 'conges'];
-  for (const tab of adminOnlyTabs) {
-    const btn = document.querySelector(`#tabs button[data-tab="${tab}"]`);
-    if (btn) btn.style.display = 'none';
-  }
-  if (adminOnlyTabs.includes(STATE.ui.currentTab)) {
+  const allowedTabs = ['week', 'conges'];
+  const allowedGroups = ['planning', 'equipe'];
+
+  document.querySelectorAll('#nav-groups button').forEach(btn => {
+    btn.style.display = allowedGroups.includes(btn.dataset.group) ? '' : 'none';
+  });
+  document.querySelectorAll('#tabs button').forEach(btn => {
+    btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
+  });
+
+  if (!allowedTabs.includes(STATE.ui.currentTab)) {
     STATE.ui.currentTab = 'week';
   }
 
   const resetBtn = document.getElementById('btn-reset');
   if (resetBtn) resetBtn.style.display = 'none';
+  ['btn-export-json', 'btn-import-json'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
 }
 
 function escapeHtml(str) {
@@ -400,26 +631,24 @@ async function requireAuthForCloud() {
   renderAuthBar();
 
   if (!result.configured) return { ok: true, cloud: false };
+  if (result.error) return { ok: true, cloud: false, error: result.error };
 
-  if (!isAuthenticated()) {
-    showAuthOverlay({ mode: 'login' });
-    await new Promise((resolve) => {
+  return { ok: true, cloud: isAuthenticated() };
+}
+
+async function waitForAuthentication() {
+  if (isAuthenticated()) return true;
+  await new Promise((resolve) => {
+    const onLogin = () => {
       if (isAuthenticated()) {
+        AUTH.listeners = AUTH.listeners.filter(fn => fn !== onLogin);
         resolve();
-        return;
       }
-      const onLogin = () => {
-        if (isAuthenticated()) {
-          AUTH.listeners = AUTH.listeners.filter(fn => fn !== onLogin);
-          resolve();
-        }
-      };
-      onAuthChange(onLogin);
-    });
-    renderAuthBar();
-  }
-
-  return { ok: true, cloud: true };
+    };
+    onAuthChange(onLogin);
+    if (isAuthenticated()) resolve();
+  });
+  return true;
 }
 
 /* Gestion des comptes (admin) ------------------------------------------------ */

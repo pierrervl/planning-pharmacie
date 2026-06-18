@@ -81,7 +81,9 @@ const INITIAL_DATA = {
 /* Génère une semaine-type de pattern (7 jours, lun→dim) ----------------- */
 function makeEmptyPattern() {
   const arr = [];
-  for (let i = 0; i < 7; i++) arr.push({ matin: 0, aprem: 0 });
+  for (let i = 0; i < 7; i++) {
+    arr.push({ matin: 0, aprem: 0, matinStart: null, matinEnd: null, apremStart: null, apremEnd: null });
+  }
   return arr;
 }
 
@@ -94,12 +96,36 @@ function rawToPatternWeek(raw7) {
 }
 
 /* Réduit un ancien pattern 14 jours → 7 jours ------------------------- */
-function normalizePatternWeek(pat) {
+function normalizePatternWeek(pat, state) {
   if (!pat || !pat.length) return makeEmptyPattern();
   const out = [];
   for (let i = 0; i < 7; i++) {
     const cell = pat[i] || { matin: 0, aprem: 0 };
-    out.push({ matin: cell.matin, aprem: cell.aprem });
+    let matinStart = normalizeTimeInput(cell.matinStart);
+    let matinEnd = normalizeTimeInput(cell.matinEnd);
+    let apremStart = normalizeTimeInput(cell.apremStart);
+    let apremEnd = normalizeTimeInput(cell.apremEnd);
+
+    if (state && cell.matinH != null && Number.isFinite(cell.matinH) && !matinStart && !matinEnd) {
+      const def = getPatternShiftDefaultSlot('matin', state);
+      matinStart = def.start;
+      matinEnd = minutesToTime(timeToMinutes(def.start) + Math.round(cell.matinH * 60));
+      if (!matinEnd || hoursBetweenTimes(matinStart, matinEnd) == null) {
+        matinStart = null;
+        matinEnd = null;
+      }
+    }
+    if (state && cell.apremH != null && Number.isFinite(cell.apremH) && !apremStart && !apremEnd) {
+      const def = getPatternShiftDefaultSlot('aprem', state);
+      apremStart = def.start;
+      apremEnd = minutesToTime(timeToMinutes(def.start) + Math.round(cell.apremH * 60));
+      if (!apremEnd || hoursBetweenTimes(apremStart, apremEnd) == null) {
+        apremStart = null;
+        apremEnd = null;
+      }
+    }
+
+    out.push({ matin: cell.matin, aprem: cell.aprem, matinStart, matinEnd, apremStart, apremEnd });
   }
   return out;
 }
@@ -116,6 +142,11 @@ function buildDefaultState() {
     /* Valeurs : 1 = travail, 0 = repos, null = non défini               */
     planning: {},
     patternAnchorDate: INITIAL_DATA.patternAnchorDate,
+    patternShiftDefaults: {
+      matin: { start: '08:00', end: '12:30' },
+      aprem: { start: '14:00', end: '19:30' },
+    },
+    planningChangeRequests: [],
     /* congés : [{ id, emp, start, end, type, comment }]                */
     conges: [],
     /* modes de congés : [{ id, label, themeId }] */
@@ -258,6 +289,9 @@ function migrateState(state) {
   if (!state.patternAnchorDate || state.patternAnchorDate === '2026-04-21') {
     state.patternAnchorDate = INITIAL_DATA.patternAnchorDate;
   }
+  ensurePatternShiftDefaults(state);
+
+  if (!state.planningChangeRequests) state.planningChangeRequests = [];
 
   if (!state.gardes) state.gardes = [];
   ensureGardes(state);
@@ -308,7 +342,7 @@ function migrateState(state) {
       if (!state.patterns[emp][pname]) {
         state.patterns[emp][pname] = makeEmptyPattern();
       } else {
-        state.patterns[emp][pname] = normalizePatternWeek(state.patterns[emp][pname]);
+        state.patterns[emp][pname] = normalizePatternWeek(state.patterns[emp][pname], state);
       }
     }
   }
@@ -333,7 +367,6 @@ function saveState() {
     console.error('Échec sauvegarde localStorage', e);
     toast('⚠ Sauvegarde locale impossible (quota ?)', true);
   }
-  if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
 }
 
 /* Gestion des salariés --------------------------------------------------- */

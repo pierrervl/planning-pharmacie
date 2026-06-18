@@ -23,7 +23,9 @@ function renderPatternsEditor(root) {
     <div class="label">Modèle de cycle — 6 semaines</div>
     <div class="help-text">
       Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A, 6 semaines-types
-      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · clic droit ou Ctrl+clic = présence spéciale (orange).
+      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
+      (horaires demandés sur orange/rouge) · double-clic sur orange/rouge = modifier les horaires.
+      Les cases affichent la durée calculée (ex. 5,5).
       Tous les salariés sont listés ici (filtres latéraux ignorés).
       L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
@@ -37,6 +39,7 @@ function renderPatternsEditor(root) {
   `;
   root.appendChild(ctrl);
 
+  mountPatternShiftDefaultsPanel(root);
   mountPatternAnchorPanel(root);
 
   const importPanel = document.createElement('div');
@@ -80,13 +83,229 @@ function renderPatternsEditor(root) {
   };
 }
 
+function mountPatternShiftDefaultsPanel(root) {
+  ensurePatternShiftDefaults(STATE);
+  const d = STATE.patternShiftDefaults;
+  const matinH = hoursBetweenTimes(d.matin.start, d.matin.end);
+  const apremH = hoursBetweenTimes(d.aprem.start, d.aprem.end);
+  const panel = document.createElement('div');
+  panel.className = 'form-card pattern-hours-defaults no-print';
+  panel.innerHTML = `
+    <h3>Horaires par demi-journée (défaut)</h3>
+    <p class="muted">
+      Indiquez l'heure de début et de fin pour chaque demi-journée — la durée est calculée automatiquement.
+      Les cases orange et rouge peuvent avoir des horaires propres (clic droit ou double-clic).
+    </p>
+    <div class="pattern-hours-shifts">
+      <div class="pattern-hours-shift-block">
+        <div class="pattern-hours-shift-title">Matin</div>
+        <div class="pattern-hours-grid">
+          <label>Début
+            <input type="text" id="pat-def-matin-start" placeholder="8h00" value="${formatPatternTime(d.matin.start)}">
+          </label>
+          <label>Fin
+            <input type="text" id="pat-def-matin-end" placeholder="12h30" value="${formatPatternTime(d.matin.end)}">
+          </label>
+          <span class="pattern-hours-computed" id="pat-def-matin-hours">= ${formatContractHours(matinH)} h</span>
+        </div>
+      </div>
+      <div class="pattern-hours-shift-block">
+        <div class="pattern-hours-shift-title">Après-midi</div>
+        <div class="pattern-hours-grid">
+          <label>Début
+            <input type="text" id="pat-def-aprem-start" placeholder="14h00" value="${formatPatternTime(d.aprem.start)}">
+          </label>
+          <label>Fin
+            <input type="text" id="pat-def-aprem-end" placeholder="19h30" value="${formatPatternTime(d.aprem.end)}">
+          </label>
+          <span class="pattern-hours-computed" id="pat-def-aprem-hours">= ${formatContractHours(apremH)} h</span>
+        </div>
+      </div>
+    </div>`;
+  root.appendChild(panel);
+
+  const updatePreview = (shift) => {
+    const startEl = panel.querySelector(`#pat-def-${shift}-start`);
+    const endEl = panel.querySelector(`#pat-def-${shift}-end`);
+    const hoursEl = panel.querySelector(`#pat-def-${shift}-hours`);
+    const h = hoursBetweenTimes(startEl.value, endEl.value);
+    hoursEl.textContent = h != null ? `= ${formatContractHours(h)} h` : '= — h';
+    hoursEl.classList.toggle('invalid', h == null);
+  };
+
+  const saveDefaults = () => {
+    const pending = {};
+    for (const shift of ['matin', 'aprem']) {
+      const start = panel.querySelector(`#pat-def-${shift}-start`).value;
+      const end = panel.querySelector(`#pat-def-${shift}-end`).value;
+      const s = normalizeTimeInput(start);
+      const e = normalizeTimeInput(end);
+      if (!s || !e || hoursBetweenTimes(s, e) == null) {
+        toast(`Horaires ${shift === 'matin' ? 'matin' : 'après-midi'} invalides (ex. 8h00 → 12h30).`, true);
+        for (const sh of ['matin', 'aprem']) {
+          const slot = getPatternShiftDefaultSlot(sh);
+          panel.querySelector(`#pat-def-${sh}-start`).value = formatPatternTime(slot.start);
+          panel.querySelector(`#pat-def-${sh}-end`).value = formatPatternTime(slot.end);
+          updatePreview(sh);
+        }
+        return;
+      }
+      pending[shift] = { start: s, end: e };
+    }
+    for (const shift of ['matin', 'aprem']) {
+      STATE.patternShiftDefaults[shift] = pending[shift];
+      panel.querySelector(`#pat-def-${shift}-start`).value = formatPatternTime(pending[shift].start);
+      panel.querySelector(`#pat-def-${shift}-end`).value = formatPatternTime(pending[shift].end);
+      updatePreview(shift);
+    }
+    saveState();
+    persistAndRender();
+  };
+
+  for (const shift of ['matin', 'aprem']) {
+    panel.querySelector(`#pat-def-${shift}-start`).addEventListener('input', () => updatePreview(shift));
+    panel.querySelector(`#pat-def-${shift}-end`).addEventListener('input', () => updatePreview(shift));
+    panel.querySelector(`#pat-def-${shift}-start`).addEventListener('change', saveDefaults);
+    panel.querySelector(`#pat-def-${shift}-end`).addEventListener('change', saveDefaults);
+  }
+}
+
+function promptShiftSlotDialog({ title, subtitle, slot, defSlot, onSave, onClear, onDone }) {
+  const old = document.querySelector('.import-dialog-overlay');
+  if (old) old.remove();
+
+  const currentH = hoursBetweenTimes(slot.start, slot.end);
+  const defH = hoursBetweenTimes(defSlot.start, defSlot.end);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'import-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="import-dialog pattern-hours-dialog" role="dialog">
+      <h3>${title}</h3>
+      <p class="muted">${subtitle}</p>
+      <div class="pattern-hours-grid pattern-hours-dialog-grid">
+        <label class="pattern-hours-field">Début
+          <input type="text" id="slot-cell-start" placeholder="14h00" value="${formatPatternTime(slot.start)}">
+        </label>
+        <label class="pattern-hours-field">Fin
+          <input type="text" id="slot-cell-end" placeholder="19h30" value="${formatPatternTime(slot.end)}">
+        </label>
+      </div>
+      <p class="pattern-hours-hint" id="slot-cell-hours-preview">Durée : ${formatContractHours(currentH)} h</p>
+      <p class="muted pattern-hours-hint">Défaut : ${formatPatternTime(defSlot.start)} → ${formatPatternTime(defSlot.end)} (${formatContractHours(defH)} h)</p>
+      <div class="import-dialog-btns">
+        <button type="button" class="primary" data-act="ok">Enregistrer</button>
+        <button type="button" class="nav" data-act="default">Utiliser le défaut</button>
+        <button type="button" class="nav muted-btn" data-act="cancel">Annuler</button>
+      </div>
+    </div>`;
+
+  const close = () => overlay.remove();
+  const finish = () => {
+    close();
+    if (onDone) onDone();
+  };
+
+  const updatePreview = () => {
+    const h = hoursBetweenTimes(
+      overlay.querySelector('#slot-cell-start').value,
+      overlay.querySelector('#slot-cell-end').value
+    );
+    const el = overlay.querySelector('#slot-cell-hours-preview');
+    el.textContent = h != null ? `Durée : ${formatContractHours(h)} h` : 'Durée invalide (fin après début)';
+    el.classList.toggle('invalid', h == null);
+    return h;
+  };
+
+  overlay.querySelector('#slot-cell-start').addEventListener('input', updatePreview);
+  overlay.querySelector('#slot-cell-end').addEventListener('input', updatePreview);
+
+  overlay.querySelector('[data-act="ok"]').onclick = () => {
+    const start = overlay.querySelector('#slot-cell-start').value;
+    const end = overlay.querySelector('#slot-cell-end').value;
+    if (!onSave(start, end)) {
+      toast('Horaires invalides (ex. départ à 17h30 au lieu de 19h30).', true);
+      return;
+    }
+    saveState();
+    close();
+    if (onDone) onDone();
+  };
+
+  overlay.querySelector('[data-act="default"]').onclick = () => {
+    if (onClear) onClear();
+    saveState();
+    close();
+    if (onDone) onDone();
+  };
+
+  overlay.querySelector('[data-act="cancel"]').onclick = finish;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) finish();
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Enter') overlay.querySelector('[data-act="ok"]').click();
+    if (e.key === 'Escape') finish();
+  };
+  overlay.querySelector('#slot-cell-start').addEventListener('keydown', onKey);
+  overlay.querySelector('#slot-cell-end').addEventListener('keydown', onKey);
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#slot-cell-start').focus();
+  overlay.querySelector('#slot-cell-start').select();
+}
+
+function promptPatternCellHours({ emp, pname, dayIdx, shift, onDone }) {
+  const shiftLabel = shift === 'matin' ? 'Matin' : 'Après-midi';
+  const dayLabel = PATTERN_DAY_LABELS[dayIdx];
+  promptShiftSlotDialog({
+    title: `Horaires — ${patternEscapeAttr(emp)}`,
+    subtitle: `${dayLabel} ${shiftLabel} · semaine ${patternEscapeAttr(pname)}`,
+    slot: getPatternCellSlot(emp, pname, dayIdx, shift),
+    defSlot: getPatternShiftDefaultSlot(shift),
+    onSave: (start, end) => setPatternCellSlot(emp, pname, dayIdx, shift, start, end),
+    onClear: () => clearPatternCellSlot(emp, pname, dayIdx, shift),
+    onDone,
+  });
+}
+
+function promptPlanningCellHours({ emp, iso, shift, onDone }) {
+  const shiftLabel = shift === 'matin' ? 'Matin' : 'Après-midi';
+  const d = fromISO(iso);
+  const dayLabel = DAY_NAMES_ABBR[d.getDay()];
+  promptShiftSlotDialog({
+    title: `Horaires — ${patternEscapeAttr(emp)}`,
+    subtitle: `${dayLabel} ${frFormat(d)} · ${shiftLabel}`,
+    slot: getPlanningCellSlot(emp, iso, shift),
+    defSlot: getPatternShiftDefaultSlot(shift),
+    onSave: (start, end) => setPlanningCellSlot(emp, iso, shift, start, end),
+    onClear: () => clearPlanningCellSlot(emp, iso, shift),
+    onDone,
+  });
+}
+
 function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   const v = getPatternWeekValue(emp, pname, dayIdx, shift);
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
   const cls = ['cell', 'editable', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)`;
-  return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}"></td>`;
+  const shiftLabel = shift === 'matin' ? 'Matin' : 'Après-midi';
+  let title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shiftLabel}`;
+  let inner = '';
+  if (isPlanningPresent(v)) {
+    const slot = getPatternCellSlot(emp, pname, dayIdx, shift);
+    const h = getPatternCellHours(emp, pname, dayIdx, shift);
+    title += ` — ${formatPatternTime(slot.start)} → ${formatPatternTime(slot.end)} (${formatContractHours(h)} h)`;
+    if (h != null) {
+      inner = `<span class="pattern-cell-hours">${formatContractHours(h)}</span>`;
+    }
+  }
+  title += ' — clic : plein ↔ repos · clic droit : orange → rouge → vert';
+  if (isPlanningSpecialVal(v)) {
+    title += ' · double-clic : modifier les horaires';
+  }
+  return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}">${inner}</td>`;
 }
 
 function buildPatternTableHeader(thead, weekNames, headRows) {
@@ -166,8 +385,24 @@ function attachPatternCellHandlers(container) {
       const dayIdx = parseInt(el.dataset.patDay, 10);
       const shift = el.dataset.patShift;
       const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      setPatternWeekValue(emp, pname, dayIdx, shift, nextPlanningValueOnRightClick(cur));
-      persistAndRender();
+      const next = nextPlanningValueOnRightClick(cur);
+      setPatternWeekValue(emp, pname, dayIdx, shift, next);
+      saveState();
+      if (isPlanningSpecialVal(next)) {
+        promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
+      } else {
+        persistAndRender();
+      }
+    };
+    el.ondblclick = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.patEmp;
+      const pname = el.dataset.patName;
+      const dayIdx = parseInt(el.dataset.patDay, 10);
+      const shift = el.dataset.patShift;
+      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
+      if (!isPlanningSpecialVal(cur)) return;
+      promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
     };
   });
 }
@@ -674,16 +909,24 @@ function mountCongeTypeCatalogSection(root, options = {}) {
 }
 
 function renderCongesEditor(root) {
-  const hint = document.createElement('div');
-  hint.className = 'form-card settings-hint-card';
-  hint.innerHTML = `
-    <p class="muted">Modes et couleurs des absences :
-      <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-conge-types">Configuration → Modes de congés</button>
-    </p>`;
-  root.appendChild(hint);
-  bindSettingsNavLinks(hint);
+  const empMode = typeof isEmployee === 'function' && isEmployee();
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
 
-  // formulaire d'ajout
+  if (!empMode) {
+    const hint = document.createElement('div');
+    hint.className = 'form-card settings-hint-card';
+    hint.innerHTML = `
+      <p class="muted">Modes et couleurs des absences :
+        <button type="button" class="nav settings-goto" data-tab="settings" data-hash="cfg-conge-types">Configuration → Modes de congés</button>
+      </p>`;
+    root.appendChild(hint);
+    bindSettingsNavLinks(hint);
+  }
+
+  const empOptions = empMode && linkedEmp
+    ? `<option selected>${escapeHtml(linkedEmp)}</option>`
+    : STATE.employees.map(e => `<option>${escapeHtml(e)}</option>`).join('');
+
   const form = document.createElement('div');
   form.className = 'form-card';
   form.innerHTML = `
@@ -691,8 +934,8 @@ function renderCongesEditor(root) {
     <div class="form-grid">
       <div class="field">
         <label>Salarié</label>
-        <select id="cg-emp">
-          ${STATE.employees.map(e => `<option>${e}</option>`).join('')}
+        <select id="cg-emp" ${empMode && linkedEmp ? 'disabled' : ''}>
+          ${empOptions}
         </select>
       </div>
       <div class="field">
@@ -719,9 +962,10 @@ function renderCongesEditor(root) {
   root.appendChild(form);
 
   $('#cg-add').onclick = () => {
+    const empVal = (empMode && linkedEmp) ? linkedEmp : $('#cg-emp').value;
     const c = {
       id: 'cg_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
-      emp: $('#cg-emp').value,
+      emp: empVal,
       type: $('#cg-type').value,
       start: readFrDateInput($('#cg-start')),
       end:   readFrDateInput($('#cg-end')),
@@ -754,6 +998,7 @@ function renderCongesEditor(root) {
     for (const c of STATE.conges) {
       const days = diffDays(c.start, c.end) + 1;
       const typeCls = congeTypeBadgeClass(c.type);
+      const canDel = !empMode || c.emp === linkedEmp;
       h += `<tr>
         <td>${escapeHtml(c.emp)}</td>
         <td><span class="${typeCls}">${escapeHtml(c.type)}</span></td>
@@ -761,7 +1006,7 @@ function renderCongesEditor(root) {
         <td>${frFormatNumeric(c.end)}</td>
         <td>${days}</td>
         <td>${c.comment || ''}</td>
-        <td><button class="del" data-id="${c.id}">Supprimer</button></td>
+        <td>${canDel ? `<button class="del" data-id="${c.id}">Supprimer</button>` : ''}</td>
       </tr>`;
     }
     h += `</tbody>`;

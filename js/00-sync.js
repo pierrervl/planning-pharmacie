@@ -3,9 +3,17 @@
 
 let syncTimer = null;
 let syncInFlight = false;
+let syncPending = false;
 let lastCloudUpdatedAt = null;
 
-const SYNC_DEBOUNCE_MS = 1500;
+const SYNC_DEBOUNCE_MS = 600;
+
+function canSyncToCloud() {
+  if (!isSupabaseConfigured() || !isAuthenticated()) return false;
+  if (isAdmin()) return true;
+  if (isEmployee()) return !!getLinkedEmployeeName();
+  return false;
+}
 
 function setSyncStatus(text, kind = '') {
   const el = document.getElementById('sync-status');
@@ -16,7 +24,6 @@ function setSyncStatus(text, kind = '') {
 
 function stateForCloudExport(state) {
   const copy = JSON.parse(JSON.stringify(state));
-  /* Préférences UI restent locales par appareil */
   delete copy.ui;
   return copy;
 }
@@ -72,9 +79,10 @@ function extractPersonalDataFromState(employeeName) {
 }
 
 async function loadPlanningFromCloud() {
-  if (!isSupabaseConfigured() || !isAuthenticated()) return null;
+  if (!canSyncToCloud()) return null;
   setSyncStatus('Chargement…', 'pending');
 
+  await ensureAuthClient();
   const { data, error } = await AUTH.client
     .from('pharmacy_planning')
     .select('data, updated_at')
@@ -94,7 +102,6 @@ async function loadPlanningFromCloud() {
     return data;
   }
 
-  /* Cloud vide : pousser l'état local si admin */
   if (isAdmin()) {
     await pushPlanningToCloud();
     setSyncStatus('Envoi initial', 'ok');
@@ -114,7 +121,8 @@ async function loadPersonalDataFromCloud() {
 }
 
 async function pushPlanningToCloud() {
-  if (!AUTH.client || !isAdmin()) return;
+  if (!isAdmin()) return;
+  await ensureAuthClient();
   const payload = stateForCloudExport(STATE);
   const { error } = await AUTH.client
     .from('pharmacy_planning')
@@ -125,13 +133,14 @@ async function pushPlanningToCloud() {
     });
   if (error) throw error;
   lastCloudUpdatedAt = new Date().toISOString();
-  setSyncStatus('Enregistré', 'ok');
+  setSyncStatus('Enregistré cloud', 'ok');
 }
 
 async function pushPersonalDataToCloud() {
-  if (!AUTH.client || !isEmployee()) return;
+  if (!isEmployee()) return;
   const empName = getLinkedEmployeeName();
   if (!empName) return;
+  await ensureAuthClient();
   const personal_data = extractPersonalDataFromState(empName);
   const { error } = await AUTH.client
     .from('profiles')
@@ -143,8 +152,14 @@ async function pushPersonalDataToCloud() {
 }
 
 async function performCloudSync() {
-  if (!isSupabaseConfigured() || !isAuthenticated() || syncInFlight) return;
+  if (!canSyncToCloud()) return;
+  if (syncInFlight) {
+    syncPending = true;
+    return;
+  }
+
   syncInFlight = true;
+  setSyncStatus('Enregistrement…', 'pending');
   try {
     if (isAdmin()) {
       await pushPlanningToCloud();
@@ -154,30 +169,65 @@ async function performCloudSync() {
   } catch (e) {
     console.error('Sync cloud échouée', e);
     setSyncStatus('Erreur sync', 'error');
-    toast('⚠ Synchronisation cloud échouée', true);
+    if (typeof toast === 'function') toast('⚠ Synchronisation cloud échouée', true);
+    throw e;
   } finally {
     syncInFlight = false;
+    if (syncPending) {
+      syncPending = false;
+      void performCloudSync();
+    }
   }
 }
 
 function scheduleCloudSync() {
-  if (!isSupabaseConfigured() || !isAuthenticated()) return;
-  if (isEmployee() && !getLinkedEmployeeName()) return;
+  if (!canSyncToCloud()) return;
   clearTimeout(syncTimer);
-  setSyncStatus('En attente…', 'pending');
-  syncTimer = setTimeout(() => void performCloudSync(), SYNC_DEBOUNCE_MS);
+  setSyncStatus('Modification…', 'pending');
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    void performCloudSync();
+  }, SYNC_DEBOUNCE_MS);
+}
+
+async function flushCloudSync() {
+  if (!canSyncToCloud()) return;
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  await performCloudSync();
 }
 
 async function forceCloudSync() {
   clearTimeout(syncTimer);
+  syncTimer = null;
+  syncPending = false;
   setSyncStatus('Synchronisation…', 'pending');
   await performCloudSync();
-  toast('Synchronisation cloud terminée');
+  if (typeof markCloudSynced === 'function') markCloudSynced();
+  if (typeof toast === 'function') toast('Synchronisation cloud terminée');
+}
+
+function setupCloudAutoSave() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void flushCloudSync();
+  });
+  window.addEventListener('pagehide', () => { void flushCloudSync(); });
 }
 
 async function bootstrapCloudData() {
-  if (!isSupabaseConfigured() || !isAuthenticated()) return;
+  if (!isAuthenticated()) return;
   await loadPlanningFromCloud();
   await loadPersonalDataFromCloud();
-  applyEmployeeViewRestrictions();
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+}
+
+async function syncAfterAuth() {
+  if (!isAuthenticated()) return;
+  void bootstrapCloudData()
+    .then(async () => {
+      if (isAdmin()) await forceCloudSync();
+      else await flushCloudSync();
+      if (typeof render === 'function') render();
+    })
+    .catch((e) => console.error('Sync post-connexion échouée', e));
 }

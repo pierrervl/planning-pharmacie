@@ -8,17 +8,57 @@
 let sessionInitialized = false;
 let suppressDirtyTracking = false;
 let sessionNeedsExport = false;
+let sessionNeedsCloudSync = false;
 let exitExportDialogOpen = false;
 let allowPageLeave = false;
 
 function markSessionDirty() {
-  if (!suppressDirtyTracking) sessionNeedsExport = true;
+  if (!suppressDirtyTracking) {
+    sessionNeedsExport = true;
+    sessionNeedsCloudSync = true;
+  }
   updateExportButtonState();
+  updateCloudButtonState();
 }
 
 function markSessionExported() {
   sessionNeedsExport = false;
   updateExportButtonState();
+}
+
+function markCloudSynced() {
+  sessionNeedsCloudSync = false;
+  updateCloudButtonState();
+}
+
+function updateCloudButtonState() {
+  const loginBtn = document.getElementById('btn-cloud-login');
+  const syncBtn = document.getElementById('btn-cloud-sync');
+  if (!loginBtn || !syncBtn) return;
+
+  const configured = typeof isSupabaseConfigured === 'function' && isSupabaseConfigured();
+  if (!configured) {
+    loginBtn.classList.add('hidden');
+    syncBtn.classList.add('hidden');
+    return;
+  }
+
+  loginBtn.classList.remove('hidden');
+  const connected = typeof isAuthenticated === 'function' && isAuthenticated();
+
+  if (connected) {
+    loginBtn.classList.add('hidden');
+    syncBtn.classList.remove('hidden');
+    syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync);
+    syncBtn.textContent = '☁ Synchroniser';
+    syncBtn.title = sessionNeedsCloudSync
+      ? 'Modifications non enregistrées sur le cloud — cliquez pour synchroniser'
+      : 'Planning à jour sur Supabase';
+  } else {
+    syncBtn.classList.add('hidden');
+    loginBtn.classList.remove('hidden');
+    loginBtn.textContent = '☁ Connexion cloud';
+  }
 }
 
 function updateExportButtonState() {
@@ -738,7 +778,9 @@ function resetAll() {
 function initApp() {
   applyEmployeeTypeColorStyles();
   applyCongeTypeColorStyles();
-  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  if (typeof applyEmployeeViewRestrictions === 'function' && isAuthenticated()) {
+    applyEmployeeViewRestrictions();
+  }
   $$('#nav-groups button').forEach(b => {
     b.onclick = () => {
       const tabs = TAB_GROUPS[b.dataset.group];
@@ -797,14 +839,15 @@ function initApp() {
 }
 
 async function bootstrapApp() {
-  if (typeof requireAuthForCloud === 'function') {
-    const authResult = await requireAuthForCloud();
-    if (authResult.cloud && typeof bootstrapCloudData === 'function') {
-      await bootstrapCloudData();
-    }
-  }
   initApp();
-  if (typeof renderAuthBar === 'function') renderAuthBar();
+  if (typeof bindCloudLoginButtons === 'function') bindCloudLoginButtons();
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+  if (typeof initAuth === 'function') {
+    void initAuth().then(() => {
+      if (typeof renderAuthBar === 'function') renderAuthBar();
+      if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+    });
+  }
 }
 
 // Lance dès que le DOM est prêt

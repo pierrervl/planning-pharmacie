@@ -8,10 +8,10 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'settings'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'settings'];
 
 const TAB_GROUPS = {
-  planning: ['week', 'patterns'],
+  planning: ['week', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi'],
   journees: ['feries', 'gardes'],
@@ -56,6 +56,7 @@ function render() {
     case 'emp-overview':   renderEmployeeOverviewView(content); break;
     case 'emp-detail':     renderEmployeeDetailView(content); break;
     case 'patterns':       renderPatternsEditor(content); break;
+    case 'planning-requests': renderPlanningRequestsEditor(content); break;
     case 'employees':      renderEmployeesEditor(content); break;
     case 'contract':       renderContractEditor(content); break;
     case 'cdi':            renderCdiEditor(content); break;
@@ -66,6 +67,7 @@ function render() {
   }
   renderSidebar();
   initFrDateInputs(content);
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
   if (STATE.ui.settingsScrollHash) {
     const hash = STATE.ui.settingsScrollHash;
     STATE.ui.settingsScrollHash = '';
@@ -119,22 +121,57 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   const { editable = true, forPrint = false } = options;
   const afterContract = isAfterEmployeeContractEnd(emp, iso);
   const c = computeCell(emp, iso, shift);
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
+  const canRequest = requestMode && emp === linkedEmp && !afterContract && !forPrint;
+  const canEdit = editable && !afterContract && !requestMode
+    && (typeof canEditPlanning !== 'function' || canEditPlanning());
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
-  const passesFilter = forPrint || cellPassesTypeFilter(c);
-  const cls = ['cell', cellDisplayClass(c), shiftCls, weekParityClass(d)];
-  const canEdit = editable && !afterContract;
-  if (canEdit) cls.unshift('editable');
+  const pendingReq = typeof getPendingPlanningChangeRequest === 'function'
+    ? getPendingPlanningChangeRequest(emp, iso, shift) : null;
+  const passesFilter = forPrint || cellPassesTypeFilter(c) || !!pendingReq;
+  const cls = ['cell', 'week-planning-cell', cellDisplayClass(c), shiftCls, weekParityClass(d)];
+  if (canEdit || canRequest) cls.unshift('editable');
+  if (canRequest) cls.push('requestable');
   if (!passesFilter) cls.push('filtered-out');
   if (c.ferie) cls.push('ferie');
   if (afterContract) cls.push('post-contract');
   if (weekBoundary && shift === 'matin') cls.push('week-start');
-  const hint = canEdit ? ' — clic : plein ↔ repos · clic droit ou Ctrl+clic : présence spéciale (orange)' : '';
+
+  if (pendingReq) cls.push('request-pending');
+
+  const hint = canEdit ? ' — clic : plein ↔ repos · clic droit : orange → rouge → vert' : '';
+  const requestHint = canRequest ? ' — clic : demander une modification' : '';
   const contractHint = afterContract ? ' — après fin de contrat' : '';
-  const title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}` +
-                (c.ferie ? ` (${c.ferieLabel})` : '') +
-                (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint;
-  const data = canEdit ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
-  return `<td class="${cls.join(' ')}"${data} title="${title}"></td>`;
+  let title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}`;
+  let inner = '';
+
+  if (pendingReq) {
+    title += pendingReq.present
+      ? ` — demande : ${formatPatternTime(pendingReq.start)} → ${formatPatternTime(pendingReq.end)} (${formatContractHours(pendingReq.hours)} h)`
+      : ' — demande : non présent (0 h)';
+    if (pendingReq.present && pendingReq.hours > 0) {
+      inner = `<span class="pattern-cell-hours">${formatContractHours(pendingReq.hours)}</span>`;
+    } else if (!pendingReq.present) {
+      inner = `<span class="pattern-cell-hours">0</span>`;
+    }
+  } else if (c.full) {
+    const slot = getPlanningCellSlot(emp, iso, shift);
+    const h = getPlanningCellHours(emp, iso, shift);
+    title += ` — ${formatPatternTime(slot.start)} → ${formatPatternTime(slot.end)} (${formatContractHours(h)} h)`;
+    if (h != null) {
+      inner = `<span class="pattern-cell-hours">${formatContractHours(h)}</span>`;
+    }
+  }
+
+  title += (c.ferie ? ` (${c.ferieLabel})` : '') +
+           (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint + requestHint;
+  if (pendingReq) title += ' — en attente de validation';
+  if (canEdit && (c.special || c.specialRed)) {
+    title += ' · double-clic : modifier les horaires';
+  }
+  const data = (canEdit || canRequest) ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
+  return `<td class="${cls.join(' ')}"${data} title="${title}">${inner}</td>`;
 }
 
 /* Effectif par demi-journée — dégradé 3 couleurs (2 = rouge, 3 = jaune, 4 = vert) */
@@ -175,6 +212,11 @@ function renderSumCell(n, shift, shiftLabel, weekBoundary, d) {
 }
 
 function createWeekPlanningTable(days, { editable = true, showImportRow = true, forPrint = false } = {}) {
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  if (requestMode) {
+    showImportRow = false;
+    editable = true;
+  }
   const showM = STATE.ui.filterShift !== 'aprem';
   const showA = STATE.ui.filterShift !== 'matin';
   const colsPerDay = (showM ? 1 : 0) + (showA ? 1 : 0);
@@ -298,7 +340,26 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
 }
 
 function attachWeekTableHandlers(wrap) {
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
+
   wrap.querySelectorAll('td.cell.editable[data-emp]').forEach(el => {
+    if (requestMode) {
+      el.onclick = (e) => {
+        const emp = el.dataset.emp;
+        const iso = el.dataset.date;
+        const shift = el.dataset.shift;
+        if (emp !== linkedEmp) return;
+        if (isAfterEmployeeContractEnd(emp, iso)) {
+          toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+          return;
+        }
+        promptPlanningChangeRequestDialog({ emp, iso, shift, onDone: persistAndRender });
+      };
+      el.oncontextmenu = (e) => e.preventDefault();
+      return;
+    }
+
     el.onclick = (e) => {
       const emp = el.dataset.emp;
       const iso = el.dataset.date;
@@ -321,8 +382,24 @@ function attachWeekTableHandlers(wrap) {
         return;
       }
       const cur = getPlanningValue(emp, iso, shift);
-      setPlanningValue(emp, iso, shift, nextPlanningValueOnRightClick(cur));
-      persistAndRender();
+      const next = nextPlanningValueOnRightClick(cur);
+      setPlanningValue(emp, iso, shift, next);
+      saveState();
+      if (isPlanningSpecialVal(next)) {
+        promptPlanningCellHours({ emp, iso, shift, onDone: persistAndRender });
+      } else {
+        persistAndRender();
+      }
+    };
+    el.ondblclick = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.emp;
+      const iso = el.dataset.date;
+      const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) return;
+      const cur = getPlanningValue(emp, iso, shift);
+      if (!isPlanningSpecialVal(cur)) return;
+      promptPlanningCellHours({ emp, iso, shift, onDone: persistAndRender });
     };
   });
 
@@ -360,7 +437,8 @@ function buildPrintLegendEl() {
   }
   leg.innerHTML = `
     <span><i class="lg plein"></i> Présent</span>
-    <span><i class="lg special"></i> Présence spéciale</span>
+    <span><i class="lg special"></i> Présence orange</span>
+    <span><i class="lg special-red"></i> Présence rouge</span>
     <span><i class="lg rest"></i> Repos</span>
     <span><i class="lg empty"></i> Non défini</span>
     ${congeSpans}
@@ -453,6 +531,7 @@ function renderWeekView(root) {
   const isoWeek = getISOWeek(monday);
   const isoYear = getISOWeekYear(monday);
   const anchorMon = getPatternAnchorMonday();
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls';
@@ -466,14 +545,24 @@ function renderWeekView(root) {
     <div class="week-num">${numWeeks} semaines · S${isoWeek}–S${getISOWeek(lastDay)} · ${isoYear}</div>
     <div class="spacer"></div>
     <label>Aller à : <input type="text" class="fr-date" id="wk-jump" data-iso="${STATE.ui.currentDate}" value="${frFormatNumeric(STATE.ui.currentDate)}"></label>
-    <span class="help-text no-print">Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit ou Ctrl+clic = présence spéciale (orange)</span>
+    <span class="help-text no-print">${requestMode
+      ? 'Cliquez sur une demi-journée pour proposer une modification · case <b>violette</b> = demande en attente'
+      : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns`}</span>
   `;
   root.appendChild(ctrl);
 
-  const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: true });
+  if (typeof isEmployee === 'function' && isEmployee() && !getLinkedEmployeeName()) {
+    const warn = document.createElement('div');
+    warn.className = 'form-card';
+    warn.innerHTML = '<p class="muted">Votre compte n\'est pas lié à un salarié. Contactez l\'administrateur pour associer votre profil.</p>';
+    root.appendChild(warn);
+  }
+
+  const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });
   root.appendChild(wrap);
   attachWeekTableHandlers(wrap);
 
+  if (!requestMode) {
   const printStart = STATE.ui.weekPrintStart || toISO(monday);
   const printEnd = STATE.ui.weekPrintEnd || toISO(lastDay);
   const printPanel = document.createElement('div');
@@ -506,6 +595,7 @@ function renderWeekView(root) {
     STATE.ui.weekPrintEnd = toISO(lastDay);
     persistAndRender();
   };
+  }
 
   $('#wk-prev').onclick  = () => { STATE.ui.currentDate = toISO(addDays(current, -7)); persistAndRender(); };
   $('#wk-next').onclick  = () => { STATE.ui.currentDate = toISO(addDays(current, 7)); persistAndRender(); };
@@ -973,8 +1063,10 @@ function renderSidebar() {
   }
   h += `<div class="side-section">
     <h3>Légende</h3>
-    <div class="legend-item"><span class="sw" style="background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">×</span> Plein (présent)</div>
-    <div class="legend-item"><span class="sw sw-special">×</span> Présence spéciale (clic droit ou Ctrl+clic)</div>
+    <div class="legend-item"><span class="sw" style="background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px">5,5</span> Plein (durée en h)</div>
+    <div class="legend-item"><span class="sw sw-special" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">4</span> Présence orange (clic droit)</div>
+    <div class="legend-item"><span class="sw sw-special-red" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">3,5</span> Présence rouge (2e clic droit)</div>
+    <div class="legend-item"><span class="sw sw-request" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">4</span> Demande en attente (violet)</div>
     <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
     <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
     <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>

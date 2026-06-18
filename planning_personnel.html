@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Planning Personnel — Gestion par patterns versionnés</title>
-<link rel="stylesheet" href="css/planning.css?v=20260603">
+<link rel="stylesheet" href="css/planning.css?v=20260625">
 </head>
 <body>
 <div class="app">
@@ -12,13 +12,19 @@
   <header class="topbar">
     <h1>Planning Personnel <span class="sub">— gestion par patterns versionnés</span></h1>
     <div class="topbtns">
-      <button id="btn-export-json" title="Enregistrer planning_AAAA-MM-JJ_HH-MM.json dans sauvegardes/">⬇ Exporter JSON</button>
-      <button id="btn-import-json" title="Importer la sauvegarde la plus récente depuis sauvegardes/">⬆ Importer JSON</button>
-      <input type="file" id="file-import" accept="application/json,.json" class="hidden">
-      <input type="file" id="folder-import" webkitdirectory multiple class="hidden">
-      <button id="btn-print" title="Imprimer la vue courante">🖨 Imprimer</button>
-      <button id="btn-export-png" title="Exporter la vue en image PNG">🖼 Exporter PNG</button>
-      <button id="btn-reset" title="Réinitialiser toutes les données">↺ Réinitialiser</button>
+      <div class="topbtns-primary">
+        <button id="btn-cloud-login" type="button" class="topbtn-cloud hidden" title="Connexion Supabase">☁ Connexion cloud</button>
+        <button id="btn-cloud-sync" type="button" class="topbtn-cloud topbtn-sync hidden" title="Enregistrer le planning sur Supabase">☁ Synchroniser</button>
+      </div>
+      <div class="topbtns-tools">
+        <button id="btn-export-json" class="topbtn-compact" title="Enregistrer planning_AAAA-MM-JJ_HH-MM.json dans sauvegardes/">⬇ JSON</button>
+        <button id="btn-import-json" class="topbtn-compact" title="Importer la sauvegarde la plus récente depuis sauvegardes/">⬆ JSON</button>
+        <input type="file" id="file-import" accept="application/json,.json" class="hidden">
+        <input type="file" id="folder-import" webkitdirectory multiple class="hidden">
+        <button id="btn-print" class="topbtn-compact" title="Imprimer la vue courante">🖨 Impr.</button>
+        <button id="btn-export-png" class="topbtn-compact" title="Exporter la vue en image PNG">🖼 PNG</button>
+        <button id="btn-reset" class="topbtn-compact topbtn-danger" title="Réinitialiser toutes les données">↺</button>
+      </div>
     </div>
   </header>
 
@@ -33,6 +39,7 @@
     <nav class="nav-subtabs" id="tabs">
       <button type="button" data-tab="week" data-group="planning" class="active">📅 Semaine</button>
       <button type="button" data-tab="patterns" data-group="planning">🧩 Patterns</button>
+      <button type="button" data-tab="planning-requests" data-group="planning">📋 Demandes</button>
       <button type="button" data-tab="emp-overview" data-group="analyse">📊 Vue d'ensemble</button>
       <button type="button" data-tab="emp-detail" data-group="analyse">👤 Salarié</button>
       <button type="button" data-tab="conges" data-group="equipe">🌴 Congés</button>
@@ -55,8 +62,8 @@
 <!-- Supabase + auth cloud -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/00-config.js?v=20260618"></script>
-<script src="js/00-auth.js?v=20260618"></script>
-<script src="js/00-sync.js?v=20260618"></script>
+<script src="js/00-auth.js?v=20260623"></script>
+<script src="js/00-sync.js?v=20260621"></script>
 <!-- Ordre de chargement important (dépendances globales) -->
 <script src="js/02-dates.js?v=20260603"></script>
 <script src="js/03-conges.js?v=20260603"></script>
@@ -65,11 +72,12 @@
 <script src="js/03-gardes.js?v=20260603"></script>
 <script src="js/03-employees.js?v=20260603"></script>
 <script src="js/03-cdi.js?v=20260603"></script>
-<script src="js/01-state.js?v=20260603"></script>
+<script src="js/01-state.js?v=20260621"></script>
 <script src="js/05-views.js?v=20260603"></script>
 <script src="js/06-editors.js?v=20260603"></script>
 <script src="js/08-contract.js?v=20260603"></script>
 <script src="js/09-cdi.js?v=20260603"></script>
-<script src="js/07-app.js?v=20260603"></script>
+<script src="js/10-planning-requests.js?v=20260625"></script>
+<script src="js/07-app.js?v=20260624"></script>
 </body>
 </html>
