@@ -909,10 +909,11 @@ function mountCongeTypeCatalogSection(root, options = {}) {
 }
 
 function renderCongesEditor(root) {
-  const empMode = typeof isEmployee === 'function' && isEmployee();
+  const staffMode = typeof isStaff === 'function' && isStaff();
+  const teamLeaderMode = typeof isTeamLeader === 'function' && isTeamLeader();
   const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
 
-  if (!empMode) {
+  if (!staffMode) {
     const hint = document.createElement('div');
     hint.className = 'form-card settings-hint-card';
     hint.innerHTML = `
@@ -923,7 +924,7 @@ function renderCongesEditor(root) {
     bindSettingsNavLinks(hint);
   }
 
-  const empOptions = empMode && linkedEmp
+  const empOptions = (staffMode && !teamLeaderMode && linkedEmp)
     ? `<option selected>${escapeHtml(linkedEmp)}</option>`
     : STATE.employees.map(e => `<option>${escapeHtml(e)}</option>`).join('');
 
@@ -931,10 +932,12 @@ function renderCongesEditor(root) {
   form.className = 'form-card';
   form.innerHTML = `
     <h3>Ajouter un congé / absence</h3>
+    ${teamLeaderMode ? '<p class="muted">En tant que chef d\'équipe, vous pouvez saisir un congé pour tout salarié.</p>' : ''}
+    ${staffMode && !teamLeaderMode ? '<p class="muted">Vous ne pouvez saisir un congé que pour vous-même.</p>' : ''}
     <div class="form-grid">
       <div class="field">
         <label>Salarié</label>
-        <select id="cg-emp" ${empMode && linkedEmp ? 'disabled' : ''}>
+        <select id="cg-emp" ${staffMode && !teamLeaderMode && linkedEmp ? 'disabled' : ''}>
           ${empOptions}
         </select>
       </div>
@@ -962,7 +965,7 @@ function renderCongesEditor(root) {
   root.appendChild(form);
 
   $('#cg-add').onclick = () => {
-    const empVal = (empMode && linkedEmp) ? linkedEmp : $('#cg-emp').value;
+    const empVal = (staffMode && !teamLeaderMode && linkedEmp) ? linkedEmp : $('#cg-emp').value;
     const c = {
       id: 'cg_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
       emp: empVal,
@@ -998,7 +1001,9 @@ function renderCongesEditor(root) {
     for (const c of STATE.conges) {
       const days = diffDays(c.start, c.end) + 1;
       const typeCls = congeTypeBadgeClass(c.type);
-      const canDel = !empMode || c.emp === linkedEmp;
+      const canDel = !staffMode
+        || teamLeaderMode
+        || (linkedEmp && typeof employeeNamesMatch === 'function' && employeeNamesMatch(c.emp, linkedEmp));
       h += `<tr>
         <td>${escapeHtml(c.emp)}</td>
         <td><span class="${typeCls}">${escapeHtml(c.type)}</span></td>

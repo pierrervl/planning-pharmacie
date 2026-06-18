@@ -123,7 +123,7 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   const c = computeCell(emp, iso, shift);
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
   const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
-  const canRequest = requestMode && emp === linkedEmp && !afterContract && !forPrint;
+  const canRequest = requestMode && canRequestPlanningFor(emp) && !afterContract && !forPrint;
   const canEdit = editable && !afterContract && !requestMode
     && (typeof canEditPlanning !== 'function' || canEditPlanning());
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
@@ -141,7 +141,14 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   if (pendingReq) cls.push('request-pending');
 
   const hint = canEdit ? ' — clic : plein ↔ repos · clic droit : orange → rouge → vert' : '';
-  const requestHint = canRequest ? ' — clic : demander une modification' : '';
+  const requestHint = canRequest
+    ? (typeof isTeamLeader === 'function' && isTeamLeader()
+      ? ' — clic : proposer une modification (case violette)'
+      : (typeof employeeNamesMatch === 'function' && employeeNamesMatch(emp, linkedEmp)
+        ? ' — clic : proposer une modification (votre ligne)'
+        : ''))
+    : '';
+  const adminReqHint = pendingReq && canEdit && !canRequest ? ' — clic : traiter la demande en attente' : '';
   const contractHint = afterContract ? ' — après fin de contrat' : '';
   let title = `${emp} — ${frFormat(d)} — ${shift === 'matin' ? 'Matin' : 'Après-midi'} — ${cellStatusLabel(c)}`;
   let inner = '';
@@ -165,12 +172,12 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   }
 
   title += (c.ferie ? ` (${c.ferieLabel})` : '') +
-           (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint + requestHint;
+           (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint + requestHint + adminReqHint;
   if (pendingReq) title += ' — en attente de validation';
   if (canEdit && (c.special || c.specialRed)) {
     title += ' · double-clic : modifier les horaires';
   }
-  const data = (canEdit || canRequest) ? ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"` : '';
+  const data = forPrint ? '' : ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"`;
   return `<td class="${cls.join(' ')}"${data} title="${title}">${inner}</td>`;
 }
 
@@ -297,9 +304,13 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   tbl.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
   for (const emp of visibleEmps) {
     const tr = document.createElement('tr');
     tr.className = 'emp-row';
+    if (requestMode && linkedEmp && typeof employeeNamesMatch === 'function' && employeeNamesMatch(emp, linkedEmp)) {
+      tr.classList.add('planning-own-row');
+    }
     tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${emp} — ${getEmployeeType(emp)}">${forPrint ? emp : shortEmpName(emp)}</td>`;
     days.forEach((d, dayIdx) => {
       const iso = toISO(d);
@@ -343,29 +354,44 @@ function attachWeekTableHandlers(wrap) {
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
   const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
 
-  wrap.querySelectorAll('td.cell.editable[data-emp]').forEach(el => {
-    if (requestMode) {
+  if (requestMode) {
+    const needsLinkedEmp = !(typeof isTeamLeader === 'function' && isTeamLeader());
+    if (needsLinkedEmp && !linkedEmp) return;
+    wrap.querySelectorAll('td.cell[data-emp]').forEach(el => {
+      if (!canRequestPlanningFor(el.dataset.emp)) return;
+      el.classList.add('editable', 'requestable');
       el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const emp = el.dataset.emp;
         const iso = el.dataset.date;
         const shift = el.dataset.shift;
-        if (emp !== linkedEmp) return;
+        if (!iso || !shift) return;
         if (isAfterEmployeeContractEnd(emp, iso)) {
           toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
           return;
         }
-        promptPlanningChangeRequestDialog({ emp, iso, shift, onDone: persistAndRender });
+        openEmployeePlanningChangeRequest(emp, iso, shift);
       };
       el.oncontextmenu = (e) => e.preventDefault();
-      return;
-    }
+    });
+    return;
+  }
 
+  wrap.querySelectorAll('td.cell.editable[data-emp]').forEach(el => {
     el.onclick = (e) => {
       const emp = el.dataset.emp;
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
       if (isAfterEmployeeContractEnd(emp, iso)) {
         toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
+      if (el.classList.contains('request-pending')
+        && typeof openAdminPlanningChangeRequest === 'function') {
+        e.preventDefault();
+        e.stopPropagation();
+        openAdminPlanningChangeRequest(emp, iso, shift);
         return;
       }
       const cur = getPlanningValue(emp, iso, shift);
@@ -379,6 +405,11 @@ function attachWeekTableHandlers(wrap) {
       const shift = el.dataset.shift;
       if (isAfterEmployeeContractEnd(emp, iso)) {
         toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
+      if (el.classList.contains('request-pending')
+        && typeof openAdminPlanningChangeRequest === 'function') {
+        openAdminPlanningChangeRequest(emp, iso, shift);
         return;
       }
       const cur = getPlanningValue(emp, iso, shift);
@@ -397,6 +428,7 @@ function attachWeekTableHandlers(wrap) {
       const iso = el.dataset.date;
       const shift = el.dataset.shift;
       if (isAfterEmployeeContractEnd(emp, iso)) return;
+      if (el.classList.contains('request-pending')) return;
       const cur = getPlanningValue(emp, iso, shift);
       if (!isPlanningSpecialVal(cur)) return;
       promptPlanningCellHours({ emp, iso, shift, onDone: persistAndRender });
@@ -546,16 +578,26 @@ function renderWeekView(root) {
     <div class="spacer"></div>
     <label>Aller à : <input type="text" class="fr-date" id="wk-jump" data-iso="${STATE.ui.currentDate}" value="${frFormatNumeric(STATE.ui.currentDate)}"></label>
     <span class="help-text no-print">${requestMode
-      ? 'Cliquez sur une demi-journée pour proposer une modification · case <b>violette</b> = demande en attente'
-      : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns`}</span>
+      ? (typeof getPlanningRequestHelpText === 'function' ? getPlanningRequestHelpText() : 'Cliquez sur une demi-journée pour proposer une modification en <b>violet</b>')
+      : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · <b>cases violettes</b> : clic pour traiter une demande' : ''}`}</span>
   `;
   root.appendChild(ctrl);
 
   if (typeof isEmployee === 'function' && isEmployee() && !getLinkedEmployeeName()) {
     const warn = document.createElement('div');
     warn.className = 'form-card';
-    warn.innerHTML = '<p class="muted">Votre compte n\'est pas lié à un salarié. Contactez l\'administrateur pour associer votre profil.</p>';
+    warn.innerHTML = '<p class="muted">Votre compte n\'est pas lié à un salarié. Contactez l\'administrateur pour associer votre profil afin de proposer vos propres modifications.</p>';
     root.appendChild(warn);
+  } else if (requestMode && typeof isEmployee === 'function' && isEmployee()
+    && !(typeof isTeamLeader === 'function' && isTeamLeader())) {
+    const linked = getLinkedEmployeeName();
+    const resolved = STATE.employees.find(e => typeof isEmployeeRow === 'function' && isEmployeeRow(e));
+    if (linked && !resolved) {
+      const warn = document.createElement('div');
+      warn.className = 'form-card';
+      warn.innerHTML = `<p class="muted">Votre profil est lié à « ${escapeHtml(linked)} », mais ce nom ne correspond à aucun salarié du planning. Contactez l'administrateur.</p>`;
+      root.appendChild(warn);
+    }
   }
 
   const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });

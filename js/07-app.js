@@ -846,6 +846,8 @@ async function bootstrapApp() {
     void initAuth().then(() => {
       if (typeof renderAuthBar === 'function') renderAuthBar();
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+      if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+      if (typeof render === 'function') render();
     });
   }
 }

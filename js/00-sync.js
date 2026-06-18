@@ -11,7 +11,7 @@ const SYNC_DEBOUNCE_MS = 600;
 function canSyncToCloud() {
   if (!isSupabaseConfigured() || !isAuthenticated()) return false;
   if (isAdmin()) return true;
-  if (isEmployee()) return !!getLinkedEmployeeName();
+  if (isStaff()) return !!getLinkedEmployeeName();
   return false;
 }
 
@@ -112,7 +112,7 @@ async function loadPlanningFromCloud() {
 }
 
 async function loadPersonalDataFromCloud() {
-  if (!isEmployee() || !AUTH.profile) return;
+  if (!isStaff() || !AUTH.profile) return;
   const empName = getLinkedEmployeeName();
   const personal = AUTH.profile.personal_data;
   if (personal && Object.keys(personal).length > 0) {
@@ -137,7 +137,7 @@ async function pushPlanningToCloud() {
 }
 
 async function pushPersonalDataToCloud() {
-  if (!isEmployee()) return;
+  if (!isStaff()) return;
   const empName = getLinkedEmployeeName();
   if (!empName) return;
   await ensureAuthClient();
@@ -163,7 +163,7 @@ async function performCloudSync() {
   try {
     if (isAdmin()) {
       await pushPlanningToCloud();
-    } else if (isEmployee()) {
+    } else if (isStaff()) {
       await pushPersonalDataToCloud();
     }
   } catch (e) {

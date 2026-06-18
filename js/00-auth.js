@@ -39,6 +39,9 @@ function refreshProfileInBackground(user) {
       if (profile) {
         AUTH.profile = profile;
         renderAuthBar();
+        if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+        if (typeof render === 'function') render();
+        if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
       }
     })
     .catch((e) => console.warn('Profil cloud non chargé', e));
@@ -191,8 +194,23 @@ function isAdmin() {
   return AUTH.profile?.role === 'admin';
 }
 
+function isTeamLeader() {
+  return AUTH.profile?.role === 'team_leader';
+}
+
 function isEmployee() {
   return AUTH.profile?.role === 'employee';
+}
+
+function isStaff() {
+  return isEmployee() || isTeamLeader();
+}
+
+function getAuthRoleLabel() {
+  if (isAdmin()) return 'Administrateur';
+  if (isTeamLeader()) return 'Chef d\'équipe';
+  if (isEmployee()) return 'Employé';
+  return '';
 }
 
 function canEditPlanning() {
@@ -205,12 +223,37 @@ function canEditEmployeeData(empName) {
   if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
   if (isAdmin()) return true;
-  if (isEmployee()) return getLinkedEmployeeName() === empName;
+  if (isTeamLeader()) return true;
+  if (isEmployee()) return employeeNamesMatch(getLinkedEmployeeName(), empName);
   return false;
 }
 
+function canRequestCongesFor(empName) {
+  return canEditEmployeeData(empName);
+}
+
+function employeeNameKey(name) {
+  const n = typeof normalizeEmployeeName === 'function'
+    ? normalizeEmployeeName(name)
+    : String(name || '').trim().replace(/\s+/g, ' ');
+  return n.toLowerCase();
+}
+
+function employeeNamesMatch(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return employeeNameKey(a) === employeeNameKey(b);
+}
+
 function getLinkedEmployeeName() {
-  return AUTH.profile?.employee_name || null;
+  const raw = AUTH.profile?.employee_name;
+  if (!raw) return null;
+  const employees = (typeof STATE !== 'undefined' && STATE.employees) ? STATE.employees : [];
+  if (employees.includes(raw)) return raw;
+  const key = employeeNameKey(raw);
+  const match = employees.find(e => employeeNameKey(e) === key);
+  if (match) return match;
+  return raw;
 }
 
 function getAuthDisplayName() {
@@ -253,7 +296,7 @@ async function signUp({ email, password, fullName, employeeName, role }) {
     const client = await ensureAuthClient();
     const meta = { full_name: fullName || '' };
     if (employeeName) meta.employee_name = employeeName;
-    if (role === 'admin' || role === 'employee') meta.role = role;
+    if (role === 'admin' || role === 'employee' || role === 'team_leader') meta.role = role;
 
     const { data, error } = await withTimeout(
       client.auth.signUp({
@@ -286,7 +329,7 @@ async function signOut() {
   AUTH.session = null;
   AUTH.profile = null;
   notifyAuthChange();
-  document.body.classList.remove('read-only-mode', 'employee-mode');
+  document.body.classList.remove('read-only-mode', 'employee-mode', 'team-leader-mode');
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
   renderAuthBar();
   if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
@@ -348,6 +391,9 @@ async function initAuth() {
       }
       notifyAuthChange();
       renderAuthBar();
+      if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+      if (typeof render === 'function') render();
+      if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
     });
     await refreshAuthSession();
     AUTH.ready = true;
@@ -553,12 +599,13 @@ function renderAuthBar() {
 
   bar.hidden = false;
 
-  const roleLabel = isAdmin() ? 'Administrateur' : 'Employé';
+  const roleLabel = getAuthRoleLabel();
+  const roleCls = isAdmin() ? 'admin' : (isTeamLeader() ? 'team-leader' : 'employee');
   const empLink = getLinkedEmployeeName() ? ` · ${escapeHtml(getLinkedEmployeeName())}` : '';
   bar.innerHTML = `
     <span class="auth-bar-status">
       <strong>${escapeHtml(getAuthDisplayName())}</strong>
-      <span class="auth-role-badge ${isAdmin() ? 'admin' : 'employee'}">${roleLabel}</span>${empLink}
+      <span class="auth-role-badge ${roleCls}">${roleLabel}</span>${empLink}
     </span>
     <span class="auth-bar-actions">
       <span class="sync-status" id="sync-status"></span>
@@ -575,8 +622,8 @@ function renderAuthBar() {
 }
 
 function applyEmployeeViewRestrictions() {
-  if (!isEmployee()) {
-    document.body.classList.remove('employee-mode');
+  if (!isStaff()) {
+    document.body.classList.remove('employee-mode', 'team-leader-mode');
     document.querySelectorAll('#tabs button, #nav-groups button').forEach(btn => {
       btn.style.display = '';
     });
@@ -584,17 +631,24 @@ function applyEmployeeViewRestrictions() {
   }
 
   document.body.classList.add('employee-mode');
+  document.body.classList.toggle('team-leader-mode', isTeamLeader());
 
   const empName = getLinkedEmployeeName();
-  if (empName && STATE.employees.includes(empName)) {
-    STATE.ui.filtersEmp = [empName];
-    STATE.ui.employeeView = empName;
-    STATE.ui.monthEmp = empName;
-    STATE.ui.yearEmp = empName;
-    STATE.ui.contractEmp = empName;
-    STATE.ui.cdiEmp = empName;
-    STATE.ui.employeeChartEmps = [empName];
+  if (empName) {
+    const resolved = STATE.employees.includes(empName)
+      ? empName
+      : STATE.employees.find(e => typeof employeeNamesMatch === 'function' && employeeNamesMatch(e, empName));
+    if (resolved) {
+      STATE.ui.employeeView = resolved;
+      STATE.ui.monthEmp = resolved;
+      STATE.ui.yearEmp = resolved;
+      STATE.ui.contractEmp = resolved;
+      STATE.ui.cdiEmp = resolved;
+      STATE.ui.employeeChartEmps = [resolved];
+    }
   }
+
+  STATE.ui.filtersEmp = STATE.employees.slice();
 
   const allowedTabs = ['week', 'conges'];
   const allowedGroups = ['planning', 'equipe'];
@@ -661,7 +715,7 @@ async function renderAdminUsersSection(root) {
   card.id = 'cfg-users';
   card.innerHTML = `
     <h3>Comptes utilisateurs</h3>
-    <p class="muted">Associez chaque compte employé au nom du salarié dans le planning.</p>
+    <p class="muted">Associez chaque compte au nom du salarié dans le planning. Le rôle <strong>Chef d'équipe</strong> permet de voir tout le planning et de proposer des modifications ou congés pour l'équipe.</p>
     <div class="auth-users-loading muted">Chargement…</div>
     <table class="auth-users-table employees-list" hidden>
       <thead>
@@ -697,6 +751,7 @@ async function renderAdminUsersSection(root) {
         <td>
           <select class="auth-user-role" data-user-id="${p.id}" ${p.id === AUTH.session?.user?.id ? 'disabled' : ''}>
             <option value="admin" ${p.role === 'admin' ? 'selected' : ''}>Administrateur</option>
+            <option value="team_leader" ${p.role === 'team_leader' ? 'selected' : ''}>Chef d'équipe</option>
             <option value="employee" ${p.role === 'employee' ? 'selected' : ''}>Employé</option>
           </select>
         </td>

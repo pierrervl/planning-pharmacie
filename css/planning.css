@@ -1583,6 +1583,21 @@ td.week-planning-cell.request-pending::after {
   gap: 16px;
   margin-bottom: 12px;
 }
+.planning-request-current {
+  margin: 10px 0 12px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--r);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.planning-request-admin-label {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+.import-dialog-btns.planning-request-admin-btns {
+  flex-wrap: wrap;
+}
 .planning-request-check {
   display: flex;
   align-items: center;
@@ -1625,6 +1640,12 @@ body.employee-mode td.cell.requestable {
 body.employee-mode td.cell.requestable:hover {
   outline: 2px solid var(--presence-request);
   outline-offset: -2px;
+}
+body.employee-mode tr.planning-own-row td.empname {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+body.team-leader-mode td.cell.requestable:hover {
+  outline-color: #7c3aed;
 }
 .pattern-cell-hours {
   position: absolute;
@@ -3402,6 +3423,11 @@ body.auth-locked .app { filter: blur(2px); }
 
 .auth-role-badge.employee {
   background: var(--rtt);
+  color: #fff;
+}
+
+.auth-role-badge.team-leader {
+  background: #7c3aed;
   color: #fff;
 }
 
