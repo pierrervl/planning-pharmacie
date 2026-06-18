@@ -51,10 +51,10 @@ function updateCloudButtonState() {
     syncBtn.classList.remove('hidden');
     const staffPull = typeof isStaff === 'function' && isStaff()
       && !(typeof isAdmin === 'function' && isAdmin());
-    syncBtn.classList.toggle('needs-cloud-sync', !staffPull && sessionNeedsCloudSync);
-    syncBtn.textContent = staffPull ? '☁ Récupérer' : '☁ Synchroniser';
+    syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync);
+    syncBtn.textContent = '☁ Synchroniser';
     syncBtn.title = staffPull
-      ? 'Récupérer le planning à jour depuis le cloud'
+      ? 'Récupérer le planning et envoyer vos congés / demandes violettes'
       : (sessionNeedsCloudSync
         ? 'Modifications non enregistrées sur le cloud — cliquez pour synchroniser'
         : 'Planning à jour sur Supabase');

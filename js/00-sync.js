@@ -32,13 +32,53 @@ function stateForCloudExport(state) {
   return copy;
 }
 
-function mergeCloudStateIntoLocal(cloudData) {
+function mergeRecordsById(baseList = [], patchList = [], idKey = 'id') {
+  const map = new Map();
+  for (const item of baseList) {
+    if (item && item[idKey] != null) map.set(String(item[idKey]), item);
+  }
+  for (const item of patchList) {
+    if (item && item[idKey] != null) map.set(String(item[idKey]), item);
+  }
+  return Array.from(map.values());
+}
+
+function collectStaffConges(state = STATE) {
+  return (state.conges || []).filter(c => {
+    if (typeof isTeamLeader === 'function' && isTeamLeader()) return true;
+    if (typeof canRequestCongesFor === 'function') return canRequestCongesFor(c.emp);
+    return false;
+  });
+}
+
+function collectStaffPendingRequests(state = STATE) {
+  return (state.planningChangeRequests || []).filter(r => {
+    if (r.status !== 'pending') return false;
+    if (typeof isTeamLeader === 'function' && isTeamLeader()) return true;
+    if (typeof canRequestPlanningFor === 'function') return canRequestPlanningFor(r.emp);
+    return false;
+  });
+}
+
+function mergeCloudStateIntoLocal(cloudData, { staffMerge = false } = {}) {
   if (!cloudData || typeof cloudData !== 'object') return false;
   const localUi = STATE.ui;
+  const localStaffConges = staffMerge ? collectStaffConges() : [];
+  const localStaffRequests = staffMerge ? collectStaffPendingRequests() : [];
+
   suppressDirtyTracking = true;
   STATE = cloudData;
   migrateState(STATE);
   STATE.ui = { ...buildDefaultState().ui, ...localUi, ...(cloudData.ui || {}) };
+
+  if (staffMerge) {
+    STATE.conges = mergeRecordsById(STATE.conges || [], localStaffConges);
+    STATE.planningChangeRequests = mergeRecordsById(
+      STATE.planningChangeRequests || [],
+      localStaffRequests
+    );
+  }
+
   migrateState(STATE);
   suppressDirtyTracking = false;
   return true;
@@ -99,9 +139,10 @@ async function loadPlanningFromCloud() {
   }
 
   lastCloudUpdatedAt = data?.updated_at || null;
+  const staffMerge = isStaff() && !isAdmin();
 
   if (data?.data && Object.keys(data.data).length > 0) {
-    mergeCloudStateIntoLocal(data.data);
+    mergeCloudStateIntoLocal(data.data, { staffMerge });
     setSyncStatus('Synchronisé', 'ok');
     return data;
   }
@@ -140,6 +181,21 @@ async function pushPlanningToCloud() {
   setSyncStatus('Enregistré cloud', 'ok');
 }
 
+async function pushStaffSharedChangesToCloud() {
+  if (!isStaff() || isAdmin()) return;
+  const congesPatch = collectStaffConges();
+  const requestsPatch = collectStaffPendingRequests();
+  if (!congesPatch.length && !requestsPatch.length) return;
+
+  await ensureAuthClient();
+  const { error } = await AUTH.client.rpc('merge_staff_planning_shared', {
+    conges_patch: congesPatch,
+    planning_change_requests_patch: requestsPatch,
+  });
+  if (error) throw error;
+  setSyncStatus('Demandes envoyées', 'ok');
+}
+
 async function pushPersonalDataToCloud() {
   if (!canPushPersonalToCloud()) return;
   const empName = getLinkedEmployeeName();
@@ -155,6 +211,15 @@ async function pushPersonalDataToCloud() {
   setSyncStatus('Profil enregistré', 'ok');
 }
 
+async function syncStaffWithCloud() {
+  await loadPlanningFromCloud();
+  await pushStaffSharedChangesToCloud();
+  await pushPersonalDataToCloud();
+  if (typeof saveState === 'function') saveState();
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  if (typeof render === 'function') render();
+}
+
 async function performCloudSync() {
   if (!canSyncToCloud()) return;
   if (syncInFlight) {
@@ -168,12 +233,12 @@ async function performCloudSync() {
     if (isAdmin()) {
       await pushPlanningToCloud();
     } else if (isStaff()) {
-      await pushPersonalDataToCloud();
+      await syncStaffWithCloud();
     }
   } catch (e) {
     console.error('Sync cloud échouée', e);
     setSyncStatus('Erreur sync', 'error');
-    if (typeof toast === 'function') toast('⚠ Synchronisation cloud échouée', true);
+    if (typeof toast === 'function') toast('Synchronisation cloud échouée', true);
     throw e;
   } finally {
     syncInFlight = false;
@@ -208,18 +273,14 @@ async function forceCloudSync() {
   setSyncStatus('Synchronisation…', 'pending');
   try {
     if (isStaff() && !isAdmin()) {
-      await loadPlanningFromCloud();
-      if (typeof saveState === 'function') saveState();
-      await pushPersonalDataToCloud();
-      if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
-      if (typeof render === 'function') render();
+      await syncStaffWithCloud();
     } else {
       await performCloudSync();
     }
     if (typeof markCloudSynced === 'function') markCloudSynced();
     if (typeof toast === 'function') {
       toast(isStaff() && !isAdmin()
-        ? 'Planning récupéré depuis le cloud'
+        ? 'Synchronisation terminée (planning + vos demandes)'
         : 'Synchronisation cloud terminée');
     }
   } catch (e) {
@@ -252,6 +313,7 @@ async function syncAfterAuth() {
     if (isAdmin()) {
       await performCloudSync();
     } else if (isStaff()) {
+      await pushStaffSharedChangesToCloud();
       await pushPersonalDataToCloud();
     }
     if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
