@@ -42,10 +42,8 @@ function feriesForYear(year) {
 
 /* Renvoie le libellé du jour férié ou null. Tient compte des ajouts/retraits. */
 function getFerieLabel(dateIso) {
-  // retirés
-  if (STATE.feriesRemove.includes(dateIso)) return null;
-  // ajoutés (personnalisés)
-  const custom = STATE.feriesAdd.find(f => f.date === dateIso);
+  if ((STATE.feriesRemove || []).includes(dateIso)) return null;
+  const custom = (STATE.feriesAdd || []).find(f => f.date === dateIso);
   if (custom) return custom.label;
   // auto
   const y = parseInt(dateIso.slice(0,4), 10);

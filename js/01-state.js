@@ -259,7 +259,14 @@ function loadState() {
 /* Assure la compatibilité des anciennes sauvegardes --------------------- */
 function migrateState(state) {
   if (!state.planning) state.planning = {};
+  if (!state.conges) state.conges = [];
+  if (!state.feriesAdd) state.feriesAdd = [];
+  if (!state.feriesRemove) state.feriesRemove = [];
   if (!state.ui) state.ui = {};
+  if (!state.ui.filtersEmp) state.ui.filtersEmp = (state.employees || []).slice();
+  if (!state.ui.filterShift) state.ui.filterShift = 'both';
+  if (!state.ui.currentDate) state.ui.currentDate = todayISO();
+  if (!state.ui.currentTab) state.ui.currentTab = 'week';
   if (!state.ui.patternLayout) state.ui.patternLayout = 'unified';
   if (!state.ui.filterTypes) {
     state.ui.filterTypes = ['work', 'rest', 'empty'];

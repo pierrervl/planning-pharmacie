@@ -158,8 +158,8 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
   } else if (c.full) {
     const slot = getPlanningCellSlot(emp, iso, shift);
     const h = getPlanningCellHours(emp, iso, shift);
-    title += ` — ${formatPatternTime(slot.start)} → ${formatPatternTime(slot.end)} (${formatContractHours(h)} h)`;
     if (h != null) {
+      title += ` — ${formatPatternTime(slot.start)} → ${formatPatternTime(slot.end)} (${formatContractHours(h)} h)`;
       inner = `<span class="pattern-cell-hours">${formatContractHours(h)}</span>`;
     }
   }
@@ -223,7 +223,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   const numWeeks = Math.ceil(days.length / 7);
   const headRows = showImportRow ? 5 : 4;
   const cellOpts = { editable, forPrint };
-  const visibleEmps = STATE.employees.filter(e => STATE.ui.filtersEmp.includes(e));
+  const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
 
   const wrap = document.createElement('div');
   wrap.className = 'planning-wrap' + (forPrint ? ' planning-wrap-print' : '');
