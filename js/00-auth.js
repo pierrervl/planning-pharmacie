@@ -565,7 +565,9 @@ function bindCloudLoginButtons() {
       try {
         await forceCloudSync();
       } catch (e) {
-        if (typeof toast === 'function') toast('Sync cloud échouée', true);
+        if (typeof toast === 'function') {
+          toast(typeof formatCloudSyncError === 'function' ? formatCloudSyncError(e) : 'Sync cloud échouée', true);
+        }
       } finally {
         syncBtn.disabled = false;
         if (typeof updateCloudButtonState === 'function') updateCloudButtonState();

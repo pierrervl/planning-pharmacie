@@ -10,7 +10,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role in ('employee', 'team_leader')
+    where id = auth.uid() and role::text in ('employee', 'team_leader')
   );
 $$;
 
@@ -104,3 +104,5 @@ end;
 $$;
 
 grant execute on function public.merge_staff_planning_shared(jsonb, jsonb) to authenticated;
+
+notify pgrst, 'reload schema';

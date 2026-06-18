@@ -181,19 +181,129 @@ async function pushPlanningToCloud() {
   setSyncStatus('Enregistré cloud', 'ok');
 }
 
-async function pushStaffSharedChangesToCloud() {
-  if (!isStaff() || isAdmin()) return;
-  const congesPatch = collectStaffConges();
-  const requestsPatch = collectStaffPendingRequests();
-  if (!congesPatch.length && !requestsPatch.length) return;
+function formatCloudSyncError(err) {
+  const msg = String(err?.message || err?.details || err || '');
+  const code = err?.code || '';
+  if (code === 'PGRST202' || /merge_staff_planning_shared|PGRST202|Could not find the function/i.test(msg)) {
+    return 'Envoi cloud indisponible — exécutez la migration SQL merge_staff_planning_shared dans Supabase (SQL Editor).';
+  }
+  if (/Non authentifié|JWT/i.test(msg)) return 'Session expirée — reconnectez-vous.';
+  if (/Accès réservé au personnel/i.test(msg)) return msg;
+  if (/profil.*salarié|employee_name/i.test(msg)) return msg;
+  return msg || 'Erreur de synchronisation cloud';
+}
 
+function isMissingRpcError(err) {
+  const msg = String(err?.message || err?.details || err || '');
+  return err?.code === 'PGRST202'
+    || /merge_staff_planning_shared|PGRST202|Could not find the function/i.test(msg);
+}
+
+async function pushStaffSharedChangesViaRpc(congesPatch, requestsPatch) {
   await ensureAuthClient();
   const { error } = await AUTH.client.rpc('merge_staff_planning_shared', {
     conges_patch: congesPatch,
     planning_change_requests_patch: requestsPatch,
   });
   if (error) throw error;
-  setSyncStatus('Demandes envoyées', 'ok');
+}
+
+async function pushStaffSharedChangesViaProfile() {
+  if (!canPushPersonalToCloud()) {
+    throw new Error('Votre compte n\'est pas lié à un salarié — impossible d\'envoyer vos demandes.');
+  }
+  const empName = getLinkedEmployeeName();
+  const congesPatch = collectStaffConges();
+  const requestsPatch = collectStaffPendingRequests();
+  if (!congesPatch.length && !requestsPatch.length) return false;
+
+  const personal_data = extractPersonalDataFromState(empName);
+  personal_data.staffSharedPatch = {
+    conges: congesPatch,
+    planningChangeRequests: requestsPatch,
+    pushedAt: new Date().toISOString(),
+  };
+
+  await ensureAuthClient();
+  const { error } = await AUTH.client
+    .from('profiles')
+    .update({ personal_data })
+    .eq('id', AUTH.session.user.id);
+  if (error) throw error;
+  if (AUTH.profile) AUTH.profile.personal_data = personal_data;
+  return true;
+}
+
+async function mergeStaffPatchesFromProfiles() {
+  if (!isAdmin()) return;
+  await ensureAuthClient();
+  const { data: profiles, error } = await AUTH.client
+    .from('profiles')
+    .select('id, personal_data');
+  if (error) throw error;
+
+  let mergedAny = false;
+  for (const profile of profiles || []) {
+    const patch = profile.personal_data?.staffSharedPatch;
+    if (!patch) continue;
+
+    if (patch.conges?.length) {
+      STATE.conges = mergeRecordsById(STATE.conges || [], patch.conges);
+      mergedAny = true;
+    }
+    if (patch.planningChangeRequests?.length) {
+      STATE.planningChangeRequests = mergeRecordsById(
+        STATE.planningChangeRequests || [],
+        patch.planningChangeRequests
+      );
+      mergedAny = true;
+    }
+
+    const nextPersonal = { ...(profile.personal_data || {}) };
+    delete nextPersonal.staffSharedPatch;
+    const { error: clearErr } = await AUTH.client
+      .from('profiles')
+      .update({ personal_data: nextPersonal })
+      .eq('id', profile.id);
+    if (clearErr) throw clearErr;
+  }
+
+  if (mergedAny) migrateState(STATE);
+  return mergedAny;
+}
+
+async function clearStaffSharedPatchFromProfile() {
+  if (!canPushPersonalToCloud() || !AUTH.profile?.personal_data?.staffSharedPatch) return;
+  const personal_data = { ...AUTH.profile.personal_data };
+  delete personal_data.staffSharedPatch;
+  await ensureAuthClient();
+  const { error } = await AUTH.client
+    .from('profiles')
+    .update({ personal_data })
+    .eq('id', AUTH.session.user.id);
+  if (error) throw error;
+  AUTH.profile.personal_data = personal_data;
+}
+
+async function pushStaffSharedChangesToCloud() {
+  if (!isStaff() || isAdmin()) return;
+  const congesPatch = collectStaffConges();
+  const requestsPatch = collectStaffPendingRequests();
+  if (!congesPatch.length && !requestsPatch.length) return;
+
+  try {
+    await pushStaffSharedChangesViaRpc(congesPatch, requestsPatch);
+    await clearStaffSharedPatchFromProfile();
+    setSyncStatus('Demandes envoyées', 'ok');
+  } catch (e) {
+    if (isMissingRpcError(e)) {
+      const sent = await pushStaffSharedChangesViaProfile();
+      if (!sent) return;
+      setSyncStatus('Demandes envoyées (via profil)', 'ok');
+      return;
+    }
+    throw e;
+  }
 }
 
 async function pushPersonalDataToCloud() {
@@ -202,6 +312,8 @@ async function pushPersonalDataToCloud() {
   if (!empName) return;
   await ensureAuthClient();
   const personal_data = extractPersonalDataFromState(empName);
+  const keptPatch = AUTH.profile?.personal_data?.staffSharedPatch;
+  if (keptPatch) personal_data.staffSharedPatch = keptPatch;
   const { error } = await AUTH.client
     .from('profiles')
     .update({ personal_data })
@@ -231,14 +343,14 @@ async function performCloudSync() {
   setSyncStatus('Enregistrement…', 'pending');
   try {
     if (isAdmin()) {
-      await pushPlanningToCloud();
+      await syncAdminWithCloud();
     } else if (isStaff()) {
       await syncStaffWithCloud();
     }
   } catch (e) {
     console.error('Sync cloud échouée', e);
     setSyncStatus('Erreur sync', 'error');
-    if (typeof toast === 'function') toast('Synchronisation cloud échouée', true);
+    if (typeof toast === 'function') toast(formatCloudSyncError(e), true);
     throw e;
   } finally {
     syncInFlight = false;
@@ -247,6 +359,14 @@ async function performCloudSync() {
       void performCloudSync();
     }
   }
+}
+
+async function syncAdminWithCloud() {
+  await loadPlanningFromCloud();
+  const mergedPatches = await mergeStaffPatchesFromProfiles();
+  if (mergedPatches && typeof saveState === 'function') saveState();
+  await pushPlanningToCloud();
+  if (typeof render === 'function') render();
 }
 
 function scheduleCloudSync() {
@@ -286,7 +406,7 @@ async function forceCloudSync() {
   } catch (e) {
     console.error('Sync cloud échouée', e);
     setSyncStatus('Erreur sync', 'error');
-    if (typeof toast === 'function') toast('Synchronisation cloud échouée', true);
+    if (typeof toast === 'function') toast(formatCloudSyncError(e), true);
     throw e;
   }
 }
@@ -301,6 +421,7 @@ function setupCloudAutoSave() {
 async function bootstrapCloudData() {
   if (!isAuthenticated()) return;
   await loadPlanningFromCloud();
+  if (isAdmin()) await mergeStaffPatchesFromProfiles();
   await loadPersonalDataFromCloud();
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
 }
@@ -311,7 +432,7 @@ async function syncAfterAuth() {
     await bootstrapCloudData();
     if (typeof saveState === 'function') saveState();
     if (isAdmin()) {
-      await performCloudSync();
+      await pushPlanningToCloud();
     } else if (isStaff()) {
       await pushStaffSharedChangesToCloud();
       await pushPersonalDataToCloud();
