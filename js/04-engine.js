@@ -130,6 +130,7 @@ function getPlanningValue(empName, dateIso, shift) {
 }
 
 function setPlanningValue(empName, dateIso, shift, value, state = STATE) {
+  if (typeof canEditPlanning === 'function' && !canEditPlanning()) return false;
   if (isAfterEmployeeContractEnd(empName, dateIso, state)) return false;
   const day = ensurePlanningDay(empName, dateIso, state);
   day[shift] = value;

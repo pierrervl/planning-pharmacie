@@ -738,6 +738,7 @@ function resetAll() {
 function initApp() {
   applyEmployeeTypeColorStyles();
   applyCongeTypeColorStyles();
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
   $$('#nav-groups button').forEach(b => {
     b.onclick = () => {
       const tabs = TAB_GROUPS[b.dataset.group];
@@ -795,9 +796,20 @@ function initApp() {
   });
 }
 
+async function bootstrapApp() {
+  if (typeof requireAuthForCloud === 'function') {
+    const authResult = await requireAuthForCloud();
+    if (authResult.cloud && typeof bootstrapCloudData === 'function') {
+      await bootstrapCloudData();
+    }
+  }
+  initApp();
+  if (typeof renderAuthBar === 'function') renderAuthBar();
+}
+
 // Lance dès que le DOM est prêt
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
+  document.addEventListener('DOMContentLoaded', () => void bootstrapApp());
 } else {
-  initApp();
+  void bootstrapApp();
 }

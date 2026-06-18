@@ -1563,6 +1563,7 @@ function renderSettingsEditor(root) {
     <a href="#cfg-conge-types" class="settings-toc-link">Modes de congés</a>
     <a href="#cfg-pattern-anchor" class="settings-toc-link">Ancrage cycle</a>
     <a href="#cfg-contract-party" class="settings-toc-link">Pharmacie &amp; employeur</a>
+    <a href="#cfg-users" class="settings-toc-link auth-admin-only">Comptes utilisateurs</a>
     <a href="#cfg-related" class="settings-toc-link">Autres réglages</a>`;
   root.appendChild(toc);
 
@@ -1580,6 +1581,10 @@ function renderSettingsEditor(root) {
   mountPatternAnchorPanel(root, { sectionId: 'cfg-pattern-anchor', idPrefix: 'cfg-pat-anchor', compactHelp: true });
 
   mountContractPartySection(root, { sectionId: 'cfg-contract-party' });
+
+  if (typeof renderAdminUsersSection === 'function') {
+    renderAdminUsersSection(root);
+  }
 
   const related = document.createElement('div');
   related.className = 'form-card settings-related-card settings-section';

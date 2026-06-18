@@ -333,6 +333,7 @@ function saveState() {
     console.error('Échec sauvegarde localStorage', e);
     toast('⚠ Sauvegarde locale impossible (quota ?)', true);
   }
+  if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
 }
 
 /* Gestion des salariés --------------------------------------------------- */
