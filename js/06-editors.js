@@ -91,7 +91,6 @@ function mountPatternShiftDefaultsPanel(root) {
   const matinH = hoursBetweenTimes(d.matin.start, d.matin.end);
   const apremH = hoursBetweenTimes(d.aprem.start, d.aprem.end);
   const satMatinH = hoursBetweenTimes(sat.matin.start, sat.matin.end);
-  const satApremH = hoursBetweenTimes(sat.aprem.start, sat.aprem.end);
   const panel = document.createElement('div');
   panel.className = 'form-card pattern-hours-defaults no-print';
   panel.innerHTML = `
@@ -131,6 +130,7 @@ function mountPatternShiftDefaultsPanel(root) {
     </div>
     <div class="pattern-hours-day-section">
       <div class="pattern-hours-day-section-title">Samedi</div>
+      <p class="muted">Le samedi après-midi n'est pas travaillé.</p>
       <div class="pattern-hours-shifts">
         <div class="pattern-hours-shift-block">
           <div class="pattern-hours-shift-title">Matin</div>
@@ -144,25 +144,13 @@ function mountPatternShiftDefaultsPanel(root) {
             <span class="pattern-hours-computed" id="pat-def-sat-matin-hours">= ${formatContractHours(satMatinH)} h</span>
           </div>
         </div>
-        <div class="pattern-hours-shift-block">
-          <div class="pattern-hours-shift-title">Après-midi</div>
-          <div class="pattern-hours-grid">
-            <label>Début
-              <input type="text" id="pat-def-sat-aprem-start" placeholder="14h00" value="${formatPatternTime(sat.aprem.start)}">
-            </label>
-            <label>Fin
-              <input type="text" id="pat-def-sat-aprem-end" placeholder="18h30" value="${formatPatternTime(sat.aprem.end)}">
-            </label>
-            <span class="pattern-hours-computed" id="pat-def-sat-aprem-hours">= ${formatContractHours(satApremH)} h</span>
-          </div>
-        </div>
       </div>
     </div>`;
   root.appendChild(panel);
 
   const fieldGroups = [
     { prefix: 'pat-def', store: 'weekday', shifts: ['matin', 'aprem'] },
-    { prefix: 'pat-def-sat', store: 'saturday', shifts: ['matin', 'aprem'] },
+    { prefix: 'pat-def-sat', store: 'saturday', shifts: ['matin'] },
   ];
 
   const updatePreview = (prefix, shift) => {
@@ -203,16 +191,19 @@ function mountPatternShiftDefaultsPanel(root) {
       resetGroupInputs('pat-def', ['matin', 'aprem'], STATE.patternShiftDefaults);
       return;
     }
-    const saturday = readGroup('pat-def-sat', ['matin', 'aprem']);
+    const saturday = readGroup('pat-def-sat', ['matin']);
     if (!saturday) {
       toast('Horaires samedi invalides (ex. 8h30 → 12h30).', true);
-      resetGroupInputs('pat-def-sat', ['matin', 'aprem'], STATE.patternShiftDefaultsSaturday);
+      resetGroupInputs('pat-def-sat', ['matin'], STATE.patternShiftDefaultsSaturday);
       return;
     }
     STATE.patternShiftDefaults = weekday;
-    STATE.patternShiftDefaultsSaturday = saturday;
+    STATE.patternShiftDefaultsSaturday = {
+      matin: saturday.matin,
+      aprem: STATE.patternShiftDefaultsSaturday.aprem,
+    };
     resetGroupInputs('pat-def', ['matin', 'aprem'], weekday);
-    resetGroupInputs('pat-def-sat', ['matin', 'aprem'], saturday);
+    resetGroupInputs('pat-def-sat', ['matin'], saturday);
     saveState();
     persistAndRender();
   };
