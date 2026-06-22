@@ -352,6 +352,8 @@ function applyImportedJSON(obj, filename) {
   if (!STATE.feriesAdd) STATE.feriesAdd = [];
   if (!STATE.feriesRemove) STATE.feriesRemove = [];
   if (!STATE.gardes) STATE.gardes = [];
+  if (!STATE.pantecotes) STATE.pantecotes = [];
+  if (!STATE.pantecoteRecovery) STATE.pantecoteRecovery = {};
   if (!STATE.employeeTypes) STATE.employeeTypes = {};
   if (!STATE.employeeInfo) STATE.employeeInfo = {};
   if (!STATE.contractDays) STATE.contractDays = {};

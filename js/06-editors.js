@@ -308,15 +308,20 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   return `<td class="${cls.join(' ')}" data-pat-emp="${patternEscapeAttr(emp)}" data-pat-name="${patternEscapeAttr(pname)}" data-pat-day="${dayIdx}" data-pat-shift="${shift}" title="${patternEscapeAttr(title)}">${inner}</td>`;
 }
 
-function buildPatternTableHeader(thead, weekNames, headRows) {
+function buildPatternTableHeader(thead, weekNames, headRows, { showMonthCol = false } = {}) {
   const showM = STATE.ui.filterShift !== 'aprem';
   const showA = STATE.ui.filterShift !== 'matin';
   const colsPerDay = (showM ? 1 : 0) + (showA ? 1 : 0);
+  const totalHeadRows = headRows;
 
   const trWeeks = document.createElement('tr');
-  trWeeks.innerHTML = `<th class="empname" rowspan="${headRows}">Nom</th>`;
+  trWeeks.innerHTML = `<th class="empname" rowspan="${totalHeadRows}">Nom</th>`;
   for (const pname of weekNames) {
     trWeeks.innerHTML += `<th class="week-band" colspan="${colsPerDay * 7}">Semaine ${pname}</th>`;
+    trWeeks.innerHTML += `<th class="hours-col hours-col-week" rowspan="${totalHeadRows}">H./sem.</th>`;
+  }
+  if (showMonthCol) {
+    trWeeks.innerHTML += `<th class="hours-col hours-col-month" rowspan="${totalHeadRows}" title="Moyenne mensuelle projetée sur le cycle 6 semaines">H./mois</th>`;
   }
   thead.appendChild(trWeeks);
 
@@ -346,7 +351,7 @@ function buildPatternTableHeader(thead, weekNames, headRows) {
   return { showM, showA };
 }
 
-function buildPatternTableBody(tbody, visibleEmps, weekNames) {
+function buildPatternTableBody(tbody, visibleEmps, weekNames, { showMonthCol = false } = {}) {
   const showM = STATE.ui.filterShift !== 'aprem';
   const showA = STATE.ui.filterShift !== 'matin';
 
@@ -362,7 +367,24 @@ function buildPatternTableBody(tbody, visibleEmps, weekNames) {
         if (showA) tr.innerHTML += renderPatternEditorCell(emp, pname, dayIdx, 'aprem', weekBoundary);
         else tr.innerHTML += `<td class="cell vide empty shift-aprem" style="opacity:.15"></td>`;
       }
+      const weekH = computePatternWeekHours(emp, pname);
+      tr.innerHTML += renderHoursTotalCell(weekH, {
+        extraClass: 'hours-col-week',
+        title: `${emp} — semaine ${pname} — ${formatContractHours(weekH)} h travaillées`,
+      });
     });
+    if (showMonthCol) {
+      const monthH = weekNames.length === PATTERN_CYCLE_WEEKS.length
+        ? computePatternMonthlyHours(emp)
+        : computePatternWeekMonthlyProjection(emp, weekNames[0]);
+      const monthTitle = weekNames.length === PATTERN_CYCLE_WEEKS.length
+        ? `${emp} — moyenne mensuelle (cycle 6 sem.) — ${formatContractHours(monthH)} h`
+        : `${emp} — projection mensuelle (sem. ${weekNames[0]}) — ${formatContractHours(monthH)} h`;
+      tr.innerHTML += renderHoursTotalCell(monthH, {
+        extraClass: 'hours-col-month',
+        title: monthTitle,
+      });
+    }
     tbody.appendChild(tr);
   }
 }
@@ -414,10 +436,10 @@ function renderPatternsUnified(root, visibleEmps) {
   tbl.className = 'planning';
 
   const thead = document.createElement('thead');
-  buildPatternTableHeader(thead, PATTERN_CYCLE_WEEKS, 3);
+  buildPatternTableHeader(thead, PATTERN_CYCLE_WEEKS, 3, { showMonthCol: true });
 
   const tbody = document.createElement('tbody');
-  buildPatternTableBody(tbody, visibleEmps, PATTERN_CYCLE_WEEKS);
+  buildPatternTableBody(tbody, visibleEmps, PATTERN_CYCLE_WEEKS, { showMonthCol: true });
 
   tbl.appendChild(thead);
   tbl.appendChild(tbody);
@@ -441,10 +463,10 @@ function renderPatternsSplit(root, visibleEmps) {
     tbl.className = 'planning';
 
     const thead = document.createElement('thead');
-    buildPatternTableHeader(thead, [pname], 3);
+    buildPatternTableHeader(thead, [pname], 3, { showMonthCol: true });
 
     const tbody = document.createElement('tbody');
-    buildPatternTableBody(tbody, visibleEmps, [pname]);
+    buildPatternTableBody(tbody, visibleEmps, [pname], { showMonthCol: true });
 
     tbl.appendChild(thead);
     tbl.appendChild(tbody);
@@ -1265,6 +1287,357 @@ function renderGardesEditor(root) {
 }
 
 /* ===========================================================================
+   15. ÉDITEUR PANTECOTES
+   ========================================================================= */
+
+function renderPantecotesEditor(root) {
+  const pantecotes = getPantecotesSorted();
+  const editable = typeof canEditPlanning !== 'function' || canEditPlanning();
+  const emps = STATE.employees.slice();
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'controls';
+  ctrl.innerHTML = `
+    <div class="label">Pantecotes</div>
+    <div class="help-text">
+      Définissez les dates de chaque édition, saisissez ou ajustez les heures travaillées,
+      puis les heures récupérées en travail ou en formation.
+      La colonne <strong>Total récup.</strong> passe au rouge si la récupération n'atteint pas les heures travaillées.
+    </div>
+  `;
+  root.appendChild(ctrl);
+
+  if (editable) {
+    const addCard = document.createElement('div');
+    addCard.className = 'form-card';
+    const nextYear = pantecotes.length
+      ? Math.max(...pantecotes.map(p => p.year)) + 1
+      : new Date().getFullYear();
+    const today = todayISO();
+    addCard.innerHTML = `
+      <h3>Ajouter une édition Pantecote</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label>Année</label>
+          <input type="number" id="pt-add-year" value="${nextYear}" min="2000" max="2100" style="width:90px">
+        </div>
+        <div class="field">
+          <label>Du</label>
+          <input type="text" class="fr-date" id="pt-add-start" data-iso="${today}" value="${frFormatNumeric(today)}">
+        </div>
+        <div class="field">
+          <label>Au</label>
+          <input type="text" class="fr-date" id="pt-add-end" data-iso="${today}" value="${frFormatNumeric(today)}">
+        </div>
+        <div class="field">
+          <label>Libellé</label>
+          <input type="text" id="pt-add-label" placeholder="ex : Pantecote 2027">
+        </div>
+        <button class="primary" id="pt-add-btn">+ Ajouter</button>
+      </div>
+    `;
+    root.appendChild(addCard);
+
+    $('#pt-add-btn').onclick = () => {
+      const year = parseInt($('#pt-add-year').value, 10);
+      const start = readFrDateInput($('#pt-add-start'));
+      const end = readFrDateInput($('#pt-add-end'));
+      const label = ($('#pt-add-label').value || '').trim();
+      const r = addPantecote(year, start, end, label || `Pantecote ${year}`);
+      if (!r.ok) {
+        toast(r.error, true);
+        return;
+      }
+      persistAndRender();
+      toast(`Pantecote ${year} ajoutée`);
+    };
+  }
+
+  const datesCard = document.createElement('div');
+  datesCard.className = 'form-card';
+  let datesHtml = `<h3>Éditions (${pantecotes.length})</h3>`;
+  if (!pantecotes.length) {
+    datesHtml += `<p class="muted">Aucune édition Pantecote. Ajoutez-en une ci-dessus.</p>`;
+  } else {
+    datesHtml += `<table class="list pantecotes-editions-table"><thead><tr>
+      <th>Édition</th><th>Du</th><th>Au</th><th>Jours</th>${editable ? '<th></th>' : ''}
+    </tr></thead><tbody>`;
+    for (const p of pantecotes) {
+      const days = pantecoteHasDates(p) ? pantecoteDateRange(p).length : 0;
+      const single = p.start && p.start === p.end;
+      datesHtml += `<tr data-pt-id="${escapeHtml(p.id)}">
+        <td><strong>${escapeHtml(p.label)}</strong></td>
+        <td>${editable
+          ? `<input type="text" class="fr-date pt-date-start" data-iso="${p.start || ''}" value="${p.start ? frFormatNumeric(p.start) : ''}" placeholder="jj/mm/aaaa">`
+          : (p.start ? frFormatNumeric(p.start) : '—')}</td>
+        <td>${editable
+          ? `<input type="text" class="fr-date pt-date-end" data-iso="${p.end || ''}" value="${p.end ? frFormatNumeric(p.end) : ''}" placeholder="jj/mm/aaaa">`
+          : (p.end && !single ? frFormatNumeric(p.end) : (single ? '—' : '—'))}</td>
+        <td class="num">${pantecoteHasDates(p) ? days + (single ? ' (1 jour)' : '') : '<span class="muted">dates à définir</span>'}</td>
+        ${editable ? `<td><button class="del" data-pt-rm="${escapeHtml(p.id)}" title="Supprimer l'édition">Retirer</button></td>` : ''}
+      </tr>`;
+    }
+    datesHtml += `</tbody></table>`;
+    if (editable) {
+      datesHtml += `<p class="muted">Modifiez les dates puis cliquez sur Enregistrer les dates.</p>
+        <button type="button" class="primary" id="pt-save-dates">Enregistrer les dates</button>`;
+    }
+  }
+  datesCard.innerHTML = datesHtml;
+  root.appendChild(datesCard);
+
+  if (editable && pantecotes.length) {
+    $('#pt-save-dates').onclick = () => {
+      let ok = true;
+      datesCard.querySelectorAll('tr[data-pt-id]').forEach(row => {
+        const id = row.dataset.ptId;
+        const start = readFrDateInput(row.querySelector('.pt-date-start'));
+        const end = readFrDateInput(row.querySelector('.pt-date-end'));
+        const r = updatePantecote(id, { start, end });
+        if (!r.ok) {
+          toast(r.error, true);
+          ok = false;
+        }
+      });
+      if (!ok) return;
+      persistAndRender();
+      toast('Dates Pantecote enregistrées');
+    };
+
+    datesCard.querySelectorAll('[data-pt-rm]').forEach(btn => {
+      btn.onclick = () => {
+        const p = pantecotes.find(x => x.id === btn.dataset.ptRm);
+        if (!confirm(`Retirer ${p ? p.label : 'cette édition'} ? Les heures récupérées associées seront supprimées.`)) return;
+        removePantecote(btn.dataset.ptRm);
+        persistAndRender();
+        toast('Édition retirée');
+      };
+    });
+  }
+
+  const tableCard = document.createElement('div');
+  tableCard.className = 'form-card pantecotes-table-card';
+  if (!pantecotes.length) {
+    tableCard.innerHTML = `<h3>Suivi par salarié</h3><p class="muted">Ajoutez au moins une édition pour afficher le tableau.</p>`;
+  } else {
+    const colsPerEdition = 3;
+    let thead = `<tr>
+      <th class="pantecotes-emp-col" rowspan="2">Salarié</th>`;
+    for (const p of pantecotes) {
+      const datesHint = pantecoteHasDates(p)
+        ? `${frFormatNumeric(p.start)}${p.end !== p.start ? ' → ' + frFormatNumeric(p.end) : ''}`
+        : 'dates non définies';
+      thead += `<th class="pantecotes-edition-head" colspan="${colsPerEdition}" title="${escapeHtml(datesHint)}">${escapeHtml(p.label)}</th>`;
+    }
+    thead += `<th class="pantecotes-total-head" rowspan="2">Total récup.</th></tr>
+      <tr>`;
+    for (const p of pantecotes) {
+      thead += `
+        <th class="pantecotes-subhead" title="Heures travaillées (planning ou saisie manuelle)">H. travaillées</th>
+        <th class="pantecotes-subhead" title="Heures récupérées en travail">Récup. travail</th>
+        <th class="pantecotes-subhead" title="Heures récupérées en formation">Récup. formation</th>`;
+    }
+    thead += `</tr>`;
+
+    let tbody = '';
+    for (const emp of emps) {
+      const rowTotals = pantecoteRowTotals(emp, pantecotes);
+      const totalCls = pantecoteRecupIsShort(rowTotals.recup, rowTotals.worked)
+        ? 'pantecotes-row-total is-short'
+        : (rowTotals.worked > 0 ? 'pantecotes-row-total is-ok' : 'pantecotes-row-total');
+      const totalTitle = pantecoteRowTotalTitle(emp, rowTotals);
+      tbody += `<tr class="emp-row" data-emp="${escapeHtml(emp)}"><td class="empname ${employeeTypeClass(emp)}" title="${escapeHtml(emp)}">${escapeHtml(shortEmpName(emp))}</td>`;
+      for (const p of pantecotes) {
+        const workedInfo = getPantecoteHoursWorkedInfo(emp, p);
+        const rec = getPantecoteRecovery(p.id, emp);
+        const workedTitle = workedInfo.manual
+          ? `${emp} — ${p.label} — saisie manuelle (${formatContractHours(workedInfo.hours)} h)`
+          : (workedInfo.hours == null
+            ? 'Définissez les dates de l\'édition'
+            : `${emp} — ${p.label} — planning (${formatContractHours(workedInfo.hours)} h)`);
+        if (editable) {
+          tbody += `
+            <td class="pantecotes-input-cell pantecotes-worked-cell" title="${escapeHtml(workedTitle)}">
+              <input type="text" class="pantecotes-hours-input pantecotes-worked-input${workedInfo.manual ? ' is-manual' : ''}"
+                inputmode="decimal" data-pt-id="${escapeHtml(p.id)}" data-emp="${escapeHtml(emp)}" data-field="worked"
+                value="${workedInfo.hours != null ? formatContractHours(workedInfo.hours) : ''}" placeholder="0"
+                aria-label="Heures travaillées">
+            </td>`;
+          tbody += `
+            <td class="pantecotes-input-cell">
+              <input type="text" class="pantecotes-hours-input" inputmode="decimal"
+                data-pt-id="${escapeHtml(p.id)}" data-emp="${escapeHtml(emp)}" data-field="work"
+                value="${rec.work ? formatContractHours(rec.work) : ''}" placeholder="0" aria-label="Récupération travail">
+            </td>
+            <td class="pantecotes-input-cell">
+              <input type="text" class="pantecotes-hours-input" inputmode="decimal"
+                data-pt-id="${escapeHtml(p.id)}" data-emp="${escapeHtml(emp)}" data-field="formation"
+                value="${rec.formation ? formatContractHours(rec.formation) : ''}" placeholder="0" aria-label="Récupération formation">
+            </td>`;
+        } else {
+          tbody += `<td class="num pantecotes-worked" title="${escapeHtml(workedTitle)}">${workedInfo.hours != null ? formatContractHours(workedInfo.hours) : '—'}</td>`;
+          tbody += `
+            <td class="num">${rec.work ? formatContractHours(rec.work) : '—'}</td>
+            <td class="num">${rec.formation ? formatContractHours(rec.formation) : '—'}</td>`;
+        }
+      }
+      tbody += `<td class="num ${totalCls}" title="${escapeHtml(totalTitle)}"><strong>${formatContractHours(rowTotals.recup)}</strong></td></tr>`;
+    }
+
+    let tfoot = `<tr class="sum-row"><td class="sum-label">Total</td>`;
+    let grandRecup = 0;
+    let grandWorked = 0;
+    let hasGrandWorked = false;
+    for (const p of pantecotes) {
+      let teamWorked = 0;
+      let teamWork = 0;
+      let teamFormation = 0;
+      let hasWorked = false;
+      for (const emp of emps) {
+        const w = getPantecoteHoursWorked(emp, p);
+        if (w != null) { teamWorked += w; hasWorked = true; }
+        const rec = getPantecoteRecovery(p.id, emp);
+        teamWork += rec.work || 0;
+        teamFormation += rec.formation || 0;
+      }
+      if (hasWorked) {
+        grandWorked += teamWorked;
+        hasGrandWorked = true;
+      }
+      grandRecup += teamWork + teamFormation;
+      tfoot += `<td class="num sum-row-hours">${hasWorked ? formatContractHours(Math.round(teamWorked * 100) / 100) : '—'}</td>`;
+      tfoot += `<td class="num sum-row-hours">${teamWork ? formatContractHours(Math.round(teamWork * 100) / 100) : '—'}</td>`;
+      tfoot += `<td class="num sum-row-hours">${teamFormation ? formatContractHours(Math.round(teamFormation * 100) / 100) : '—'}</td>`;
+    }
+    const grandWorkedR = hasGrandWorked ? Math.round(grandWorked * 100) / 100 : null;
+    const grandRecupR = Math.round(grandRecup * 100) / 100;
+    const grandTotalCls = pantecoteRecupIsShort(grandRecupR, grandWorkedR)
+      ? 'sum-row-hours pantecotes-row-total is-short'
+      : (grandWorkedR > 0 ? 'sum-row-hours pantecotes-row-total is-ok' : 'sum-row-hours pantecotes-row-total');
+    tfoot += `<td class="num ${grandTotalCls}"><strong>${formatContractHours(grandRecupR)}</strong></td></tr>`;
+
+    tableCard.innerHTML = `
+      <h3>Suivi par salarié</h3>
+      <p class="muted">Les heures travaillées sont préremplies depuis le planning (modifiables). Double-clic sur une H. travaillée pour reprendre la valeur du planning.</p>
+      <div class="planning-wrap pantecotes-wrap">
+        <table class="list pantecotes-table">
+          <thead>${thead}</thead>
+          <tbody>${tbody}</tbody>
+          <tfoot>${tfoot}</tfoot>
+        </table>
+      </div>`;
+  }
+  root.appendChild(tableCard);
+
+  if (editable) {
+    tableCard.querySelectorAll('.pantecotes-hours-input').forEach(input => {
+      const save = () => {
+        const ptId = input.dataset.ptId;
+        const emp = input.dataset.emp;
+        const field = input.dataset.field;
+        const parsed = parseHoursInput(input.value);
+        if (parsed === null) {
+          toast('Heures invalides (nombre ≥ 0, virgule ou point).', true);
+          input.focus();
+          return;
+        }
+        if (field === 'worked') {
+          setPantecoteWorkedOverride(ptId, emp, parsed);
+          input.classList.add('is-manual');
+        } else {
+          const rec = getPantecoteRecovery(ptId, emp);
+          const work = field === 'work' ? parsed : rec.work;
+          const formation = field === 'formation' ? parsed : rec.formation;
+          setPantecoteRecovery(ptId, emp, work, formation);
+        }
+        saveState();
+        refreshPantecoteEmployeeRow(tableCard, emp, pantecotes, emps);
+        updatePantecotesFooterTotals(tableCard, pantecotes, emps);
+      };
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+      if (input.dataset.field === 'worked') {
+        input.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          const ptId = input.dataset.ptId;
+          const emp = input.dataset.emp;
+          const p = pantecotes.find(x => x.id === ptId);
+          if (!p) return;
+          clearPantecoteWorkedOverride(ptId, emp);
+          const info = getPantecoteHoursWorkedInfo(emp, p);
+          input.value = info.hours != null ? formatContractHours(info.hours) : '';
+          input.classList.toggle('is-manual', info.manual);
+          saveState();
+          refreshPantecoteEmployeeRow(tableCard, emp, pantecotes, emps);
+          updatePantecotesFooterTotals(tableCard, pantecotes, emps);
+          toast('Heures travaillées reprises depuis le planning');
+        });
+      }
+    });
+  }
+}
+
+function refreshPantecoteEmployeeRow(tableCard, emp, pantecotes, emps) {
+  const row = tableCard.querySelector(`tr[data-emp="${CSS.escape(emp)}"]`);
+  if (!row) return;
+  const totals = pantecoteRowTotals(emp, pantecotes);
+  const totalCell = row.querySelector('.pantecotes-row-total') || row.querySelector('td:last-child');
+  if (!totalCell) return;
+  totalCell.className = 'num pantecotes-row-total'
+    + (pantecoteRecupIsShort(totals.recup, totals.worked) ? ' is-short'
+      : (totals.worked > 0 ? ' is-ok' : ''));
+  totalCell.title = pantecoteRowTotalTitle(emp, totals);
+  const strong = totalCell.querySelector('strong') || totalCell;
+  strong.textContent = formatContractHours(totals.recup);
+}
+
+function updatePantecotesFooterTotals(tableCard, pantecotes, emps) {
+  const tfoot = tableCard.querySelector('tfoot tr');
+  if (!tfoot) return;
+  const cells = tfoot.querySelectorAll('td');
+  let cellIdx = 1;
+  let grandRecup = 0;
+  let grandWorked = 0;
+  let hasGrandWorked = false;
+  for (const p of pantecotes) {
+    let teamWorked = 0;
+    let teamWork = 0;
+    let teamFormation = 0;
+    let hasWorked = false;
+    for (const emp of emps) {
+      const w = getPantecoteHoursWorked(emp, p);
+      if (w != null) { teamWorked += w; hasWorked = true; }
+      const rec = getPantecoteRecovery(p.id, emp);
+      teamWork += rec.work || 0;
+      teamFormation += rec.formation || 0;
+    }
+    if (hasWorked) {
+      grandWorked += teamWorked;
+      hasGrandWorked = true;
+    }
+    grandRecup += teamWork + teamFormation;
+    if (cells[cellIdx]) cells[cellIdx].textContent = hasWorked ? formatContractHours(Math.round(teamWorked * 100) / 100) : '—';
+    cellIdx++;
+    if (cells[cellIdx]) cells[cellIdx].textContent = teamWork ? formatContractHours(Math.round(teamWork * 100) / 100) : '—';
+    cellIdx++;
+    if (cells[cellIdx]) cells[cellIdx].textContent = teamFormation ? formatContractHours(Math.round(teamFormation * 100) / 100) : '—';
+    cellIdx++;
+  }
+  const grandWorkedR = hasGrandWorked ? Math.round(grandWorked * 100) / 100 : null;
+  const grandRecupR = Math.round(grandRecup * 100) / 100;
+  const grandCell = cells[cellIdx];
+  if (grandCell) {
+    grandCell.className = 'num sum-row-hours pantecotes-row-total'
+      + (pantecoteRecupIsShort(grandRecupR, grandWorkedR) ? ' is-short'
+        : (grandWorkedR > 0 ? ' is-ok' : ''));
+    const target = grandCell.querySelector('strong') || grandCell;
+    target.textContent = formatContractHours(grandRecupR);
+  }
+}
+
+/* ===========================================================================
    ÉDITEUR ÉQUIPE — ajout / renommage salariés
    ========================================================================= */
 
@@ -1857,6 +2230,11 @@ function renderSettingsEditor(root) {
         <span class="settings-related-icon">🏥</span>
         <span class="settings-related-label">Jours de garde</span>
         <span class="settings-related-desc">Périodes de garde affichées dans le planning</span>
+      </button>
+      <button type="button" class="settings-related-item settings-goto" data-tab="pantecotes">
+        <span class="settings-related-icon">🎪</span>
+        <span class="settings-related-label">Pantecotes</span>
+        <span class="settings-related-desc">Heures travaillées et récupérées par édition</span>
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="contract">
         <span class="settings-related-icon">📄</span>

@@ -804,6 +804,42 @@ table.planning tfoot td.sum-label {
 table.planning td.sum-cell {
   color: var(--ink);
 }
+table.planning th.hours-col,
+table.planning td.hours-total-cell {
+  min-width: 42px;
+  max-width: 52px;
+  width: 46px;
+  padding: 2px 4px;
+  text-align: center;
+  vertical-align: middle;
+  background: #f0f4f8;
+  border-left: 2px solid var(--border-strong, #c5cdd8);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+table.planning th.hours-col {
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+table.planning th.hours-col-month,
+table.planning td.hours-col-month {
+  background: #e8eef5;
+  border-left-color: #9aabb8;
+}
+table.planning td.hours-total-cell .hours-total-value {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+}
+table.planning tfoot td.hours-total-cell.sum-row-hours {
+  font-size: 10px;
+  color: var(--ink-soft);
+}
 /* Statuts visuels — plein (présent) ou vide (couleur = repos / congé) */
 .cell.plein, .pcell.plein {
   background: var(--accent);
@@ -1250,7 +1286,110 @@ table.heatmap th.month-name { width: 80px; text-align: left; padding: 0 6px; }
 }
 .form-card h3 { font-size: 14px; margin-bottom: 10px; }
 
-/* Vue Salarié — bilan période */
+/* Pantecotes */
+.pantecotes-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+table.pantecotes-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.pantecotes-table th,
+table.pantecotes-table td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+table.pantecotes-table thead th {
+  background: #eef2f6;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+table.pantecotes-table .pantecotes-emp-col {
+  text-align: left;
+  min-width: 100px;
+}
+table.pantecotes-table .pantecotes-edition-head {
+  background: #e2eaf2;
+  font-size: 12px;
+}
+table.pantecotes-table .pantecotes-subhead {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+table.pantecotes-table .pantecotes-total-head {
+  background: #dce6f0;
+  min-width: 72px;
+}
+table.pantecotes-table td.empname {
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.pantecotes-table td.pantecotes-worked {
+  background: #f8fafc;
+  font-weight: 700;
+  text-align: center;
+}
+table.pantecotes-table td.pantecotes-row-total {
+  font-weight: 700;
+  text-align: center;
+  transition: background-color 0.15s ease;
+}
+table.pantecotes-table td.pantecotes-row-total.is-short {
+  background: #f8696b;
+  color: #fff;
+}
+table.pantecotes-table td.pantecotes-row-total.is-short strong {
+  color: #fff;
+}
+table.pantecotes-table td.pantecotes-row-total.is-ok {
+  background: #63be7b;
+  color: #fff;
+}
+table.pantecotes-table td.pantecotes-row-total.is-ok strong {
+  color: #fff;
+}
+table.pantecotes-table .pantecotes-worked-input.is-manual {
+  background: #fff8e6;
+  border-color: #e8b84a;
+}
+table.pantecotes-table .pantecotes-worked-input:not(.is-manual) {
+  background: #f8fafc;
+}
+table.pantecotes-table td.pantecotes-input-cell {
+  padding: 4px;
+  text-align: center;
+}
+table.pantecotes-table .pantecotes-hours-input {
+  width: 52px;
+  max-width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+table.pantecotes-table .pantecotes-hours-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+table.pantecotes-table td.num {
+  text-align: center;
+}
+table.pantecotes-table tfoot td {
+  background: #f0f4f8;
+  font-weight: 600;
+}
+table.pantecotes-editions-table input.fr-date {
+  min-width: 100px;
+}
+
 /* Vue Salarié — bandeau période */
 .emp-period-bar {
   background: var(--bg-panel);
@@ -3167,7 +3306,9 @@ body.printing-cdi #cdi-print-root {
   }
   body.printing-week table.planning td,
   body.printing-week table.planning th,
-  body.printing-week table.planning td.sum-cell {
+  body.printing-week table.planning td.sum-cell,
+  body.printing-week table.planning td.hours-total-cell,
+  body.printing-week table.planning th.hours-col {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

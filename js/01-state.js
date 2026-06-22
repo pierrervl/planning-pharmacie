@@ -156,6 +156,10 @@ function buildDefaultState() {
     feriesRemove: [],  // dates ISO retirées du calcul auto
     /* jours de garde pharmacie : [{ id, start, end, label }]            */
     gardes:       [],
+    /* éditions Pantecote : [{ id, year, start, end, label }]            */
+    pantecotes:   [],
+    /* heures récupérées : { pantecoteId: { emp: { work, formation } } } */
+    pantecoteRecovery: {},
     /* type par salarié : Pharmacien/Préparateur × étudiant/salarié */
     employeeTypes: {},
     /* catalogue des types : [{ id, label, group, bg, border }] */
@@ -234,6 +238,8 @@ function buildDefaultState() {
   ensureCdiWeeks(state);
   ensureCdiDescriptions(state);
   ensureContractPartyInfo(state);
+  ensurePantecotes(state);
+  cleanupPantecoteRecovery(state);
   return state;
 }
 
@@ -302,6 +308,10 @@ function migrateState(state) {
 
   if (!state.gardes) state.gardes = [];
   ensureGardes(state);
+  if (!state.pantecotes) state.pantecotes = [];
+  if (!state.pantecoteRecovery) state.pantecoteRecovery = {};
+  ensurePantecotes(state);
+  cleanupPantecoteRecovery(state);
   if (!state.congeTypeCatalog) state.congeTypeCatalog = [];
   ensureCongeTypeCatalog(state);
   applyCongeTypeColorStyles(state);

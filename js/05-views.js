@@ -8,13 +8,13 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'settings'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'pantecotes', 'settings'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi'],
-  journees: ['feries', 'gardes'],
+  journees: ['feries', 'gardes', 'pantecotes'],
   config:   ['settings'],
 };
 
@@ -63,6 +63,7 @@ function render() {
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
+    case 'pantecotes':     renderPantecotesEditor(content); break;
     case 'settings':       renderSettingsEditor(content); break;
   }
   renderSidebar();
@@ -218,6 +219,12 @@ function renderSumCell(n, shift, shiftLabel, weekBoundary, d) {
   return `<td class="cell sum-cell ${shiftCls}${weekCls}" style="background:${bg}" title="${title}">${n}</td>`;
 }
 
+function renderHoursTotalCell(hours, { title = '', extraClass = '' } = {}) {
+  const txt = formatContractHours(hours);
+  const t = title || `${txt} h travaillées`;
+  return `<td class="cell hours-total-cell ${extraClass}" title="${t}"><span class="hours-total-value">${txt}</span></td>`;
+}
+
 function createWeekPlanningTable(days, { editable = true, showImportRow = true, forPrint = false } = {}) {
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
   if (requestMode) {
@@ -228,6 +235,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   const showA = STATE.ui.filterShift !== 'matin';
   const colsPerDay = (showM ? 1 : 0) + (showA ? 1 : 0);
   const numWeeks = Math.ceil(days.length / 7);
+  const months = groupDaysByCalendarMonth(days);
   const headRows = showImportRow ? 5 : 4;
   const cellOpts = { editable, forPrint };
   const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
@@ -244,6 +252,10 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
     const weekMon = days[w * 7];
     const pName = getPatternWeekNameForMonday(weekMon);
     trPattern.innerHTML += `<th class="pattern-ref ${weekParityClass(weekMon)}" colspan="${colsPerDay * 7}">${pName}</th>`;
+    trPattern.innerHTML += `<th class="hours-col hours-col-week" rowspan="${headRows}">H./sem.</th>`;
+  }
+  for (const m of months) {
+    trPattern.innerHTML += `<th class="hours-col hours-col-month" rowspan="${headRows}" title="Heures travaillées en ${MONTH_NAMES[m.month]} ${m.year}">${monthShortLabel(m.year, m.month)}</th>`;
   }
   thead.appendChild(trPattern);
 
@@ -312,15 +324,36 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
       tr.classList.add('planning-own-row');
     }
     tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${emp} — ${getEmployeeType(emp)}">${forPrint ? emp : shortEmpName(emp)}</td>`;
-    days.forEach((d, dayIdx) => {
-      const iso = toISO(d);
-      const weekBoundary = dayIdx % 7 === 0 && dayIdx > 0;
-      const parity = weekParityClass(d);
-      if (showM) tr.innerHTML += renderShiftCell(emp, iso, 'matin', d, weekBoundary, cellOpts);
-      else tr.innerHTML += `<td class="cell vide empty shift-matin ${parity}${weekBoundary ? ' week-start' : ''}" style="opacity:.15"></td>`;
-      if (showA) tr.innerHTML += renderShiftCell(emp, iso, 'aprem', d, weekBoundary, cellOpts);
-      else tr.innerHTML += `<td class="cell vide empty shift-aprem ${parity}" style="opacity:.15"></td>`;
-    });
+    for (let w = 0; w < numWeeks; w++) {
+      for (let di = 0; di < 7; di++) {
+        const dayIdx = w * 7 + di;
+        const d = days[dayIdx];
+        const iso = toISO(d);
+        const weekBoundary = di === 0 && w > 0;
+        const parity = weekParityClass(d);
+        if (showM) tr.innerHTML += renderShiftCell(emp, iso, 'matin', d, weekBoundary, cellOpts);
+        else tr.innerHTML += `<td class="cell vide empty shift-matin ${parity}${weekBoundary ? ' week-start' : ''}" style="opacity:.15"></td>`;
+        if (showA) tr.innerHTML += renderShiftCell(emp, iso, 'aprem', d, weekBoundary, cellOpts);
+        else tr.innerHTML += `<td class="cell vide empty shift-aprem ${parity}" style="opacity:.15"></td>`;
+      }
+      const weekMon = days[w * 7];
+      const weekStart = toISO(weekMon);
+      const weekEnd = toISO(days[w * 7 + 6]);
+      const weekH = computePlanningHoursForPeriod(emp, weekStart, weekEnd);
+      tr.innerHTML += renderHoursTotalCell(weekH, {
+        extraClass: `hours-col-week ${weekParityClass(weekMon)}`,
+        title: `${emp} — semaine ${getISOWeek(weekMon)} — ${formatContractHours(weekH)} h travaillées`,
+      });
+    }
+    for (const m of months) {
+      const startIso = toISO(m.days[0]);
+      const endIso = toISO(m.days[m.days.length - 1]);
+      const monthH = computePlanningHoursForPeriod(emp, startIso, endIso);
+      tr.innerHTML += renderHoursTotalCell(monthH, {
+        extraClass: 'hours-col-month',
+        title: `${emp} — ${MONTH_NAMES[m.month]} ${m.year} — ${formatContractHours(monthH)} h travaillées`,
+      });
+    }
     tbody.appendChild(tr);
   }
   tbl.appendChild(tbody);
@@ -329,21 +362,42 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   const trSum = document.createElement('tr');
   trSum.className = 'sum-row';
   trSum.innerHTML = `<td class="empname sum-label" title="Effectif par demi-journée">Eff.</td>`;
-  days.forEach((d, dayIdx) => {
-    const iso = toISO(d);
-    const weekBoundary = dayIdx % 7 === 0 && dayIdx > 0;
-    const parity = weekParityClass(d);
-    if (showM) {
-      trSum.innerHTML += renderSumCell(countPresences(visibleEmps, iso, 'matin'), 'matin', 'Matin', weekBoundary, d);
-    } else {
-      trSum.innerHTML += `<td class="cell sum-cell shift-matin ${parity}${weekBoundary ? ' week-start' : ''}" style="opacity:.15"></td>`;
+  for (let w = 0; w < numWeeks; w++) {
+    for (let di = 0; di < 7; di++) {
+      const dayIdx = w * 7 + di;
+      const d = days[dayIdx];
+      const iso = toISO(d);
+      const weekBoundary = di === 0 && w > 0;
+      const parity = weekParityClass(d);
+      if (showM) {
+        trSum.innerHTML += renderSumCell(countPresences(visibleEmps, iso, 'matin'), 'matin', 'Matin', weekBoundary, d);
+      } else {
+        trSum.innerHTML += `<td class="cell sum-cell shift-matin ${parity}${weekBoundary ? ' week-start' : ''}" style="opacity:.15"></td>`;
+      }
+      if (showA) {
+        trSum.innerHTML += renderSumCell(countPresences(visibleEmps, iso, 'aprem'), 'aprem', 'Après-midi', weekBoundary, d);
+      } else {
+        trSum.innerHTML += `<td class="cell sum-cell shift-aprem ${parity}" style="opacity:.15"></td>`;
+      }
     }
-    if (showA) {
-      trSum.innerHTML += renderSumCell(countPresences(visibleEmps, iso, 'aprem'), 'aprem', 'Après-midi', weekBoundary, d);
-    } else {
-      trSum.innerHTML += `<td class="cell sum-cell shift-aprem ${parity}" style="opacity:.15"></td>`;
-    }
-  });
+    const weekMon = days[w * 7];
+    const weekStart = toISO(weekMon);
+    const weekEnd = toISO(days[w * 7 + 6]);
+    const teamWeekH = visibleEmps.reduce((s, emp) => s + computePlanningHoursForPeriod(emp, weekStart, weekEnd), 0);
+    trSum.innerHTML += renderHoursTotalCell(Math.round(teamWeekH * 100) / 100, {
+      extraClass: `hours-col-week sum-row-hours ${weekParityClass(weekMon)}`,
+      title: `Total équipe — semaine ${getISOWeek(weekMon)} — ${formatContractHours(teamWeekH)} h`,
+    });
+  }
+  for (const m of months) {
+    const startIso = toISO(m.days[0]);
+    const endIso = toISO(m.days[m.days.length - 1]);
+    const teamMonthH = visibleEmps.reduce((s, emp) => s + computePlanningHoursForPeriod(emp, startIso, endIso), 0);
+    trSum.innerHTML += renderHoursTotalCell(Math.round(teamMonthH * 100) / 100, {
+      extraClass: 'hours-col-month sum-row-hours',
+      title: `Total équipe — ${MONTH_NAMES[m.month]} ${m.year} — ${formatContractHours(teamMonthH)} h`,
+    });
+  }
   tfoot.appendChild(trSum);
   tbl.appendChild(tfoot);
   wrap.appendChild(tbl);

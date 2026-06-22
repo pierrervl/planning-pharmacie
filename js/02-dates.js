@@ -62,6 +62,32 @@ function getISOWeekYear(d) {
   return target.getFullYear();
 }
 
+/* Regroupe des jours consécutifs par mois calendaire -------------------- */
+function groupDaysByCalendarMonth(days) {
+  const order = [];
+  const map = new Map();
+  for (const d of days) {
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!map.has(key)) {
+      const entry = { key, year: d.getFullYear(), month: d.getMonth(), days: [] };
+      map.set(key, entry);
+      order.push(entry);
+    }
+    map.get(key).days.push(d);
+  }
+  return order;
+}
+
+const MONTH_NAMES_SHORT = [
+  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'
+];
+
+function monthShortLabel(year, month) {
+  const yy = String(year).slice(-2);
+  return `${MONTH_NAMES_SHORT[month]} ${yy}`;
+}
+
 /* Lundi de la semaine contenant la date donnée -------------------------- */
 function mondayOf(d) {
   const r = new Date(d);

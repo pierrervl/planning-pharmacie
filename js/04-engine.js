@@ -574,6 +574,74 @@ function cellStatusLabel(c) {
   return c.status;
 }
 
+/* Agrégation des heures travaillées ------------------------------------- */
+const AVG_WEEKS_PER_MONTH = 365.25 / 12 / 7;
+
+function shiftsForHoursFilter(state = STATE) {
+  const f = state.ui.filterShift;
+  if (f === 'matin') return ['matin'];
+  if (f === 'aprem') return ['aprem'];
+  return ['matin', 'aprem'];
+}
+
+function computePlanningShiftHours(empName, dateIso, shift, state = STATE) {
+  if (isAfterEmployeeContractEnd(empName, dateIso)) return 0;
+  const c = computeCell(empName, dateIso, shift);
+  if (!c.full) return 0;
+  const h = getPlanningCellHours(empName, dateIso, shift, state);
+  return h != null ? h : 0;
+}
+
+function computePlanningHoursForPeriod(empName, startIso, endIso, state = STATE) {
+  let total = 0;
+  const shifts = shiftsForHoursFilter(state);
+  let d = fromISO(startIso);
+  const last = fromISO(endIso);
+  while (d <= last) {
+    const iso = toISO(d);
+    for (const shift of shifts) {
+      total += computePlanningShiftHours(empName, iso, shift, state);
+    }
+    d = addDays(d, 1);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function computePatternShiftHours(empName, pname, dayIdx, shift, state = STATE) {
+  const v = getPatternWeekValue(empName, pname, dayIdx, shift, state);
+  if (!isPlanningPresent(v)) return 0;
+  const h = getPatternCellHours(empName, pname, dayIdx, shift, state);
+  return h != null ? h : 0;
+}
+
+function computePatternWeekHours(empName, pname, state = STATE) {
+  let total = 0;
+  const shifts = shiftsForHoursFilter(state);
+  for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+    for (const shift of shifts) {
+      total += computePatternShiftHours(empName, pname, dayIdx, shift, state);
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function computePatternCycleHours(empName, state = STATE) {
+  let total = 0;
+  for (const pname of PATTERN_CYCLE_WEEKS) {
+    total += computePatternWeekHours(empName, pname, state);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function computePatternMonthlyHours(empName, state = STATE) {
+  const weeklyAvg = computePatternCycleHours(empName, state) / PATTERN_CYCLE_WEEKS.length;
+  return Math.round(weeklyAvg * AVG_WEEKS_PER_MONTH * 100) / 100;
+}
+
+function computePatternWeekMonthlyProjection(empName, pname, state = STATE) {
+  return Math.round(computePatternWeekHours(empName, pname, state) * AVG_WEEKS_PER_MONTH * 100) / 100;
+}
+
 /* Codes CSS pour les types ---------------------------------------------- */
 function statusClass(status) {
   switch (status) {
