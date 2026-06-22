@@ -85,9 +85,13 @@ function renderPatternsEditor(root) {
 
 function mountPatternShiftDefaultsPanel(root) {
   ensurePatternShiftDefaults(STATE);
+  ensurePatternShiftDefaultsSaturday(STATE);
   const d = STATE.patternShiftDefaults;
+  const sat = STATE.patternShiftDefaultsSaturday;
   const matinH = hoursBetweenTimes(d.matin.start, d.matin.end);
   const apremH = hoursBetweenTimes(d.aprem.start, d.aprem.end);
+  const satMatinH = hoursBetweenTimes(sat.matin.start, sat.matin.end);
+  const satApremH = hoursBetweenTimes(sat.aprem.start, sat.aprem.end);
   const panel = document.createElement('div');
   panel.className = 'form-card pattern-hours-defaults no-print';
   panel.innerHTML = `
@@ -96,77 +100,131 @@ function mountPatternShiftDefaultsPanel(root) {
       Indiquez l'heure de début et de fin pour chaque demi-journée — la durée est calculée automatiquement.
       Les cases orange et rouge peuvent avoir des horaires propres (clic droit ou double-clic).
     </p>
-    <div class="pattern-hours-shifts">
-      <div class="pattern-hours-shift-block">
-        <div class="pattern-hours-shift-title">Matin</div>
-        <div class="pattern-hours-grid">
-          <label>Début
-            <input type="text" id="pat-def-matin-start" placeholder="8h00" value="${formatPatternTime(d.matin.start)}">
-          </label>
-          <label>Fin
-            <input type="text" id="pat-def-matin-end" placeholder="12h30" value="${formatPatternTime(d.matin.end)}">
-          </label>
-          <span class="pattern-hours-computed" id="pat-def-matin-hours">= ${formatContractHours(matinH)} h</span>
+    <div class="pattern-hours-day-section">
+      <div class="pattern-hours-day-section-title">Lundi → vendredi</div>
+      <div class="pattern-hours-shifts">
+        <div class="pattern-hours-shift-block">
+          <div class="pattern-hours-shift-title">Matin</div>
+          <div class="pattern-hours-grid">
+            <label>Début
+              <input type="text" id="pat-def-matin-start" placeholder="8h00" value="${formatPatternTime(d.matin.start)}">
+            </label>
+            <label>Fin
+              <input type="text" id="pat-def-matin-end" placeholder="12h30" value="${formatPatternTime(d.matin.end)}">
+            </label>
+            <span class="pattern-hours-computed" id="pat-def-matin-hours">= ${formatContractHours(matinH)} h</span>
+          </div>
+        </div>
+        <div class="pattern-hours-shift-block">
+          <div class="pattern-hours-shift-title">Après-midi</div>
+          <div class="pattern-hours-grid">
+            <label>Début
+              <input type="text" id="pat-def-aprem-start" placeholder="14h00" value="${formatPatternTime(d.aprem.start)}">
+            </label>
+            <label>Fin
+              <input type="text" id="pat-def-aprem-end" placeholder="19h30" value="${formatPatternTime(d.aprem.end)}">
+            </label>
+            <span class="pattern-hours-computed" id="pat-def-aprem-hours">= ${formatContractHours(apremH)} h</span>
+          </div>
         </div>
       </div>
-      <div class="pattern-hours-shift-block">
-        <div class="pattern-hours-shift-title">Après-midi</div>
-        <div class="pattern-hours-grid">
-          <label>Début
-            <input type="text" id="pat-def-aprem-start" placeholder="14h00" value="${formatPatternTime(d.aprem.start)}">
-          </label>
-          <label>Fin
-            <input type="text" id="pat-def-aprem-end" placeholder="19h30" value="${formatPatternTime(d.aprem.end)}">
-          </label>
-          <span class="pattern-hours-computed" id="pat-def-aprem-hours">= ${formatContractHours(apremH)} h</span>
+    </div>
+    <div class="pattern-hours-day-section">
+      <div class="pattern-hours-day-section-title">Samedi</div>
+      <div class="pattern-hours-shifts">
+        <div class="pattern-hours-shift-block">
+          <div class="pattern-hours-shift-title">Matin</div>
+          <div class="pattern-hours-grid">
+            <label>Début
+              <input type="text" id="pat-def-sat-matin-start" placeholder="8h30" value="${formatPatternTime(sat.matin.start)}">
+            </label>
+            <label>Fin
+              <input type="text" id="pat-def-sat-matin-end" placeholder="12h30" value="${formatPatternTime(sat.matin.end)}">
+            </label>
+            <span class="pattern-hours-computed" id="pat-def-sat-matin-hours">= ${formatContractHours(satMatinH)} h</span>
+          </div>
+        </div>
+        <div class="pattern-hours-shift-block">
+          <div class="pattern-hours-shift-title">Après-midi</div>
+          <div class="pattern-hours-grid">
+            <label>Début
+              <input type="text" id="pat-def-sat-aprem-start" placeholder="14h00" value="${formatPatternTime(sat.aprem.start)}">
+            </label>
+            <label>Fin
+              <input type="text" id="pat-def-sat-aprem-end" placeholder="18h30" value="${formatPatternTime(sat.aprem.end)}">
+            </label>
+            <span class="pattern-hours-computed" id="pat-def-sat-aprem-hours">= ${formatContractHours(satApremH)} h</span>
+          </div>
         </div>
       </div>
     </div>`;
   root.appendChild(panel);
 
-  const updatePreview = (shift) => {
-    const startEl = panel.querySelector(`#pat-def-${shift}-start`);
-    const endEl = panel.querySelector(`#pat-def-${shift}-end`);
-    const hoursEl = panel.querySelector(`#pat-def-${shift}-hours`);
+  const fieldGroups = [
+    { prefix: 'pat-def', store: 'weekday', shifts: ['matin', 'aprem'] },
+    { prefix: 'pat-def-sat', store: 'saturday', shifts: ['matin', 'aprem'] },
+  ];
+
+  const updatePreview = (prefix, shift) => {
+    const startEl = panel.querySelector(`#${prefix}-${shift}-start`);
+    const endEl = panel.querySelector(`#${prefix}-${shift}-end`);
+    const hoursEl = panel.querySelector(`#${prefix}-${shift}-hours`);
     const h = hoursBetweenTimes(startEl.value, endEl.value);
     hoursEl.textContent = h != null ? `= ${formatContractHours(h)} h` : '= — h';
     hoursEl.classList.toggle('invalid', h == null);
   };
 
-  const saveDefaults = () => {
+  const readGroup = (prefix, shifts) => {
     const pending = {};
-    for (const shift of ['matin', 'aprem']) {
-      const start = panel.querySelector(`#pat-def-${shift}-start`).value;
-      const end = panel.querySelector(`#pat-def-${shift}-end`).value;
+    for (const shift of shifts) {
+      const start = panel.querySelector(`#${prefix}-${shift}-start`).value;
+      const end = panel.querySelector(`#${prefix}-${shift}-end`).value;
       const s = normalizeTimeInput(start);
       const e = normalizeTimeInput(end);
-      if (!s || !e || hoursBetweenTimes(s, e) == null) {
-        toast(`Horaires ${shift === 'matin' ? 'matin' : 'après-midi'} invalides (ex. 8h00 → 12h30).`, true);
-        for (const sh of ['matin', 'aprem']) {
-          const slot = getPatternShiftDefaultSlot(sh);
-          panel.querySelector(`#pat-def-${sh}-start`).value = formatPatternTime(slot.start);
-          panel.querySelector(`#pat-def-${sh}-end`).value = formatPatternTime(slot.end);
-          updatePreview(sh);
-        }
-        return;
-      }
+      if (!s || !e || hoursBetweenTimes(s, e) == null) return null;
       pending[shift] = { start: s, end: e };
     }
-    for (const shift of ['matin', 'aprem']) {
-      STATE.patternShiftDefaults[shift] = pending[shift];
-      panel.querySelector(`#pat-def-${shift}-start`).value = formatPatternTime(pending[shift].start);
-      panel.querySelector(`#pat-def-${shift}-end`).value = formatPatternTime(pending[shift].end);
-      updatePreview(shift);
+    return pending;
+  };
+
+  const resetGroupInputs = (prefix, shifts, slots) => {
+    for (const shift of shifts) {
+      const slot = slots[shift];
+      panel.querySelector(`#${prefix}-${shift}-start`).value = formatPatternTime(slot.start);
+      panel.querySelector(`#${prefix}-${shift}-end`).value = formatPatternTime(slot.end);
+      updatePreview(prefix, shift);
     }
+  };
+
+  const saveDefaults = () => {
+    const weekday = readGroup('pat-def', ['matin', 'aprem']);
+    if (!weekday) {
+      toast('Horaires semaine invalides (ex. 8h00 → 12h30).', true);
+      resetGroupInputs('pat-def', ['matin', 'aprem'], STATE.patternShiftDefaults);
+      return;
+    }
+    const saturday = readGroup('pat-def-sat', ['matin', 'aprem']);
+    if (!saturday) {
+      toast('Horaires samedi invalides (ex. 8h30 → 12h30).', true);
+      resetGroupInputs('pat-def-sat', ['matin', 'aprem'], STATE.patternShiftDefaultsSaturday);
+      return;
+    }
+    STATE.patternShiftDefaults = weekday;
+    STATE.patternShiftDefaultsSaturday = saturday;
+    resetGroupInputs('pat-def', ['matin', 'aprem'], weekday);
+    resetGroupInputs('pat-def-sat', ['matin', 'aprem'], saturday);
     saveState();
     persistAndRender();
   };
 
-  for (const shift of ['matin', 'aprem']) {
-    panel.querySelector(`#pat-def-${shift}-start`).addEventListener('input', () => updatePreview(shift));
-    panel.querySelector(`#pat-def-${shift}-end`).addEventListener('input', () => updatePreview(shift));
-    panel.querySelector(`#pat-def-${shift}-start`).addEventListener('change', saveDefaults);
-    panel.querySelector(`#pat-def-${shift}-end`).addEventListener('change', saveDefaults);
+  for (const group of fieldGroups) {
+    for (const shift of group.shifts) {
+      const prefix = group.prefix;
+      panel.querySelector(`#${prefix}-${shift}-start`).addEventListener('input', () => updatePreview(prefix, shift));
+      panel.querySelector(`#${prefix}-${shift}-end`).addEventListener('input', () => updatePreview(prefix, shift));
+      panel.querySelector(`#${prefix}-${shift}-start`).addEventListener('change', saveDefaults);
+      panel.querySelector(`#${prefix}-${shift}-end`).addEventListener('change', saveDefaults);
+    }
   }
 }
 
@@ -263,7 +321,7 @@ function promptPatternCellHours({ emp, pname, dayIdx, shift, onDone }) {
     title: `Horaires — ${patternEscapeAttr(emp)}`,
     subtitle: `${dayLabel} ${shiftLabel} · semaine ${patternEscapeAttr(pname)}`,
     slot: getPatternCellSlot(emp, pname, dayIdx, shift),
-    defSlot: getPatternShiftDefaultSlot(shift),
+    defSlot: getPatternShiftDefaultSlot(shift, STATE, dayIdx),
     onSave: (start, end) => setPatternCellSlot(emp, pname, dayIdx, shift, start, end),
     onClear: () => clearPatternCellSlot(emp, pname, dayIdx, shift),
     onDone,
@@ -273,12 +331,13 @@ function promptPatternCellHours({ emp, pname, dayIdx, shift, onDone }) {
 function promptPlanningCellHours({ emp, iso, shift, onDone }) {
   const shiftLabel = shift === 'matin' ? 'Matin' : 'Après-midi';
   const d = fromISO(iso);
+  const dayIdx = weekDayIndex(d);
   const dayLabel = DAY_NAMES_ABBR[d.getDay()];
   promptShiftSlotDialog({
     title: `Horaires — ${patternEscapeAttr(emp)}`,
     subtitle: `${dayLabel} ${frFormat(d)} · ${shiftLabel}`,
     slot: getPlanningCellSlot(emp, iso, shift),
-    defSlot: getPatternShiftDefaultSlot(shift),
+    defSlot: getPatternShiftDefaultSlot(shift, STATE, dayIdx),
     onSave: (start, end) => setPlanningCellSlot(emp, iso, shift, start, end),
     onClear: () => clearPlanningCellSlot(emp, iso, shift),
     onDone,
@@ -330,6 +389,7 @@ function buildPatternTableHeader(thead, weekNames, headRows, { showMonthCol = fa
     for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
       const cls = ['day-header', 'day-group'];
       if (weekIdx > 0 && dayIdx === 0) cls.push('week-start');
+      if (dayIdx === PATTERN_SATURDAY_DAY_IDX) cls.push('day-saturday');
       trDays.innerHTML += `
         <th class="${cls.join(' ')}" colspan="${colsPerDay}">
           <span class="date-lbl">${PATTERN_DAY_LABELS[dayIdx]}</span>

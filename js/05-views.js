@@ -8,12 +8,12 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'feries', 'gardes', 'pantecotes', 'settings'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
-  equipe:   ['conges', 'employees', 'contract', 'cdi'],
+  equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
   journees: ['feries', 'gardes', 'pantecotes'],
   config:   ['settings'],
 };
@@ -60,6 +60,7 @@ function render() {
     case 'employees':      renderEmployeesEditor(content); break;
     case 'contract':       renderContractEditor(content); break;
     case 'cdi':            renderCdiEditor(content); break;
+    case 'releve':         renderReleveActiviteEditor(content); break;
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
@@ -119,7 +120,8 @@ function chunkDaysForPrint(days, weeksPerPage) {
 }
 
 function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
-  const { editable = true, forPrint = false } = options;
+  const { editable = true, forPrint = false, weekCellDisplay = STATE.ui.weekCellDisplay || 'cross' } = options;
+  const showHours = weekCellDisplay === 'hours';
   const afterContract = isAfterEmployeeContractEnd(emp, iso);
   const c = computeCell(emp, iso, shift);
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
@@ -158,12 +160,14 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
     title += pendingReq.present
       ? ` — demande : ${formatPatternTime(pendingReq.start)} → ${formatPatternTime(pendingReq.end)} (${formatContractHours(pendingReq.hours)} h)`
       : ' — demande : non présent (0 h)';
-    if (pendingReq.present && pendingReq.hours > 0) {
-      inner = `<span class="pattern-cell-hours">${formatContractHours(pendingReq.hours)}</span>`;
-    } else if (!pendingReq.present) {
-      inner = `<span class="pattern-cell-hours">0</span>`;
+    if (showHours) {
+      if (pendingReq.present && pendingReq.hours > 0) {
+        inner = `<span class="pattern-cell-hours">${formatContractHours(pendingReq.hours)}</span>`;
+      } else if (!pendingReq.present) {
+        inner = `<span class="pattern-cell-hours">0</span>`;
+      }
     }
-  } else if (c.full) {
+  } else if (c.full && showHours) {
     const slot = getPlanningCellSlot(emp, iso, shift);
     const h = getPlanningCellHours(emp, iso, shift);
     if (h != null) {
@@ -219,29 +223,41 @@ function renderSumCell(n, shift, shiftLabel, weekBoundary, d) {
   return `<td class="cell sum-cell ${shiftCls}${weekCls}" style="background:${bg}" title="${title}">${n}</td>`;
 }
 
-function renderHoursTotalCell(hours, { title = '', extraClass = '' } = {}) {
+function renderHoursTotalCell(hours, { title = '', extraClass = '', patternMismatch = false } = {}) {
   const txt = formatContractHours(hours);
   const t = title || `${txt} h travaillées`;
-  return `<td class="cell hours-total-cell ${extraClass}" title="${t}"><span class="hours-total-value">${txt}</span></td>`;
+  const mismatchCls = patternMismatch ? ' hours-pattern-mismatch' : '';
+  return `<td class="cell hours-total-cell ${extraClass}${mismatchCls}" title="${t}"><span class="hours-total-value">${txt}</span></td>`;
 }
 
-function createWeekPlanningTable(days, { editable = true, showImportRow = true, forPrint = false } = {}) {
+function renderWeekHoursTotalCell(emp, weekMon, extraClass = '') {
+  const cmp = compareWeekHoursToPattern(emp, weekMon);
+  const isoWeek = getISOWeek(weekMon);
+  return renderHoursTotalCell(cmp.actual, {
+    extraClass,
+    patternMismatch: !cmp.match,
+    title: weekHoursPatternMismatchTitle(emp, isoWeek, cmp),
+  });
+}
+
+function createWeekPlanningTable(days, { editable = true, showImportRow = true, forPrint = false, weekCellDisplay } = {}) {
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
   if (requestMode) {
     showImportRow = false;
     editable = true;
   }
+  const displayMode = weekCellDisplay || STATE.ui.weekCellDisplay || 'cross';
   const showM = STATE.ui.filterShift !== 'aprem';
   const showA = STATE.ui.filterShift !== 'matin';
   const colsPerDay = (showM ? 1 : 0) + (showA ? 1 : 0);
   const numWeeks = Math.ceil(days.length / 7);
   const months = groupDaysByCalendarMonth(days);
   const headRows = showImportRow ? 5 : 4;
-  const cellOpts = { editable, forPrint };
+  const cellOpts = { editable, forPrint, weekCellDisplay: displayMode };
   const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
 
   const wrap = document.createElement('div');
-  wrap.className = 'planning-wrap' + (forPrint ? ' planning-wrap-print' : '');
+  wrap.className = 'planning-wrap week-display-' + displayMode + (forPrint ? ' planning-wrap-print' : '');
   const tbl = document.createElement('table');
   tbl.className = 'planning' + (forPrint ? ' planning-print' : '');
 
@@ -252,7 +268,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
     const weekMon = days[w * 7];
     const pName = getPatternWeekNameForMonday(weekMon);
     trPattern.innerHTML += `<th class="pattern-ref ${weekParityClass(weekMon)}" colspan="${colsPerDay * 7}">${pName}</th>`;
-    trPattern.innerHTML += `<th class="hours-col hours-col-week" rowspan="${headRows}">H./sem.</th>`;
+    trPattern.innerHTML += `<th class="hours-col hours-col-week" rowspan="${headRows}" title="Heures travaillées — fond rouge si écart avec le pattern de la semaine">H./sem.</th>`;
   }
   for (const m of months) {
     trPattern.innerHTML += `<th class="hours-col hours-col-month" rowspan="${headRows}" title="Heures travaillées en ${MONTH_NAMES[m.month]} ${m.year}">${monthShortLabel(m.year, m.month)}</th>`;
@@ -337,13 +353,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
         else tr.innerHTML += `<td class="cell vide empty shift-aprem ${parity}" style="opacity:.15"></td>`;
       }
       const weekMon = days[w * 7];
-      const weekStart = toISO(weekMon);
-      const weekEnd = toISO(days[w * 7 + 6]);
-      const weekH = computePlanningHoursForPeriod(emp, weekStart, weekEnd);
-      tr.innerHTML += renderHoursTotalCell(weekH, {
-        extraClass: `hours-col-week ${weekParityClass(weekMon)}`,
-        title: `${emp} — semaine ${getISOWeek(weekMon)} — ${formatContractHours(weekH)} h travaillées`,
-      });
+      tr.innerHTML += renderWeekHoursTotalCell(emp, weekMon, `hours-col-week ${weekParityClass(weekMon)}`);
     }
     for (const m of months) {
       const startIso = toISO(m.days[0]);
@@ -590,7 +600,8 @@ function printWeekPeriod() {
     block.appendChild(createWeekPlanningTable(chunkDays, {
       editable: false,
       showImportRow: false,
-      forPrint: true
+      forPrint: true,
+      weekCellDisplay: STATE.ui.weekCellDisplay || 'cross',
     }));
     root.appendChild(block);
   });
@@ -657,6 +668,27 @@ function renderWeekView(root) {
   const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });
   root.appendChild(wrap);
   attachWeekTableHandlers(wrap);
+
+  const displayMode = STATE.ui.weekCellDisplay || 'cross';
+  const viewBar = document.createElement('div');
+  viewBar.className = 'week-view-bar no-print';
+  viewBar.innerHTML = `
+    <span class="week-view-bar-label">Affichage des cellules</span>
+    <div class="week-display-switch" role="group" aria-label="Mode d'affichage du planning">
+      <button type="button" class="week-display-btn${displayMode === 'cross' ? ' active' : ''}" data-week-display="cross" aria-pressed="${displayMode === 'cross'}">Croix</button>
+      <button type="button" class="week-display-btn${displayMode === 'hours' ? ' active' : ''}" data-week-display="hours" aria-pressed="${displayMode === 'hours'}">Heures</button>
+    </div>`;
+  root.insertBefore(viewBar, wrap);
+
+  viewBar.querySelectorAll('[data-week-display]').forEach(btn => {
+    btn.onclick = () => {
+      const mode = btn.dataset.weekDisplay;
+      if (mode === STATE.ui.weekCellDisplay) return;
+      STATE.ui.weekCellDisplay = mode;
+      saveState();
+      persistAndRender();
+    };
+  });
 
   if (!requestMode) {
   const printStart = STATE.ui.weekPrintStart || toISO(monday);

@@ -414,6 +414,7 @@ function ensureEmployeeTypeColors(state) {
 
 /* Coordonnées et informations personnelles par salarié ----------------- */
 const EMPLOYEE_INFO_FIELDS = [
+  { key: 'matricule', label: 'Matricule', type: 'text', mono: true, placeholder: '001' },
   { key: 'phone', label: 'Téléphone', type: 'tel', placeholder: '06 12 34 56 78' },
   { key: 'email', label: 'E-mail', type: 'email', placeholder: 'prenom@exemple.fr' },
   { key: 'address', label: 'Adresse', type: 'text', wide: true, placeholder: 'Rue, code postal, ville' },
@@ -421,6 +422,7 @@ const EMPLOYEE_INFO_FIELDS = [
   { key: 'birthDate', label: 'Date de naissance', type: 'fr-date' },
   { key: 'birthPlace', label: 'Lieu de naissance', type: 'text', placeholder: 'Ville' },
   { key: 'secuNumber', label: 'N° sécurité sociale', type: 'text', mono: true, placeholder: '1 23 45 67 890 123 45' },
+  { key: 'contractStartDate', label: 'Début de contrat', type: 'fr-date' },
   { key: 'contractEndDate', label: 'Fin de contrat', type: 'fr-date' },
 ];
 
@@ -433,6 +435,8 @@ function makeEmptyEmployeeInfo() {
     birthDate: '',
     birthPlace: '',
     secuNumber: '',
+    matricule: '',
+    contractStartDate: '',
     contractEndDate: '',
   };
 }
@@ -602,8 +606,52 @@ function ensureContractDescriptions(state) {
   }
 }
 
+function getEmployeePresenceRange(emp, periodStartIso, periodEndIso, state = STATE) {
+  if (!emp || !periodStartIso || !periodEndIso || periodStartIso > periodEndIso) return null;
+
+  let start = periodStartIso;
+  let end = periodEndIso;
+
+  const contractStart = getEmployeeContractStartDate(emp, state);
+  const contractEnd = getEmployeeContractEndDate(emp, state);
+  if (contractStart && contractStart > start) start = contractStart;
+  if (contractEnd && contractEnd < end) end = contractEnd;
+  if (start > end) return null;
+
+  const assignments = (state.affectations[emp] || []).filter(a =>
+    a.start <= periodEndIso && (!a.end || a.end >= periodStartIso)
+  );
+  if (assignments.length) {
+    const earliest = assignments.reduce((best, a) => (!best || a.start < best.start ? a : best), null);
+    if (earliest && earliest.start > start) start = earliest.start;
+    const activeEnds = assignments.map(a => a.end).filter(Boolean);
+    if (activeEnds.length) {
+      const latestEnd = activeEnds.reduce((a, b) => (a > b ? a : b));
+      if (latestEnd < end) end = latestEnd;
+    }
+  }
+
+  if (start > end) return null;
+  return { start, end };
+}
+
+function getEmployeeMatricule(emp, state = STATE) {
+  const m = (getEmployeeInfo(emp, state).matricule || '').trim();
+  return m || '—';
+}
+
+function getEmployeeContractStartDate(emp, state = STATE) {
+  return getEmployeeInfo(emp, state).contractStartDate || '';
+}
+
 function getEmployeeContractEndDate(emp, state = STATE) {
   return getEmployeeInfo(emp, state).contractEndDate || '';
+}
+
+function isBeforeEmployeeContractStart(emp, dateIso, state = STATE) {
+  const start = getEmployeeContractStartDate(emp, state);
+  if (!start || !dateIso) return false;
+  return dateIso < start;
 }
 
 function isAfterEmployeeContractEnd(emp, dateIso, state = STATE) {
@@ -614,7 +662,7 @@ function isAfterEmployeeContractEnd(emp, dateIso, state = STATE) {
 
 function formatEmployeeInfoDisplay(field, value) {
   if (!value) return '—';
-  if (field.key === 'birthDate' || field.key === 'contractEndDate') return frFormatNumeric(value);
+  if (field.key === 'birthDate' || field.key === 'contractStartDate' || field.key === 'contractEndDate') return frFormatNumeric(value);
   return value;
 }
 

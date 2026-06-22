@@ -812,6 +812,7 @@ function initApp() {
     if (STATE.ui.currentTab === 'week') printWeekPeriod();
     else if (STATE.ui.currentTab === 'contract') printContractPdf();
     else if (STATE.ui.currentTab === 'cdi') printCdiPdf();
+    else if (STATE.ui.currentTab === 'releve') printReleveActivite();
     else window.print();
   };
   $('#btn-export-png').onclick = exportPNG;

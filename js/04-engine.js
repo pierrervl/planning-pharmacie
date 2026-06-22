@@ -55,6 +55,13 @@ const PATTERN_SHIFT_DEFAULT_SLOTS = {
   aprem: { start: '14:00', end: '19:30' },
 };
 
+const PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY = {
+  matin: { start: '08:30', end: '12:30' },
+  aprem: { start: '14:00', end: '18:30' },
+};
+
+const PATTERN_SATURDAY_DAY_IDX = 5;
+
 function padTimePart(n) {
   return String(n).padStart(2, '0');
 }
@@ -131,6 +138,33 @@ function ensurePatternShiftDefaults(state = STATE) {
   return state.patternShiftDefaults;
 }
 
+function ensurePatternShiftDefaultsSaturday(state = STATE) {
+  if (!state.patternShiftDefaultsSaturday) {
+    state.patternShiftDefaultsSaturday = JSON.parse(JSON.stringify(PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY));
+    return state.patternShiftDefaultsSaturday;
+  }
+  const d = state.patternShiftDefaultsSaturday;
+  if (typeof d.matin === 'number' || typeof d.aprem === 'number') {
+    state.patternShiftDefaultsSaturday = JSON.parse(JSON.stringify(PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY));
+    return state.patternShiftDefaultsSaturday;
+  }
+  for (const shift of ['matin', 'aprem']) {
+    if (!d[shift] || typeof d[shift] !== 'object') {
+      d[shift] = { ...PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY[shift] };
+    } else {
+      d[shift] = {
+        start: normalizeTimeInput(d[shift].start) || PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY[shift].start,
+        end: normalizeTimeInput(d[shift].end) || PATTERN_SHIFT_DEFAULT_SLOTS_SATURDAY[shift].end,
+      };
+    }
+  }
+  return state.patternShiftDefaultsSaturday;
+}
+
+function isPatternSaturday(dayIdx) {
+  return dayIdx === PATTERN_SATURDAY_DAY_IDX;
+}
+
 function patternCellStartKey(shift) {
   return shift === 'matin' ? 'matinStart' : 'apremStart';
 }
@@ -139,7 +173,11 @@ function patternCellEndKey(shift) {
   return shift === 'matin' ? 'matinEnd' : 'apremEnd';
 }
 
-function getPatternShiftDefaultSlot(shift, state = STATE) {
+function getPatternShiftDefaultSlot(shift, state = STATE, dayIdx = null) {
+  if (isPatternSaturday(dayIdx)) {
+    const d = ensurePatternShiftDefaultsSaturday(state);
+    return { ...d[shift] };
+  }
   const d = ensurePatternShiftDefaults(state);
   return { ...d[shift] };
 }
@@ -147,7 +185,7 @@ function getPatternShiftDefaultSlot(shift, state = STATE) {
 function getPatternCellSlot(empName, pname, dayIdx, shift, state = STATE) {
   const pat = ensurePatternWeek(empName, pname, state);
   const cell = pat[dayIdx] || {};
-  const def = getPatternShiftDefaultSlot(shift, state);
+  const def = getPatternShiftDefaultSlot(shift, state, dayIdx);
   const start = normalizeTimeInput(cell[patternCellStartKey(shift)]) || def.start;
   const end = normalizeTimeInput(cell[patternCellEndKey(shift)]) || def.end;
   return { start, end };
@@ -169,7 +207,7 @@ function setPatternCellSlot(empName, pname, dayIdx, shift, start, end, state = S
   const e = normalizeTimeInput(end);
   if (!s || !e || hoursBetweenTimes(s, e) == null) return false;
   const pat = ensurePatternWeek(empName, pname, state);
-  const def = getPatternShiftDefaultSlot(shift, state);
+  const def = getPatternShiftDefaultSlot(shift, state, dayIdx);
   const sKey = patternCellStartKey(shift);
   const eKey = patternCellEndKey(shift);
   if (s === def.start && e === def.end) {
@@ -182,12 +220,17 @@ function setPatternCellSlot(empName, pname, dayIdx, shift, start, end, state = S
   return true;
 }
 
-function setPatternShiftDefaultSlot(shift, start, end, state = STATE) {
+function setPatternShiftDefaultSlot(shift, start, end, state = STATE, { saturday = false } = {}) {
   const s = normalizeTimeInput(start);
   const e = normalizeTimeInput(end);
   if (!s || !e || hoursBetweenTimes(s, e) == null) return false;
-  ensurePatternShiftDefaults(state);
-  state.patternShiftDefaults[shift] = { start: s, end: e };
+  if (saturday) {
+    ensurePatternShiftDefaultsSaturday(state);
+    state.patternShiftDefaultsSaturday[shift] = { start: s, end: e };
+  } else {
+    ensurePatternShiftDefaults(state);
+    state.patternShiftDefaults[shift] = { start: s, end: e };
+  }
   return true;
 }
 
@@ -623,6 +666,44 @@ function computePatternWeekHours(empName, pname, state = STATE) {
     }
   }
   return Math.round(total * 100) / 100;
+}
+
+function computePlanningDayHours(empName, dateIso, state = STATE) {
+  let total = 0;
+  for (const shift of ['matin', 'aprem']) {
+    total += computePlanningShiftHours(empName, dateIso, shift, state);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function buildPlanningDayObservations(empName, dateIso, state = STATE) {
+  const parts = [];
+  for (const shift of ['matin', 'aprem']) {
+    const h = computePlanningShiftHours(empName, dateIso, shift, state);
+    if (h <= 0) continue;
+    const slot = getPlanningCellSlot(empName, dateIso, shift, state);
+    parts.push(`${formatPatternTime(slot.start)}-${formatPatternTime(slot.end)}`);
+  }
+  return parts.join(' / ');
+}
+
+function compareWeekHoursToPattern(empName, weekMonday, state = STATE) {
+  const pname = getPatternWeekNameForMonday(weekMonday, state);
+  const expected = computePatternWeekHours(empName, pname, state);
+  const weekStart = toISO(weekMonday);
+  const weekEnd = toISO(addDays(weekMonday, 6));
+  const actual = computePlanningHoursForPeriod(empName, weekStart, weekEnd, state);
+  const match = Math.round(actual * 100) === Math.round(expected * 100);
+  return { actual, expected, pname, match };
+}
+
+function weekHoursPatternMismatchTitle(empName, isoWeek, cmp) {
+  if (cmp.match) {
+    return `${empName} — semaine ${isoWeek} (${cmp.pname}) — ${formatContractHours(cmp.actual)} h — conforme au pattern (${formatContractHours(cmp.expected)} h)`;
+  }
+  const diff = Math.round((cmp.actual - cmp.expected) * 100) / 100;
+  const diffSign = diff > 0 ? '+' : '';
+  return `${empName} — semaine ${isoWeek} (${cmp.pname}) — réalisé : ${formatContractHours(cmp.actual)} h · pattern : ${formatContractHours(cmp.expected)} h (${diffSign}${formatContractHours(diff)} h)`;
 }
 
 function computePatternCycleHours(empName, state = STATE) {

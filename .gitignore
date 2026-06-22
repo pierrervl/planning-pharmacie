@@ -2,3 +2,8 @@
 sauvegardes/*.json
 js/planning_*.json
 planning_*.json
+
+# Dépendances de développement / outils de test
+node_modules/
+package-lock.json
+package.json

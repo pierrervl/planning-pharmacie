@@ -320,6 +320,55 @@ aside.side h3:first-child { margin-top: 0; }
 }
 .controls label { font-size: 12px; color: var(--ink-soft); }
 
+.week-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.week-view-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.week-display-switch {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.week-display-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.week-display-btn + .week-display-btn {
+  border-left: 1px solid var(--line-strong);
+}
+.week-display-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ink);
+}
+.week-display-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.week-display-btn.active:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* =========================================================================
    TABLEAUX DE PLANNING
    ========================================================================= */
@@ -835,6 +884,15 @@ table.planning td.hours-total-cell .hours-total-value {
   font-size: 11px;
   font-weight: 700;
   color: var(--ink);
+}
+table.planning td.hours-total-cell.hours-pattern-mismatch {
+  background: #f8696b !important;
+  border-left-color: #d64545 !important;
+  color: #fff;
+}
+table.planning td.hours-total-cell.hours-pattern-mismatch .hours-total-value {
+  color: #fff;
+  font-weight: 800;
 }
 table.planning tfoot td.hours-total-cell.sum-row-hours {
   font-size: 10px;
@@ -1621,6 +1679,29 @@ table.pantecotes-editions-table input.fr-date {
 .pattern-hours-defaults {
   margin: 0 0 14px;
 }
+.pattern-hours-day-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 10px;
+}
+.pattern-hours-day-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+.pattern-hours-day-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--ink);
+}
+table.planning th.day-saturday,
+table.planning td.pattern-cell[data-pat-day="5"] {
+  background-color: rgba(255, 235, 180, 0.22);
+}
+table.planning th.day-saturday {
+  font-weight: 700;
+}
 .pattern-hours-shifts {
   display: flex;
   flex-direction: column;
@@ -1697,11 +1778,33 @@ td.week-planning-cell {
 }
 td.pattern-cell.plein::after,
 td.pattern-cell.plein.special::after,
-td.pattern-cell.plein.special-red::after,
-td.week-planning-cell.plein::after,
-td.week-planning-cell.plein.special::after,
-td.week-planning-cell.plein.special-red::after {
+td.pattern-cell.plein.special-red::after {
   content: none !important;
+}
+.week-display-hours td.week-planning-cell.plein::after,
+.week-display-hours td.week-planning-cell.plein.special::after,
+.week-display-hours td.week-planning-cell.plein.special-red::after {
+  content: none !important;
+}
+.week-display-cross td.week-planning-cell.plein::after,
+.week-display-cross td.week-planning-cell.plein.special::after,
+.week-display-cross td.week-planning-cell.plein.special-red::after {
+  content: '×' !important;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+.week-display-cross td.week-planning-cell.plein.special::after,
+.week-display-cross td.week-planning-cell.plein.special-red::after {
+  z-index: 1;
 }
 td.week-planning-cell.request-pending,
 td.week-planning-cell.request-pending.vide,
@@ -3308,6 +3411,7 @@ body.printing-cdi #cdi-print-root {
   body.printing-week table.planning th,
   body.printing-week table.planning td.sum-cell,
   body.printing-week table.planning td.hours-total-cell,
+  body.printing-week table.planning td.hours-total-cell.hours-pattern-mismatch,
   body.printing-week table.planning th.hours-col {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -3372,6 +3476,96 @@ button.danger {
 @keyframes slideup {
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
+}
+
+/* =========================================================================
+   RELEVÉ D'ACTIVITÉ PRÉVISIONNEL (simple)
+   ========================================================================= */
+.rap-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+.rap-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.rap-preview-block {
+  margin-bottom: 20px;
+}
+.rap-preview-block:last-child {
+  margin-bottom: 0;
+}
+.rap-preview-block h4 {
+  margin: 0 0 8px;
+}
+.rap-simple-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rap-simple-table th,
+.rap-simple-table td {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+}
+.rap-simple-table th {
+  background: #eee;
+  font-weight: 600;
+}
+.rap-simple-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rap-simple-table tfoot td {
+  background: #f5f5f5;
+}
+
+#releve-print-root { display: none; }
+body.printing-releve .app { display: none !important; }
+body.printing-releve #releve-print-root {
+  display: block;
+  color: #111;
+  font-size: 11px;
+}
+.rap-simple-sheet {
+  max-width: 180mm;
+  margin: 0 auto;
+}
+.rap-simple-sheet.page-break-after {
+  break-after: page;
+  page-break-after: always;
+}
+.rap-simple-header {
+  margin-bottom: 12px;
+  border-bottom: 2px solid #222;
+  padding-bottom: 8px;
+}
+.rap-simple-header h1 {
+  font-size: 16px;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+}
+.rap-simple-header p {
+  margin: 0;
+  font-size: 11px;
+}
+.rap-simple-brand {
+  font-weight: 700;
+  font-size: 13px;
+}
+.rap-simple-emp {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+@media print {
+  body.printing-releve #releve-print-root { display: block !important; }
 }
 
 /* =========================================================================

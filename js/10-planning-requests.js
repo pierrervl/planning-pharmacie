@@ -156,7 +156,8 @@ function ensureDraftPlanningChangeRequest(emp, dateIso, shift, state = STATE) {
   const curVal = getPlanningValue(emp, dateIso, shift, state);
   let present = isPlanningPresent(curVal);
   const slot = getPlanningCellSlot(emp, dateIso, shift, state);
-  const def = getPatternShiftDefaultSlot(shift, state);
+  const dayIdx = weekDayIndex(fromISO(dateIso));
+  const def = getPatternShiftDefaultSlot(shift, state, dayIdx);
   let start = present ? slot.start : null;
   let end = present ? slot.end : null;
   if (present && (!start || !end || hoursBetweenTimes(start, end) == null)) {
@@ -334,7 +335,7 @@ function promptAdminPlanningChangeRequestDialog({ emp, iso, shift, request, onDo
   let startVal = request.present && request.start ? formatPatternTime(request.start) : '';
   let endVal = request.present && request.end ? formatPatternTime(request.end) : '';
   if (present && (!startVal || !endVal)) {
-    const def = getPatternShiftDefaultSlot(shift);
+    const def = getPatternShiftDefaultSlot(shift, STATE, weekDayIndex(d));
     startVal = formatPatternTime(def.start);
     endVal = formatPatternTime(def.end);
   }
@@ -455,7 +456,7 @@ function promptPlanningChangeRequestDialog({ emp, iso, shift, isNewDraft = false
   const existing = getPendingPlanningChangeRequest(emp, iso, shift);
   const curVal = getPlanningValue(emp, iso, shift);
   const slot = getPlanningCellSlot(emp, iso, shift);
-  const def = getPatternShiftDefaultSlot(shift);
+  const def = getPatternShiftDefaultSlot(shift, STATE, weekDayIndex(d));
 
   let present = true;
   let startVal = formatPatternTime(slot.start);

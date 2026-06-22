@@ -107,7 +107,7 @@ function normalizePatternWeek(pat, state) {
     let apremEnd = normalizeTimeInput(cell.apremEnd);
 
     if (state && cell.matinH != null && Number.isFinite(cell.matinH) && !matinStart && !matinEnd) {
-      const def = getPatternShiftDefaultSlot('matin', state);
+      const def = getPatternShiftDefaultSlot('matin', state, i);
       matinStart = def.start;
       matinEnd = minutesToTime(timeToMinutes(def.start) + Math.round(cell.matinH * 60));
       if (!matinEnd || hoursBetweenTimes(matinStart, matinEnd) == null) {
@@ -116,7 +116,7 @@ function normalizePatternWeek(pat, state) {
       }
     }
     if (state && cell.apremH != null && Number.isFinite(cell.apremH) && !apremStart && !apremEnd) {
-      const def = getPatternShiftDefaultSlot('aprem', state);
+      const def = getPatternShiftDefaultSlot('aprem', state, i);
       apremStart = def.start;
       apremEnd = minutesToTime(timeToMinutes(def.start) + Math.round(cell.apremH * 60));
       if (!apremEnd || hoursBetweenTimes(apremStart, apremEnd) == null) {
@@ -145,6 +145,10 @@ function buildDefaultState() {
     patternShiftDefaults: {
       matin: { start: '08:00', end: '12:30' },
       aprem: { start: '14:00', end: '19:30' },
+    },
+    patternShiftDefaultsSaturday: {
+      matin: { start: '08:30', end: '12:30' },
+      aprem: { start: '14:00', end: '18:30' },
     },
     planningChangeRequests: [],
     /* congés : [{ id, emp, start, end, type, comment }]                */
@@ -193,6 +197,9 @@ function buildDefaultState() {
       patternLayout: 'unified', /* 'unified' | 'split' */
       weekPrintStart: null,
       weekPrintEnd: null,
+      weekCellDisplay: 'cross', /* 'cross' | 'hours' */
+      relevePeriodStart: null,
+      relevePeriodEnd: null,
     }
   };
 
@@ -292,6 +299,15 @@ function migrateState(state) {
   if (!state.ui.weekPrintEnd) {
     state.ui.weekPrintEnd = toISO(addDays(curMon, (1 + 2) * 7 - 1)); /* 3 semaines */
   }
+  if (!state.ui.weekCellDisplay || !['cross', 'hours'].includes(state.ui.weekCellDisplay)) {
+    state.ui.weekCellDisplay = 'cross';
+  }
+  if (!state.ui.relevePeriodStart) {
+    state.ui.relevePeriodStart = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
+  }
+  if (!state.ui.relevePeriodEnd) {
+    state.ui.relevePeriodEnd = toISO(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 12));
+  }
   if (state.ui.currentTab === 'employee') state.ui.currentTab = 'emp-detail';
   if (!state.ui.employeeChartEmps) {
     state.ui.employeeChartEmps = (state.employees || []).slice();
@@ -303,6 +319,7 @@ function migrateState(state) {
     state.patternAnchorDate = INITIAL_DATA.patternAnchorDate;
   }
   ensurePatternShiftDefaults(state);
+  ensurePatternShiftDefaultsSaturday(state);
 
   if (!state.planningChangeRequests) state.planningChangeRequests = [];
 
