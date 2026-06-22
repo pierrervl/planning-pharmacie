@@ -1695,13 +1695,6 @@ table.pantecotes-editions-table input.fr-date {
   margin-bottom: 10px;
   color: var(--ink);
 }
-table.planning th.day-saturday,
-table.planning td.pattern-cell[data-pat-day="5"] {
-  background-color: rgba(255, 235, 180, 0.22);
-}
-table.planning th.day-saturday {
-  font-weight: 700;
-}
 .pattern-hours-shifts {
   display: flex;
   flex-direction: column;

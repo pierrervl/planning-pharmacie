@@ -380,7 +380,6 @@ function buildPatternTableHeader(thead, weekNames, headRows, { showMonthCol = fa
     for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
       const cls = ['day-header', 'day-group'];
       if (weekIdx > 0 && dayIdx === 0) cls.push('week-start');
-      if (dayIdx === PATTERN_SATURDAY_DAY_IDX) cls.push('day-saturday');
       trDays.innerHTML += `
         <th class="${cls.join(' ')}" colspan="${colsPerDay}">
           <span class="date-lbl">${PATTERN_DAY_LABELS[dayIdx]}</span>
