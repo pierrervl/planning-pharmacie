@@ -60,7 +60,7 @@ function render() {
     case 'employees':      renderEmployeesEditor(content); break;
     case 'contract':       renderContractEditor(content); break;
     case 'cdi':            renderCdiEditor(content); break;
-    case 'releve':         renderReleveActiviteEditor(content); break;
+    case 'releve':         renderReleveView(content); break;
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
@@ -791,6 +791,7 @@ function computePeriodTotals(emp, startIso, endIso) {
   const half = (n) => Math.ceil(n / 2);
   return {
     workShifts, workDays, restShifts, undefinedShifts,
+    workHours: computePlanningHoursForPeriod(emp, startIso, endIso),
     cp: half(byCongeType['CP'] || 0),
     rtt: half(byCongeType['RTT'] || 0),
     maladie: half(byCongeType['Maladie'] || 0),
@@ -932,6 +933,7 @@ function buildEmployeeOverviewTable(startIso, endIso) {
       .reduce((n, c) => n + c.daysInPeriod, 0);
     rows += `<tr>
       <td><b>${emp}</b></td>
+      <td class="num"><b>${formatContractHours(t.workHours)}</b></td>
       <td class="num">${t.workDays}</td>
       <td class="num">${t.workShifts}</td>
       <td class="num">${t.cp}</td>
@@ -940,6 +942,8 @@ function buildEmployeeOverviewTable(startIso, endIso) {
       <td class="num">${congesDays}</td>
     </tr>`;
   }
+  const totalHours = selected.reduce((s, emp) =>
+    s + computePeriodTotals(emp, startIso, endIso).workHours, 0);
 
   card.innerHTML = `
     <h3>Tableau comparatif</h3>
@@ -947,6 +951,7 @@ function buildEmployeeOverviewTable(startIso, endIso) {
     <table class="list emp-summary-table emp-overview-table">
       <thead><tr>
         <th>Salarié</th>
+        <th class="num">Heures trav.</th>
         <th class="num">Jours trav.</th>
         <th class="num">Demi-j.</th>
         <th class="num">CP</th>
@@ -955,6 +960,11 @@ function buildEmployeeOverviewTable(startIso, endIso) {
         <th class="num">Congés</th>
       </tr></thead>
       <tbody>${rows}</tbody>
+      <tfoot><tr class="emp-overview-total">
+        <td><b>Total</b></td>
+        <td class="num"><b>${formatContractHours(totalHours)}</b></td>
+        <td colspan="6"></td>
+      </tr></tfoot>
     </table>`;
 
   card.querySelectorAll('tbody tr').forEach((tr, i) => {
@@ -988,6 +998,7 @@ function buildEmployeeComparisonChart(startIso, endIso) {
     </div></div>`;
 
   const metrics = [
+    { key: 'workHours', label: 'Heures travaillées', color: 'var(--accent)', fmt: formatContractHours },
     { key: 'workDays', label: 'Jours travaillés', color: 'var(--accent)' },
     { key: 'cp', label: 'CP', color: 'var(--cp)' },
     { key: 'rtt', label: 'RTT', color: 'var(--rtt)' },
@@ -1021,11 +1032,12 @@ function buildEmployeeComparisonChart(startIso, endIso) {
     for (const r of rows) {
       const val = r[m.key] || 0;
       const pct = Math.round((val / maxByKey[m.key]) * 100);
+      const valLbl = m.fmt ? m.fmt(val) : val;
       chartsHtml += `
-        <div class="emp-chart-row" title="${r.emp} — ${m.label} : ${val}">
+        <div class="emp-chart-row" title="${r.emp} — ${m.label} : ${valLbl}">
           <span class="emp-chart-name">${r.short}</span>
           <div class="emp-chart-track"><div class="emp-chart-bar" style="width:${pct}%;background:${m.color}"></div></div>
-          <span class="emp-chart-val">${val}</span>
+          <span class="emp-chart-val">${valLbl}</span>
         </div>`;
     }
     chartsHtml += `</div></div>`;
@@ -1091,6 +1103,7 @@ function buildEmployeeSummaryTables(emp, startIso, endIso) {
       <table class="list emp-summary-table emp-detail-block">
         <thead><tr><th colspan="2">Travail</th></tr></thead>
         <tbody>
+          <tr class="row-highlight"><td>Heures travaillées</td><td class="num"><b>${formatContractHours(totals.workHours)}</b></td></tr>
           <tr class="row-highlight"><td>Demi-journées travaillées</td><td class="num"><b>${totals.workShifts}</b></td></tr>
           <tr class="row-highlight"><td>Jours travaillés</td><td class="num"><b>${totals.workDays}</b></td></tr>
           <tr><td>Repos</td><td class="num">${totals.restShifts}</td></tr>
@@ -1144,6 +1157,141 @@ function buildEmployeeSummaryTables(emp, startIso, endIso) {
   return wrap;
 }
 
+/* ===========================================================================
+   7bis. RELEVÉ D'HEURES (Équipe) — ÉTAPE 1 : total des heures par salarié
+   ========================================================================= */
+
+/* Période du relevé (par défaut : mois courant) */
+function getRelevePeriod() {
+  const now = new Date();
+  const defStart = toISO(new Date(now.getFullYear(), now.getMonth(), 1, 12));
+  const defEnd = toISO(new Date(now.getFullYear(), now.getMonth() + 1, 0, 12));
+  return {
+    startIso: STATE.ui.relevePeriodStart || defStart,
+    endIso: STATE.ui.relevePeriodEnd || defEnd,
+  };
+}
+
+function releveMonthTitle(startIso, endIso) {
+  const s = fromISO(startIso);
+  const e = fromISO(endIso);
+  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+    return `${MONTH_NAMES[s.getMonth()]} ${s.getFullYear()}`;
+  }
+  return `${frFormatNumeric(startIso)} → ${frFormatNumeric(endIso)}`;
+}
+
+function renderReleveView(root) {
+  const { startIso, endIso } = getRelevePeriod();
+
+  const bar = document.createElement('div');
+  bar.className = 'emp-period-bar no-print';
+  bar.innerHTML = `
+    <div class="emp-period-inner">
+      <div class="emp-period-block emp-period-dates">
+        <span class="emp-period-label">Période</span>
+        <div class="emp-period-fields">
+          <label>Du <input type="text" class="fr-date" id="rel-start" data-iso="${startIso}" value="${frFormatNumeric(startIso)}"></label>
+          <label>Au <input type="text" class="fr-date" id="rel-end" data-iso="${endIso}" value="${frFormatNumeric(endIso)}"></label>
+          <button type="button" class="primary-btn" id="rel-refresh">Actualiser</button>
+        </div>
+      </div>
+      <div class="emp-period-block">
+        <span class="emp-period-label">Mois</span>
+        <div class="emp-period-fields">
+          <button type="button" class="nav" id="rel-prev-month">‹ Mois</button>
+          <button type="button" class="nav" id="rel-this-month">Mois courant</button>
+          <button type="button" class="nav" id="rel-next-month">Mois ›</button>
+        </div>
+      </div>
+    </div>
+    <p class="emp-period-hint muted">${frFormat(fromISO(startIso))} → ${frFormat(fromISO(endIso))}</p>`;
+  root.appendChild(bar);
+
+  if (startIso > endIso) {
+    appendEmpPeriodError(root);
+    attachRelevePeriodHandlers();
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'form-card';
+  let rows = '';
+  let total = 0;
+  for (const emp of STATE.employees) {
+    const h = computePlanningHoursForPeriod(emp, startIso, endIso);
+    total += h;
+    rows += `<tr>
+      <td><b>${escapeHtml(emp)}</b></td>
+      <td class="num">${formatContractHours(h)}</td>
+    </tr>`;
+  }
+  card.innerHTML = `
+    <h3>Relevé d'heures — ${releveMonthTitle(startIso, endIso)}</h3>
+    <p class="muted">Total des heures planifiées par salarié sur la période sélectionnée.</p>
+    <table class="list emp-summary-table">
+      <thead><tr><th>Salarié</th><th class="num">Heures travaillées</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="row-highlight">
+        <td><b>Total</b></td>
+        <td class="num"><b>${formatContractHours(Math.round(total * 100) / 100)}</b></td>
+      </tr></tfoot>
+    </table>`;
+  root.appendChild(card);
+
+  attachRelevePeriodHandlers();
+}
+
+function attachRelevePeriodHandlers() {
+  const persist = () => {
+    const s = readFrDateInput($('#rel-start'));
+    const e = readFrDateInput($('#rel-end'));
+    if (s) STATE.ui.relevePeriodStart = s;
+    if (e) STATE.ui.relevePeriodEnd = e;
+    saveState();
+  };
+  const setMonth = (year, month) => {
+    STATE.ui.relevePeriodStart = toISO(new Date(year, month, 1, 12));
+    STATE.ui.relevePeriodEnd = toISO(new Date(year, month + 1, 0, 12));
+    persistAndRender();
+  };
+
+  const startEl = $('#rel-start');
+  const endEl = $('#rel-end');
+  if (startEl) {
+    startEl.addEventListener('blur', persist);
+    startEl.addEventListener('frdate-select', () => { persist(); persistAndRender(); });
+  }
+  if (endEl) {
+    endEl.addEventListener('blur', persist);
+    endEl.addEventListener('frdate-select', () => { persist(); persistAndRender(); });
+  }
+
+  const refresh = $('#rel-refresh');
+  if (refresh) refresh.onclick = () => {
+    syncFrDateInputFromValue($('#rel-start'));
+    syncFrDateInputFromValue($('#rel-end'));
+    persist();
+    persistAndRender();
+  };
+
+  const prev = $('#rel-prev-month');
+  const next = $('#rel-next-month');
+  const cur = $('#rel-this-month');
+  if (prev) prev.onclick = () => {
+    const s = fromISO(getRelevePeriod().startIso);
+    setMonth(s.getFullYear(), s.getMonth() - 1);
+  };
+  if (next) next.onclick = () => {
+    const s = fromISO(getRelevePeriod().startIso);
+    setMonth(s.getFullYear(), s.getMonth() + 1);
+  };
+  if (cur) cur.onclick = () => {
+    const now = new Date();
+    setMonth(now.getFullYear(), now.getMonth());
+  };
+}
+
 /* Panneau latéral — filtres (planning) + légende */
 function renderSidebar() {
   const side = $('#sidebar');
@@ -1153,6 +1301,7 @@ function renderSidebar() {
     || STATE.ui.currentTab === 'employees'
     || STATE.ui.currentTab === 'contract'
     || STATE.ui.currentTab === 'cdi'
+    || STATE.ui.currentTab === 'releve'
     || STATE.ui.currentTab === 'settings';
 
   if (!isEmployeeTab) {

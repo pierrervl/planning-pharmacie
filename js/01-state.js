@@ -198,8 +198,6 @@ function buildDefaultState() {
       weekPrintStart: null,
       weekPrintEnd: null,
       weekCellDisplay: 'cross', /* 'cross' | 'hours' */
-      relevePeriodStart: null,
-      relevePeriodEnd: null,
     }
   };
 
@@ -301,12 +299,6 @@ function migrateState(state) {
   }
   if (!state.ui.weekCellDisplay || !['cross', 'hours'].includes(state.ui.weekCellDisplay)) {
     state.ui.weekCellDisplay = 'cross';
-  }
-  if (!state.ui.relevePeriodStart) {
-    state.ui.relevePeriodStart = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
-  }
-  if (!state.ui.relevePeriodEnd) {
-    state.ui.relevePeriodEnd = toISO(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 12));
   }
   if (state.ui.currentTab === 'employee') state.ui.currentTab = 'emp-detail';
   if (!state.ui.employeeChartEmps) {
