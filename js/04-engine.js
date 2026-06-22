@@ -50,6 +50,15 @@ function setPatternWeekValue(empName, pname, dayIdx, shift, value) {
   }
 }
 
+/* Copie une semaine-type (présences + horaires) vers une autre pour un salarié */
+function copyPatternWeekForEmployee(empName, srcName, dstName, state = STATE) {
+  if (!empName || !srcName || !dstName || srcName === dstName) return false;
+  const src = ensurePatternWeek(empName, srcName, state);
+  if (!state.patterns[empName]) state.patterns[empName] = {};
+  state.patterns[empName][dstName] = JSON.parse(JSON.stringify(src));
+  return true;
+}
+
 const PATTERN_SHIFT_DEFAULT_SLOTS = {
   matin: { start: '08:00', end: '12:30' },
   aprem: { start: '14:00', end: '19:30' },

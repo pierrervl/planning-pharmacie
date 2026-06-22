@@ -59,6 +59,10 @@ function renderPatternsEditor(root) {
   root.appendChild(importPanel);
   attachPatternPeriodImportHandlers(importPanel);
 
+  if (patternEmps.length > 0) {
+    mountPatternCopyPanel(root, patternEmps);
+  }
+
   if (patternEmps.length === 0) {
     const msg = document.createElement('p');
     msg.className = 'muted';
@@ -217,6 +221,72 @@ function mountPatternShiftDefaultsPanel(root) {
       panel.querySelector(`#${prefix}-${shift}-end`).addEventListener('change', saveDefaults);
     }
   }
+}
+
+function mountPatternCopyPanel(root, patternEmps) {
+  const src = PATTERN_CYCLE_WEEKS.includes(STATE.ui.patternCopySrc) ? STATE.ui.patternCopySrc : PATTERN_CYCLE_WEEKS[0];
+  const dst = PATTERN_CYCLE_WEEKS.includes(STATE.ui.patternCopyDst) ? STATE.ui.patternCopyDst : PATTERN_CYCLE_WEEKS[1];
+
+  const weekOptions = (selected) => PATTERN_CYCLE_WEEKS
+    .map((w) => `<option value="${patternEscapeAttr(w)}" ${w === selected ? 'selected' : ''}>${escapeHtml(w)}</option>`)
+    .join('');
+
+  const empChecks = patternEmps.map((emp) => `
+    <label class="pattern-copy-emp-item">
+      <input type="checkbox" class="pat-copy-emp" value="${patternEscapeAttr(emp)}" checked>
+      <span>${escapeHtml(emp)}</span>
+    </label>`).join('');
+
+  const panel = document.createElement('div');
+  panel.className = 'form-card pattern-copy-panel no-print';
+  panel.innerHTML = `
+    <h3>Copier une semaine-type</h3>
+    <p class="muted">Recopie les présences et horaires d'une semaine-type vers une autre, pour les salariés sélectionnés.</p>
+    <div class="pattern-copy-grid">
+      <label>Copier <select id="pat-copy-src">${weekOptions(src)}</select></label>
+      <label>vers <select id="pat-copy-dst">${weekOptions(dst)}</select></label>
+      <button type="button" class="primary" id="pat-copy-run">Copier la semaine</button>
+    </div>
+    <div class="pattern-copy-emps">
+      <div class="pattern-copy-emps-head">
+        <span>Salariés concernés :</span>
+        <button type="button" class="link-btn" id="pat-copy-all">Tous</button>
+        <button type="button" class="link-btn" id="pat-copy-none">Aucun</button>
+      </div>
+      <div class="pattern-copy-emps-list">${empChecks}</div>
+    </div>`;
+  root.appendChild(panel);
+
+  const srcSel = panel.querySelector('#pat-copy-src');
+  const dstSel = panel.querySelector('#pat-copy-dst');
+
+  srcSel.onchange = () => { STATE.ui.patternCopySrc = srcSel.value; saveState(); };
+  dstSel.onchange = () => { STATE.ui.patternCopyDst = dstSel.value; saveState(); };
+
+  panel.querySelector('#pat-copy-all').onclick = () => {
+    panel.querySelectorAll('.pat-copy-emp').forEach((c) => { c.checked = true; });
+  };
+  panel.querySelector('#pat-copy-none').onclick = () => {
+    panel.querySelectorAll('.pat-copy-emp').forEach((c) => { c.checked = false; });
+  };
+
+  panel.querySelector('#pat-copy-run').onclick = () => {
+    const from = srcSel.value;
+    const to = dstSel.value;
+    if (from === to) { toast('Choisissez deux semaines différentes.', true); return; }
+    const emps = [...panel.querySelectorAll('.pat-copy-emp:checked')].map((c) => c.value);
+    if (!emps.length) { toast('Sélectionnez au moins un salarié.', true); return; }
+
+    let n = 0;
+    for (const emp of emps) {
+      if (copyPatternWeekForEmployee(emp, from, to)) n++;
+    }
+    STATE.ui.patternCopySrc = from;
+    STATE.ui.patternCopyDst = to;
+    saveState();
+    persistAndRender();
+    toast(`${from} copiée vers ${to} pour ${n} salarié(s).`);
+  };
 }
 
 function promptShiftSlotDialog({ title, subtitle, slot, defSlot, onSave, onClear, onDone }) {
