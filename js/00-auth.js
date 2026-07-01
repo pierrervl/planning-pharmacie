@@ -975,8 +975,8 @@ function applyEmployeeViewRestrictions() {
 
   STATE.ui.filtersEmp = STATE.employees.slice();
 
-  const allowedTabs = ['week', 'conges'];
-  const allowedGroups = ['planning', 'equipe'];
+  const allowedTabs = ['week', 'conges', 'help'];
+  const allowedGroups = ['planning', 'equipe', 'config'];
 
   document.querySelectorAll('#nav-groups button').forEach(btn => {
     btn.style.display = allowedGroups.includes(btn.dataset.group) ? '' : 'none';

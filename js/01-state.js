@@ -258,7 +258,7 @@ function buildDefaultState() {
     employerInfo: {},
     /* préférences UI                                                    */
     ui: {
-      currentTab:     'week',
+      currentTab:     'help',
       currentDate:    todayISO(),
       monthEmp:       null,
       yearEmp:        null,

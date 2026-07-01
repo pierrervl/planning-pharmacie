@@ -8,14 +8,14 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
   journees: ['feries', 'gardes', 'pantecotes'],
-  config:   ['settings'],
+  config:   ['help', 'settings'],
 };
 
 function goToTab(tab, hash) {
@@ -66,6 +66,7 @@ function render() {
     case 'gardes':         renderGardesEditor(content); break;
     case 'pantecotes':     renderPantecotesEditor(content); break;
     case 'settings':       renderSettingsEditor(content); break;
+    case 'help':           renderHelpEditor(content); break;
   }
   renderSidebar();
   initFrDateInputs(content);

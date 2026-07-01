@@ -3,6 +3,14 @@
 
 const PATTERN_DAY_LABELS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
 
+const PATTERN_CONCEPT_NOTE = `
+  <p class="pattern-concept-lead">
+    Le <strong>planning</strong> (onglet Semaine) est d'abord un <strong>calendrier vierge</strong>.
+    Le <strong>pattern</strong>, c'est le modèle — comme un <strong>tampon</strong> avec l'empreinte
+    des horaires de travail habituels de chaque salarié. Vous le préparez ici, puis vous l'« estampez »
+    sur le calendrier via <em>Importer le cycle vers le planning</em>.
+  </p>`;
+
 function patternEscapeAttr(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -30,6 +38,7 @@ function renderPatternsEditor(root) {
   ctrl.className = 'controls pattern-controls';
   ctrl.innerHTML = `
     <div class="label">Modèle de cycle — ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
+    <div class="pattern-concept-note">${PATTERN_CONCEPT_NOTE}</div>
     <div class="help-text">
       Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A,
       <b>${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}-types</b>

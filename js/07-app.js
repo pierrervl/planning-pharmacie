@@ -833,7 +833,6 @@ function initApp() {
   render();
   sessionInitialized = true;
   setupSessionLifecycle();
-  void promptStartupImport();
 
   // tentative d'export à la fermeture (Ctrl+W / fermeture onglet)
   window.addEventListener('keydown', (e) => {
