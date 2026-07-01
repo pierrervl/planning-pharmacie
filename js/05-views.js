@@ -48,9 +48,11 @@ function syncNavTabs() {
 
 function applyConfigTabLayout() {
   const sidebar = document.getElementById('sidebar');
-  if (!sidebar) return;
+  const main = document.querySelector('.main');
+  if (!sidebar || !main) return;
   const hide = ['help', 'rgpd'].includes(STATE.ui.currentTab);
-  sidebar.style.display = hide ? 'none' : '';
+  sidebar.hidden = hide;
+  main.classList.toggle('main-no-sidebar', hide);
 }
 
 function render() {
@@ -99,6 +101,7 @@ function render() {
     });
   }
   if (typeof updateTopbarAppearance === 'function') updateTopbarAppearance();
+  if (typeof applyAdminReadOnlyUi === 'function') applyAdminReadOnlyUi();
 }
 
 /* ===========================================================================

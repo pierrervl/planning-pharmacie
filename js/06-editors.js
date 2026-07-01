@@ -440,7 +440,9 @@ function promptPlanningCellHours({ emp, iso, shift, onDone }) {
 function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
   const v = getPatternWeekValue(emp, pname, dayIdx, shift);
   const shiftCls = shift === 'matin' ? 'shift-matin' : 'shift-aprem';
-  const cls = ['cell', 'editable', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
+  const canEdit = typeof canEditPlanning !== 'function' || canEditPlanning();
+  const cls = ['cell', 'pattern-cell', patternCellDisplayClass(v), shiftCls];
+  if (canEdit) cls.unshift('editable');
   if (weekBoundary && shift === 'matin') cls.push('week-start');
   const shiftLabel = shift === 'matin' ? 'Matin' : 'Après-midi';
   let title = `${emp} — semaine ${pname} — ${PATTERN_DAY_LABELS[dayIdx]} — ${shiftLabel}`;

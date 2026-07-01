@@ -45,7 +45,7 @@ function switchPharmacyState(pharmacyId) {
     saveState(currentId);
   }
   STATE = loadState(pharmacyId);
-  if (typeof persistAndRender === 'function') persistAndRender();
+  if (typeof persistAndRender === 'function') persistAndRender({ skipCloud: true });
   else if (typeof render === 'function') render();
 }
 

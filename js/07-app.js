@@ -13,6 +13,7 @@ let exitExportDialogOpen = false;
 let allowPageLeave = false;
 
 function markSessionDirty() {
+  if (typeof isAdminReadOnly === 'function' && isAdminReadOnly()) return;
   if (!suppressDirtyTracking) {
     sessionNeedsExport = true;
     sessionNeedsCloudSync = true;
@@ -52,9 +53,12 @@ function updateCloudButtonState() {
     syncBtn.classList.remove('hidden');
     const staffPull = typeof isStaff === 'function' && isStaff()
       && !(typeof isAdmin === 'function' && isAdmin());
-    syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync);
+    syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync && !(typeof isAdminReadOnly === 'function' && isAdminReadOnly()));
     syncBtn.textContent = '☁ Synchroniser';
-    syncBtn.title = staffPull
+    const adminReadOnly = typeof isAdminReadOnly === 'function' && isAdminReadOnly();
+    syncBtn.title = adminReadOnly
+      ? 'Mode consultation — cliquez sur ✏️ Modifier pour enregistrer des changements'
+      : staffPull
       ? (sessionNeedsCloudSync
         ? 'Envoi automatique en cours — clic pour forcer la sync'
         : 'Sync auto active · clic pour forcer')

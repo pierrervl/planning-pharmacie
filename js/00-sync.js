@@ -201,6 +201,7 @@ async function loadPersonalDataFromCloud() {
 
 async function pushPlanningToCloud() {
   if (!isAdmin()) return;
+  if (typeof isAdminReadOnly === 'function' && isAdminReadOnly()) return;
   const pharmacyId = getCurrentPharmacyId();
   if (!pharmacyId) return;
   await ensureAuthClient();
@@ -427,7 +428,11 @@ async function syncAdminWithCloud() {
   }
 
   if ((mergedProfiles || mergedShared) && typeof saveState === 'function') saveState();
-  await pushPlanningToCloud();
+  if (typeof isAdminReadOnly === 'function' && isAdminReadOnly()) {
+    setSyncStatus('À jour (consultation)', 'ok');
+  } else {
+    await pushPlanningToCloud();
+  }
   if (typeof render === 'function') render();
 }
 

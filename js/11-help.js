@@ -175,7 +175,7 @@ function createHelpAccordion({ id, title, hint, open = false, bodyHtml }) {
 function renderHelpEditor(root) {
   const progress = getStartupProgress();
   const pct = progress.total ? Math.round((progress.doneCount / progress.total) * 100) : 0;
-  const isAdmin = typeof canEditPlanning === 'function' ? canEditPlanning() : true;
+  const isAdminUser = typeof isAdmin === 'function' ? isAdmin() : (typeof canEditPlanning === 'function' ? canEditPlanning() : true);
   const isStaffUser = typeof isStaff === 'function' && isStaff();
   const isTeamLeaderUser = typeof isTeamLeader === 'function' && isTeamLeader();
   const cloudConfigured = typeof isSupabaseConfigured === 'function' && isSupabaseConfigured();
@@ -184,7 +184,7 @@ function renderHelpEditor(root) {
 
   const header = document.createElement('div');
   header.className = 'controls help-header';
-  const headerIntro = isAdmin && progress.doneCount < progress.total
+  const headerIntro = isAdminUser && progress.doneCount < progress.total
     ? 'Commencez par <strong>Mise en route — titulaire</strong> ci-dessous pour créer l\'environnement de votre pharmacie.'
     : 'Guides et procédures — ouvrez les sections ci-dessous selon vos besoins.';
   header.innerHTML = `
@@ -195,7 +195,7 @@ function renderHelpEditor(root) {
   const accordions = document.createElement('div');
   accordions.className = 'help-accordions';
 
-  if (isAdmin) {
+  if (isAdminUser) {
     accordions.appendChild(createHelpAccordion({
       id: 'help-startup-admin',
       title: 'Mise en route — titulaire / administrateur',
@@ -210,7 +210,7 @@ function renderHelpEditor(root) {
       id: 'help-employee-guide',
       title: isTeamLeaderUser ? 'Vue salarié / chef d\'équipe' : 'Vue salarié',
       hint: 'Planning · demandes · congés',
-      open: !isAdmin,
+      open: !isAdminUser,
       bodyHtml: buildEmployeeGuideHtml({ isTeamLeader: isTeamLeaderUser, cloudConfigured }),
     }));
   }
@@ -218,9 +218,9 @@ function renderHelpEditor(root) {
   accordions.appendChild(createHelpAccordion({
     id: 'help-planning-tuto',
     title: 'Utiliser le planning (vue Semaine)',
-    hint: isAdmin ? 'Clics, couleurs, heures' : 'Administrateurs',
+    hint: isAdminUser ? 'Clics, couleurs, heures' : 'Administrateurs',
     open: false,
-    bodyHtml: buildPlanningTutorialHtml({ forAdmin: isAdmin || !isStaffUser }),
+    bodyHtml: buildPlanningTutorialHtml({ forAdmin: isAdminUser || !isStaffUser }),
   }));
 
   accordions.appendChild(createHelpAccordion({

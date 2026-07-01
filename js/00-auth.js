@@ -156,6 +156,7 @@ async function selectPharmacy(pharmacyId) {
   AUTH.pharmacy = membership.pharmacy;
   AUTH.membership = membership;
   setActivePharmacyIdInStorage(pharmacyId);
+  resetAdminEditLock();
   if (typeof switchPharmacyState === 'function') switchPharmacyState(pharmacyId);
   renderAuthBar();
   notifyAuthChange();
@@ -288,6 +289,42 @@ function isAdmin() {
   return getMembershipRole() === 'admin';
 }
 
+let adminEditUnlocked = false;
+
+function isAdminEditUnlocked() {
+  return adminEditUnlocked;
+}
+
+function isAdminReadOnly() {
+  return isAdmin() && isAuthenticated() && isSupabaseConfigured() && !adminEditUnlocked;
+}
+
+function resetAdminEditLock() {
+  adminEditUnlocked = false;
+  applyAdminReadOnlyUi();
+}
+
+function setAdminEditUnlocked(unlocked) {
+  if (!isAdmin()) return;
+  adminEditUnlocked = !!unlocked;
+  applyAdminReadOnlyUi();
+  if (typeof renderAuthBar === 'function') renderAuthBar();
+  if (typeof render === 'function') render();
+  if (typeof toast === 'function') {
+    toast(unlocked ? 'Mode édition activé — les modifications seront enregistrées.' : 'Mode lecture seule.');
+  }
+}
+
+function applyAdminReadOnlyUi() {
+  const readOnly = isAdminReadOnly();
+  document.body.classList.toggle('admin-read-only', readOnly);
+  ['btn-reset', 'btn-import-json'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = readOnly;
+  });
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+}
+
 function isTeamLeader() {
   return getMembershipRole() === 'team_leader';
 }
@@ -326,13 +363,14 @@ function getAuthRoleLabel() {
 function canEditPlanning() {
   if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  return isAdmin();
+  if (isAdmin()) return isAdminEditUnlocked();
+  return false;
 }
 
 function canEditEmployeeData(empName) {
   if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  if (isAdmin()) return true;
+  if (isAdmin()) return isAdminEditUnlocked();
   if (isTeamLeader()) return true;
   if (isEmployee()) return employeeNamesMatch(getLinkedEmployeeName(), empName);
   return false;
@@ -954,12 +992,30 @@ function renderAuthBar() {
         ? '<span class="auth-rgpd-badge">RGPD à valider</span>' : ''}
     </span>
     <span class="auth-bar-actions">
-      ${AUTH.memberships.length > 1 ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
+      ${AUTH.pharmacy ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
+      ${isAdmin() && AUTH.pharmacy ? `
+        <button type="button" class="auth-bar-btn auth-edit-toggle${isAdminEditUnlocked() ? ' is-editing' : ''}" id="auth-bar-edit-toggle" title="${isAdminEditUnlocked() ? 'Repasser en lecture seule' : 'Activer les modifications'}">
+          ${isAdminEditUnlocked() ? '🔒 Lecture seule' : '✏️ Modifier'}
+        </button>
+        ${isAdminReadOnly() ? '<span class="auth-readonly-badge">Consultation</span>' : ''}
+      ` : ''}
       <span class="sync-status" id="sync-status"></span>
       <button type="button" class="auth-bar-btn" id="auth-bar-logout">Déconnexion</button>
     </span>`;
 
   bar.querySelector('#auth-bar-switch-pharmacy')?.addEventListener('click', () => showPharmacyPicker());
+
+  bar.querySelector('#auth-bar-edit-toggle')?.addEventListener('click', () => {
+    if (isAdminEditUnlocked()) {
+      setAdminEditUnlocked(false);
+      return;
+    }
+    const pharmacyName = AUTH.pharmacy?.name || 'cette pharmacie';
+    if (typeof confirm === 'function' && !confirm(
+      `Activer le mode édition pour « ${pharmacyName} » ?\n\nLes modifications du planning seront enregistrées (cloud et export).`
+    )) return;
+    setAdminEditUnlocked(true);
+  });
 
   bar.querySelector('#auth-bar-logout').onclick = async () => {
     await signOut();
@@ -968,6 +1024,7 @@ function renderAuthBar() {
   };
 
   if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+  applyAdminReadOnlyUi();
 }
 
 function applyEmployeeViewRestrictions() {

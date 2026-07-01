@@ -346,6 +346,9 @@ nav.nav-subtabs button.active {
   gap: 0;
   min-height: 0;
 }
+.main.main-no-sidebar {
+  grid-template-columns: 1fr;
+}
 @media (max-width: 900px) {
   .main { grid-template-columns: 1fr; }
   aside.side { border-left: none; border-top: 1px solid var(--line); }
@@ -3834,6 +3837,45 @@ body.auth-locked .app { filter: blur(2px); }
 .auth-role-badge.team-leader {
   background: #7c3aed;
   color: #fff;
+}
+
+.auth-readonly-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--cp) 25%, var(--bg-panel));
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.auth-bar-btn.auth-edit-toggle.is-editing {
+  background: color-mix(in srgb, var(--warn) 18%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+
+body.admin-read-only .main input:not([type="checkbox"]),
+body.admin-read-only .main select,
+body.admin-read-only .main textarea,
+body.admin-read-only .main button,
+body.admin-read-only .side input,
+body.admin-read-only .side select,
+body.admin-read-only .side button,
+body.admin-read-only td.cell.editable,
+body.admin-read-only td.pattern-cell.editable {
+  pointer-events: none;
+  cursor: default;
+}
+
+body.admin-read-only .main input[type="checkbox"] {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+body.admin-read-only .help-accordions summary {
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .sync-status {
