@@ -6,7 +6,10 @@ let syncInFlight = false;
 let syncPending = false;
 let lastCloudUpdatedAt = null;
 
-const SYNC_DEBOUNCE_MS = 600;
+const SYNC_DEBOUNCE_MS = 4000;
+const SYNC_POLL_MS = 45000;
+
+let syncPollTimer = null;
 
 function canSyncToCloud() {
   if (!isSupabaseConfigured() || !isAuthenticated()) return false;
@@ -123,27 +126,53 @@ function extractPersonalDataFromState(employeeName) {
   };
 }
 
-async function loadPlanningFromCloud() {
+function mergeEmployeeSharedFromCloud(cloudData, state = STATE) {
+  if (!cloudData || typeof cloudData !== 'object') return false;
+  let changed = false;
+  if (Array.isArray(cloudData.conges)) {
+    const merged = mergeRecordsById(state.conges || [], cloudData.conges);
+    if (JSON.stringify(merged) !== JSON.stringify(state.conges || [])) {
+      state.conges = merged;
+      changed = true;
+    }
+  }
+  if (Array.isArray(cloudData.planningChangeRequests)) {
+    const merged = mergeRecordsById(
+      state.planningChangeRequests || [],
+      cloudData.planningChangeRequests
+    );
+    if (JSON.stringify(merged) !== JSON.stringify(state.planningChangeRequests || [])) {
+      state.planningChangeRequests = merged;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+async function fetchPlanningRowFromCloud() {
   if (!canSyncToCloud()) return null;
   const pharmacyId = getCurrentPharmacyId();
-  setSyncStatus('Chargement…', 'pending');
-
   await ensureAuthClient();
   const { data, error } = await AUTH.client
     .from('pharmacy_planning')
     .select('data, updated_at')
     .eq('pharmacy_id', pharmacyId)
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
 
-  if (error) {
-    setSyncStatus('Erreur chargement', 'error');
-    throw error;
-  }
+async function loadPlanningFromCloud() {
+  if (!canSyncToCloud()) return null;
+  setSyncStatus('Chargement…', 'pending');
 
-  lastCloudUpdatedAt = data?.updated_at || null;
+  const data = await fetchPlanningRowFromCloud();
+  if (!data) return null;
+
+  lastCloudUpdatedAt = data.updated_at || null;
   const staffMerge = isStaff() && !isAdmin();
 
-  if (data?.data && Object.keys(data.data).length > 0) {
+  if (data.data && Object.keys(data.data).length > 0) {
     mergeCloudStateIntoLocal(data.data, { staffMerge });
     setSyncStatus('Synchronisé', 'ok');
     return data;
@@ -365,6 +394,7 @@ async function performCloudSync() {
     } else if (isStaff()) {
       await syncStaffWithCloud();
     }
+    if (typeof markCloudSynced === 'function') markCloudSynced();
   } catch (e) {
     console.error('Sync cloud échouée', e);
     setSyncStatus('Erreur sync', 'error');
@@ -380,17 +410,90 @@ async function performCloudSync() {
 }
 
 async function syncAdminWithCloud() {
-  await loadPlanningFromCloud();
-  const mergedPatches = await mergeStaffPatchesFromProfiles();
-  if (mergedPatches && typeof saveState === 'function') saveState();
+  const row = await fetchPlanningRowFromCloud();
+  if (row?.updated_at) lastCloudUpdatedAt = row.updated_at;
+
+  const mergedProfiles = await mergeStaffPatchesFromProfiles();
+
+  let mergedShared = false;
+  if (row?.data) {
+    suppressDirtyTracking = true;
+    mergedShared = mergeEmployeeSharedFromCloud(row.data);
+    if (mergedShared) migrateState(STATE);
+    suppressDirtyTracking = false;
+  }
+
+  if ((mergedProfiles || mergedShared) && typeof saveState === 'function') saveState();
   await pushPlanningToCloud();
   if (typeof render === 'function') render();
 }
 
+async function pullCloudUpdatesOnly() {
+  if (!canSyncToCloud() || syncInFlight || syncTimer) return;
+  if (isAdmin() && typeof sessionNeedsCloudSync !== 'undefined' && sessionNeedsCloudSync) return;
+
+  syncInFlight = true;
+  try {
+    if (isAdmin()) {
+      const row = await fetchPlanningRowFromCloud();
+      if (!row?.updated_at || row.updated_at === lastCloudUpdatedAt) return;
+
+      lastCloudUpdatedAt = row.updated_at;
+      const mergedProfiles = await mergeStaffPatchesFromProfiles();
+      let mergedShared = false;
+      if (row.data) {
+        suppressDirtyTracking = true;
+        mergedShared = mergeEmployeeSharedFromCloud(row.data);
+        if (mergedShared) migrateState(STATE);
+        suppressDirtyTracking = false;
+      }
+      if (mergedProfiles || mergedShared) {
+        if (typeof saveState === 'function') saveState();
+        if (typeof render === 'function') render();
+        setSyncStatus('Mise à jour équipe', 'ok');
+      }
+    } else if (isStaff()) {
+      const row = await fetchPlanningRowFromCloud();
+      if (!row?.updated_at || row.updated_at === lastCloudUpdatedAt) return;
+
+      lastCloudUpdatedAt = row.updated_at;
+      if (row.data && Object.keys(row.data).length > 0) {
+        suppressDirtyTracking = true;
+        mergeCloudStateIntoLocal(row.data, { staffMerge: true });
+        suppressDirtyTracking = false;
+        if (typeof saveState === 'function') saveState();
+        if (typeof render === 'function') render();
+        setSyncStatus('Planning à jour', 'ok');
+      }
+    }
+  } catch (e) {
+    console.warn('Pull cloud échoué', e);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+function startCloudSyncPoll() {
+  stopCloudSyncPoll();
+  if (!canSyncToCloud()) return;
+  syncPollTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    void pullCloudUpdatesOnly();
+  }, SYNC_POLL_MS);
+}
+
+function stopCloudSyncPoll() {
+  if (syncPollTimer) {
+    clearInterval(syncPollTimer);
+    syncPollTimer = null;
+  }
+}
+
 function scheduleCloudSync() {
   if (!canSyncToCloud()) return;
+  if (typeof sessionNeedsCloudSync !== 'undefined' && !sessionNeedsCloudSync) return;
   clearTimeout(syncTimer);
-  setSyncStatus('Modification…', 'pending');
+  setSyncStatus('En attente cloud…', 'pending');
   syncTimer = setTimeout(() => {
     syncTimer = null;
     void performCloudSync();
@@ -431,9 +534,14 @@ async function forceCloudSync() {
 
 function setupCloudAutoSave() {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void flushCloudSync();
+    if (document.visibilityState === 'hidden') {
+      void flushCloudSync();
+    } else if (document.visibilityState === 'visible') {
+      void pullCloudUpdatesOnly();
+    }
   });
   window.addEventListener('pagehide', () => { void flushCloudSync(); });
+  startCloudSyncPoll();
 }
 
 async function bootstrapCloudData() {
@@ -442,6 +550,7 @@ async function bootstrapCloudData() {
   if (isAdmin()) await mergeStaffPatchesFromProfiles();
   await loadPersonalDataFromCloud();
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  startCloudSyncPoll();
 }
 
 async function syncAfterAuth() {
@@ -458,6 +567,7 @@ async function syncAfterAuth() {
     if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
     if (typeof render === 'function') render();
     if (typeof markCloudSynced === 'function') markCloudSynced();
+    startCloudSyncPoll();
   } catch (e) {
     console.error('Sync post-connexion échouée', e);
   }

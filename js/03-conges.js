@@ -293,7 +293,12 @@ function applyCongeTypeColorStyles(state) {
         background: var(--conge-type-${entry.id}-bg) !important;
         background-color: var(--conge-type-${entry.id}-bg) !important;
       }
-      .print-legend .lg.${cls} { background: var(--conge-type-${entry.id}-bg); }`);
+      .print-legend .lg.${cls} {
+        background: var(--conge-type-${entry.id}-bg);
+        background-color: var(--conge-type-${entry.id}-bg);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }`);
   }
   let el = document.getElementById('conge-type-dynamic-styles');
   if (!el) {

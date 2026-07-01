@@ -8,14 +8,14 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
 
 const TAB_GROUPS = {
   planning: ['week', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
   journees: ['feries', 'gardes', 'pantecotes'],
-  config:   ['help', 'settings'],
+  config:   ['help', 'settings', 'rgpd'],
 };
 
 function goToTab(tab, hash) {
@@ -39,12 +39,20 @@ function syncNavTabs() {
   $$('#tabs button').forEach(b => {
     const inGroup = b.dataset.group === group;
     b.hidden = !inGroup;
+    if (b.dataset.tab === 'rgpd' && typeof shouldShowRgpdTab === 'function' && !shouldShowRgpdTab()) {
+      b.hidden = true;
+    }
     b.classList.toggle('active', b.dataset.tab === STATE.ui.currentTab);
   });
 }
 
 function render() {
   syncNavTabs();
+  if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
+    STATE.ui.currentTab = 'rgpd';
+  } else if (STATE.ui.currentTab === 'rgpd') {
+    STATE.ui.currentTab = 'week';
+  }
   if (!VALID_TABS.includes(STATE.ui.currentTab)) {
     STATE.ui.currentTab = STATE.ui.currentTab === 'employee' ? 'emp-detail' : 'week';
   }
@@ -67,10 +75,12 @@ function render() {
     case 'pantecotes':     renderPantecotesEditor(content); break;
     case 'settings':       renderSettingsEditor(content); break;
     case 'help':           renderHelpEditor(content); break;
+    case 'rgpd':           if (typeof renderRgpdEditor === 'function') renderRgpdEditor(content); break;
   }
   renderSidebar();
   initFrDateInputs(content);
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  if (typeof applyRgpdGate === 'function') applyRgpdGate();
   if (STATE.ui.settingsScrollHash) {
     const hash = STATE.ui.settingsScrollHash;
     STATE.ui.settingsScrollHash = '';
@@ -79,6 +89,7 @@ function render() {
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
+  if (typeof updateTopbarAppearance === 'function') updateTopbarAppearance();
 }
 
 /* ===========================================================================
@@ -181,7 +192,7 @@ function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
            (c.garde ? ` (${c.gardeLabel})` : '') + contractHint + hint + requestHint + adminReqHint;
   if (pendingReq) title += ' — en attente de validation';
   if (canEdit && (c.special || c.specialRed)) {
-    title += ' · double-clic : modifier les horaires';
+    title += ' · clic droit : modifier les horaires';
   }
   const data = forPrint ? '' : ` data-emp="${emp}" data-date="${iso}" data-shift="${shift}"`;
   return `<td class="${cls.join(' ')}"${data} title="${title}">${inner}</td>`;

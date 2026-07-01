@@ -347,6 +347,12 @@ function migrateState(state) {
   if (!state.ui.weekCellDisplay || !['cross', 'hours'].includes(state.ui.weekCellDisplay)) {
     state.ui.weekCellDisplay = 'cross';
   }
+  if (state.ui.topbarColor != null && state.ui.topbarColor !== '') {
+    state.ui.topbarColor = String(state.ui.topbarColor).trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(state.ui.topbarColor)) state.ui.topbarColor = '';
+  } else {
+    state.ui.topbarColor = '';
+  }
   if (state.ui.currentTab === 'employee') state.ui.currentTab = 'emp-detail';
   if (!state.ui.employeeChartEmps) {
     state.ui.employeeChartEmps = (state.employees || []).slice();

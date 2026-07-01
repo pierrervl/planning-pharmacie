@@ -19,6 +19,7 @@ function markSessionDirty() {
   }
   updateExportButtonState();
   updateCloudButtonState();
+  if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
 }
 
 function markSessionExported() {
@@ -54,10 +55,12 @@ function updateCloudButtonState() {
     syncBtn.classList.toggle('needs-cloud-sync', sessionNeedsCloudSync);
     syncBtn.textContent = '☁ Synchroniser';
     syncBtn.title = staffPull
-      ? 'Récupérer le planning et envoyer vos congés / demandes violettes'
+      ? (sessionNeedsCloudSync
+        ? 'Envoi automatique en cours — clic pour forcer la sync'
+        : 'Sync auto active · clic pour forcer')
       : (sessionNeedsCloudSync
-        ? 'Modifications non enregistrées sur le cloud — cliquez pour synchroniser'
-        : 'Planning à jour sur Supabase');
+        ? 'Envoi automatique en cours — clic pour forcer la sync'
+        : 'Sync auto active (congés/demandes équipe) · clic pour forcer');
   } else {
     syncBtn.classList.add('hidden');
     loginBtn.classList.remove('hidden');
@@ -72,6 +75,102 @@ function updateExportButtonState() {
   btn.title = sessionNeedsExport
     ? 'Exporter JSON — modifications non sauvegardées'
     : `Enregistrer planning_AAAA-MM-JJ_HH-MM.json dans ${JSON_BACKUP_DIR_NAME}/`;
+}
+
+const DEFAULT_TOPBAR_COLOR = '#1a1a1a';
+
+const TOPBAR_COLOR_PRESETS = [
+  { label: 'Noir', color: '#1a1a1a' },
+  { label: 'Vert sapin', color: '#1f5f4a' },
+  { label: 'Bleu nuit', color: '#1e3a5f' },
+  { label: 'Bordeaux', color: '#5c2a2a' },
+  { label: 'Anthracite', color: '#2d3436' },
+];
+
+function normalizeTopbarColor(raw) {
+  const c = String(raw || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(c)) return c.toLowerCase();
+  return '';
+}
+
+function getTopbarColor(state = STATE) {
+  return normalizeTopbarColor(state.ui?.topbarColor) || DEFAULT_TOPBAR_COLOR;
+}
+
+function getAppDisplayTitle(state = STATE) {
+  const local = String(getPharmacyInfo(state).name || '').trim();
+  if (local) return local;
+  if (typeof AUTH !== 'undefined' && AUTH.pharmacy?.name) {
+    const cloud = String(AUTH.pharmacy.name).trim();
+    if (cloud) return cloud;
+  }
+  return 'Planning';
+}
+
+function updateTopbarAppearance() {
+  const topbar = document.querySelector('header.topbar');
+  const titleEl = document.getElementById('app-title');
+  const title = getAppDisplayTitle();
+  if (titleEl) titleEl.textContent = title;
+  document.title = title;
+  const color = getTopbarColor();
+  if (topbar) topbar.style.background = color;
+  const preview = document.getElementById('topbar-preview');
+  const previewTitle = document.getElementById('topbar-preview-title');
+  if (preview) preview.style.background = color;
+  if (previewTitle) previewTitle.textContent = title;
+  document.querySelectorAll('.topbar-color-preset').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.color === color);
+  });
+  const colorInput = document.getElementById('cfg-topbar-color');
+  if (colorInput) colorInput.value = color;
+}
+
+function setTopbarColor(color, { save = true } = {}) {
+  STATE.ui.topbarColor = normalizeTopbarColor(color) || '';
+  if (save) saveState();
+  updateTopbarAppearance();
+  if (save && sessionInitialized) markSessionDirty();
+}
+
+function mountTopbarAppearanceSection(root, options = {}) {
+  const sectionId = options.sectionId || 'cfg-appearance';
+  const color = getTopbarColor();
+  const title = getAppDisplayTitle();
+
+  const card = document.createElement('div');
+  card.className = 'form-card topbar-appearance-card settings-section';
+  card.id = sectionId;
+  card.innerHTML = `
+    <h3>En-tête de l'application</h3>
+    <p class="muted">Le titre du bandeau reprend le <strong>nom de la pharmacie</strong> (ci-dessous, section Pharmacie &amp; employeur). S'il est vide, le nom cloud ou « Planning » s'affiche.</p>
+    <div class="topbar-appearance-preview" id="topbar-preview" style="background:${escapeHtml(color)}">
+      <span id="topbar-preview-title">${escapeHtml(title)}</span>
+    </div>
+    <div class="topbar-appearance-field">
+      <label for="cfg-topbar-color">Couleur du bandeau</label>
+      <div class="topbar-color-row">
+        <input type="color" id="cfg-topbar-color" value="${escapeHtml(color)}" aria-label="Couleur du bandeau">
+        <div class="topbar-color-presets" role="group" aria-label="Couleurs prédéfinies">
+          ${TOPBAR_COLOR_PRESETS.map(p => `
+            <button type="button" class="topbar-color-preset${p.color === color ? ' active' : ''}"
+              data-color="${p.color}" title="${escapeHtml(p.label)}"
+              style="background:${p.color}"></button>`).join('')}
+        </div>
+        <button type="button" class="nav topbar-color-reset" id="cfg-topbar-reset">Par défaut</button>
+      </div>
+    </div>`;
+  root.appendChild(card);
+
+  const colorInput = card.querySelector('#cfg-topbar-color');
+
+  colorInput.oninput = () => setTopbarColor(colorInput.value);
+
+  card.querySelectorAll('.topbar-color-preset').forEach(btn => {
+    btn.onclick = () => setTopbarColor(btn.dataset.color);
+  });
+
+  card.querySelector('#cfg-topbar-reset').onclick = () => setTopbarColor('');
 }
 
 function persistAndRender() {
@@ -784,6 +883,7 @@ function resetAll() {
 function initApp() {
   applyEmployeeTypeColorStyles();
   applyCongeTypeColorStyles();
+  if (typeof setupCloudAutoSave === 'function') setupCloudAutoSave();
   if (typeof applyEmployeeViewRestrictions === 'function' && isAuthenticated()) {
     applyEmployeeViewRestrictions();
   }
@@ -808,13 +908,6 @@ function initApp() {
   $('#btn-export-json').onclick = exportJSON;
   $('#btn-import-json').onclick = () => startImportJSON();
   updateExportButtonState();
-  $('#btn-print').onclick = () => {
-    if (STATE.ui.currentTab === 'week') printWeekPeriod();
-    else if (STATE.ui.currentTab === 'contract') printContractPdf();
-    else if (STATE.ui.currentTab === 'cdi') printCdiPdf();
-    else window.print();
-  };
-  $('#btn-export-png').onclick = exportPNG;
   $('#btn-reset').onclick = resetAll;
 
   // raccourcis clavier : ←/→ pour naviguer dans semaine/mois/année
@@ -831,6 +924,7 @@ function initApp() {
 
   // rendu initial
   render();
+  updateTopbarAppearance();
   sessionInitialized = true;
   setupSessionLifecycle();
 
@@ -853,6 +947,7 @@ async function bootstrapApp() {
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
       if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
       if (typeof render === 'function') render();
+      if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
       if (typeof isAuthenticated === 'function' && isAuthenticated()
         && typeof syncAfterAuth === 'function') {
         void syncAfterAuth();

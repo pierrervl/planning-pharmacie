@@ -24,6 +24,7 @@ function persistContractMetaFromDom() {
     setEmployerInfo(readPartyInfoFromPanel(partyPanel, 'employer', EMPLOYER_INFO_FIELDS));
   }
   saveState();
+  if (typeof updateTopbarAppearance === 'function') updateTopbarAppearance();
 }
 
 function mountContractPartySection(root, options = {}) {
@@ -36,7 +37,7 @@ function mountContractPartySection(root, options = {}) {
   if (options.sectionId) partyCard.id = options.sectionId;
   partyCard.innerHTML = `
     <h3>Pharmacie &amp; employeur</h3>
-    <p class="muted">Ces informations apparaissent dans le bloc « Employeur » des contrats PDF.</p>
+    <p class="muted">Ces informations apparaissent dans le bloc « Employeur » des contrats PDF et comme titre du bandeau en haut de l'application.</p>
     <div class="contract-party-columns" id="${escapeHtml(panelId)}">
       <div class="contract-party-col">
         <h4>Établissement</h4>

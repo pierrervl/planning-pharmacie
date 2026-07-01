@@ -43,7 +43,8 @@ function refreshProfileInBackground(user) {
         AUTH.profile = profile;
         renderAuthBar();
         if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
-        if (typeof render === 'function') render();
+        if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
+        else if (typeof render === 'function') render();
         if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
       }
     })
@@ -651,7 +652,8 @@ async function initAuth() {
       notifyAuthChange();
       renderAuthBar();
       if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
-      if (typeof render === 'function') render();
+      if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
+      else if (typeof render === 'function') render();
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
     });
     await refreshAuthSession();
@@ -928,6 +930,8 @@ function renderAuthBar() {
       <strong>${escapeHtml(getAuthDisplayName())}</strong>
       <span class="auth-role-badge ${roleCls}">${roleLabel}</span>${empLink}
       ${AUTH.pharmacy ? `<span class="auth-pharmacy-name">· ${escapeHtml(AUTH.pharmacy.name)}</span>` : ''}
+      ${typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()
+        ? '<span class="auth-rgpd-badge">RGPD à valider</span>' : ''}
     </span>
     <span class="auth-bar-actions">
       ${AUTH.memberships.length > 1 ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
@@ -976,6 +980,9 @@ function applyEmployeeViewRestrictions() {
   STATE.ui.filtersEmp = STATE.employees.slice();
 
   const allowedTabs = ['week', 'conges', 'help'];
+  if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
+    allowedTabs.push('rgpd');
+  }
   const allowedGroups = ['planning', 'equipe', 'config'];
 
   document.querySelectorAll('#nav-groups button').forEach(btn => {

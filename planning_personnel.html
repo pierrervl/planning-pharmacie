@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning Personnel — Gestion par patterns versionnés</title>
-<link rel="stylesheet" href="css/planning.css?v=20260705">
+<title>Planning pharmacie</title>
+<link rel="stylesheet" href="css/planning.css?v=20260713">
 </head>
 <body>
 <div class="app">
 
   <header class="topbar">
-    <h1>Planning Personnel <span class="sub">— gestion par patterns versionnés</span></h1>
+    <h1 id="app-title">Planning</h1>
     <div class="topbtns">
       <div class="topbtns-primary">
         <button id="btn-cloud-login" type="button" class="topbtn-cloud hidden" title="Connexion Supabase">☁ Connexion cloud</button>
@@ -21,8 +21,6 @@
         <button id="btn-import-json" class="topbtn-compact" title="Importer la sauvegarde la plus récente depuis sauvegardes/">⬆ JSON</button>
         <input type="file" id="file-import" accept="application/json,.json" class="hidden">
         <input type="file" id="folder-import" webkitdirectory multiple class="hidden">
-        <button id="btn-print" class="topbtn-compact" title="Imprimer la vue courante">🖨 Impr.</button>
-        <button id="btn-export-png" class="topbtn-compact" title="Exporter la vue en image PNG">🖼 PNG</button>
         <button id="btn-reset" class="topbtn-compact topbtn-danger" title="Réinitialiser toutes les données">↺</button>
       </div>
     </div>
@@ -51,6 +49,7 @@
       <button type="button" data-tab="gardes" data-group="journees">🏥 Jours de garde</button>
       <button type="button" data-tab="pantecotes" data-group="journees">🤝 Journées de solidarité</button>
       <button type="button" data-tab="help" data-group="config">❓ Aide</button>
+      <button type="button" data-tab="rgpd" data-group="config">🔒 RGPD</button>
       <button type="button" data-tab="settings" data-group="config">⚙ Paramètres</button>
     </nav>
   </div>
@@ -65,11 +64,11 @@
 <!-- Supabase + auth cloud -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/00-config.js?v=20260618"></script>
-<script src="js/00-auth.js?v=20260704"></script>
-<script src="js/00-sync.js?v=20260701"></script>
+<script src="js/00-auth.js?v=20260713"></script>
+<script src="js/00-sync.js?v=20260710"></script>
 <!-- Ordre de chargement important (dépendances globales) -->
 <script src="js/02-dates.js?v=20260626"></script>
-<script src="js/03-conges.js?v=20260626"></script>
+<script src="js/03-conges.js?v=20260709"></script>
 <script src="js/04-engine.js?v=20260702"></script>
 <script src="js/03-feries.js?v=20260626"></script>
 <script src="js/03-gardes.js?v=20260626"></script>
@@ -77,12 +76,13 @@
 <script src="js/03-employees.js?v=20260626"></script>
 <script src="js/03-cdi.js?v=20260626"></script>
 <script src="js/01-state.js?v=20260704"></script>
-<script src="js/05-views.js?v=20260704"></script>
-<script src="js/06-editors.js?v=20260704b"></script>
-<script src="js/08-contract.js?v=20260627"></script>
+<script src="js/05-views.js?v=20260713"></script>
+<script src="js/06-editors.js?v=20260710"></script>
+<script src="js/08-contract.js?v=20260707"></script>
 <script src="js/09-cdi.js?v=20260627"></script>
 <script src="js/10-planning-requests.js?v=20260629"></script>
-<script src="js/11-help.js?v=20260705"></script>
-<script src="js/07-app.js?v=20260705"></script>
+<script src="js/11-help.js?v=20260710"></script>
+<script src="js/12-rgpd.js?v=20260713"></script>
+<script src="js/07-app.js?v=20260713"></script>
 </body>
 </html>
