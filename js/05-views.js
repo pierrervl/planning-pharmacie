@@ -21,7 +21,7 @@ const TAB_GROUPS = {
 function goToTab(tab, hash) {
   if (VALID_TABS.includes(tab)) STATE.ui.currentTab = tab;
   if (hash) STATE.ui.settingsScrollHash = hash;
-  persistAndRender();
+  persistAndRender({ skipCloud: true });
 }
 
 function groupForTab(tab) {
@@ -46,6 +46,13 @@ function syncNavTabs() {
   });
 }
 
+function applyConfigTabLayout() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const hide = ['help', 'rgpd'].includes(STATE.ui.currentTab);
+  sidebar.style.display = hide ? 'none' : '';
+}
+
 function render() {
   syncNavTabs();
   if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
@@ -53,6 +60,7 @@ function render() {
   } else if (STATE.ui.currentTab === 'rgpd') {
     STATE.ui.currentTab = 'week';
   }
+  if (typeof ensureEmployeeTabAllowed === 'function') ensureEmployeeTabAllowed();
   if (!VALID_TABS.includes(STATE.ui.currentTab)) {
     STATE.ui.currentTab = STATE.ui.currentTab === 'employee' ? 'emp-detail' : 'week';
   }
@@ -81,6 +89,7 @@ function render() {
   initFrDateInputs(content);
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
   if (typeof applyRgpdGate === 'function') applyRgpdGate();
+  applyConfigTabLayout();
   if (STATE.ui.settingsScrollHash) {
     const hash = STATE.ui.settingsScrollHash;
     STATE.ui.settingsScrollHash = '';

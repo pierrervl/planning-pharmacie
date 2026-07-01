@@ -66,6 +66,7 @@ function updateCloudButtonState() {
     loginBtn.classList.remove('hidden');
     loginBtn.textContent = '☁ Connexion cloud';
   }
+  if (typeof updateFeedbackTopbarButton === 'function') void updateFeedbackTopbarButton();
 }
 
 function updateExportButtonState() {
@@ -173,10 +174,21 @@ function mountTopbarAppearanceSection(root, options = {}) {
   card.querySelector('#cfg-topbar-reset').onclick = () => setTopbarColor('');
 }
 
-function persistAndRender() {
+function persistAndRender({ skipCloud = false } = {}) {
   saveState();
-  if (sessionInitialized) markSessionDirty();
+  if (sessionInitialized && !skipCloud) markSessionDirty();
   render();
+}
+
+function firstTabInGroupForUser(groupKey) {
+  const tabs = TAB_GROUPS[groupKey];
+  if (!tabs?.length) return 'week';
+  if (typeof isStaff === 'function' && isStaff() && typeof getStaffAllowedTabs === 'function') {
+    const allowed = getStaffAllowedTabs();
+    const match = tabs.find(t => allowed.includes(t));
+    if (match) return match;
+  }
+  return tabs[0];
 }
 
 function showPlanningImportDialog({ title, message, onChoose }) {
@@ -892,15 +904,17 @@ function initApp() {
       const tabs = TAB_GROUPS[b.dataset.group];
       if (!tabs) return;
       if (!tabs.includes(STATE.ui.currentTab)) {
-        STATE.ui.currentTab = tabs[0];
+        STATE.ui.currentTab = typeof firstTabInGroupForUser === 'function'
+          ? firstTabInGroupForUser(b.dataset.group)
+          : tabs[0];
       }
-      persistAndRender();
+      persistAndRender({ skipCloud: true });
     };
   });
   $$('#tabs button').forEach(b => {
     b.onclick = () => {
       STATE.ui.currentTab = b.dataset.tab;
-      persistAndRender();
+      persistAndRender({ skipCloud: true });
     };
   });
 
@@ -944,6 +958,7 @@ function initApp() {
 async function bootstrapApp() {
   initApp();
   if (typeof bindCloudLoginButtons === 'function') bindCloudLoginButtons();
+  if (typeof bindFeedbackButton === 'function') bindFeedbackButton();
   if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
   if (typeof initAuth === 'function') {
     void initAuth().then(() => {
@@ -953,6 +968,7 @@ async function bootstrapApp() {
       if (typeof render === 'function') render();
       if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
       if (typeof showWelcomeOverlayIfNeeded === 'function') showWelcomeOverlayIfNeeded();
+      if (typeof updateFeedbackTabVisibility === 'function') updateFeedbackTabVisibility();
       if (typeof isAuthenticated === 'function' && isAuthenticated()
         && typeof syncAfterAuth === 'function') {
         void syncAfterAuth();

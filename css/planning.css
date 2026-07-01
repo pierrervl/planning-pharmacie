@@ -175,6 +175,35 @@ header.topbar button.topbtn-cloud.topbtn-sync:hover {
 header.topbar button.topbtn-cloud.topbtn-sync.needs-cloud-sync:hover {
   background: #3f2826;
 }
+
+header.topbar button.topbtn-feedback {
+  min-width: 2.25rem;
+  padding-left: 10px;
+  padding-right: 10px;
+  position: relative;
+}
+
+header.topbar button.topbtn-feedback.feedback-owner {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+header.topbar button.topbtn-feedback.has-feedback-open::after {
+  content: attr(data-badge);
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 header.topbar button.needs-export {
   background: rgba(200, 82, 63, 0.35);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
@@ -4746,4 +4775,168 @@ body.rgpd-locked .app {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
     transform: translateY(-1px);
   }
+}
+
+/* Suggestions d'amélioration ---------------------------------------------- */
+
+.feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.feedback-field input,
+.feedback-field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font: inherit;
+  resize: vertical;
+}
+
+.feedback-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedback-item {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  background: var(--bg-soft);
+}
+
+.feedback-item--open {
+  border-left: 3px solid var(--accent);
+}
+
+.feedback-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.feedback-item-title {
+  font-size: 14px;
+}
+
+.feedback-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.feedback-status-badge.status-open {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-panel));
+  color: var(--accent);
+}
+
+.feedback-status-badge.status-done {
+  background: color-mix(in srgb, var(--ok) 20%, var(--bg-panel));
+  color: var(--ok);
+}
+
+.feedback-item-meta {
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.feedback-item-body {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.feedback-item-actions {
+  margin-top: 10px;
+}
+
+.feedback-status-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+}
+
+.feedback-lists {
+  margin-top: 16px;
+}
+
+.feedback-footnote {
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.feedback-overlay {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 11500;
+  align-items: flex-start;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.feedback-overlay.is-visible {
+  opacity: 1;
+}
+
+.feedback-overlay-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--r) + 2px);
+  width: min(640px, 100%);
+  max-height: min(90vh, 820px);
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.feedback-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.feedback-overlay-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.feedback-overlay-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-soft);
+  padding: 4px 8px;
+}
+
+.feedback-overlay-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.feedback-overlay-body .feedback-lists {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.feedback-overlay-body .feedback-inbox-card {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
 }

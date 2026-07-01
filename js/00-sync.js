@@ -66,14 +66,17 @@ function collectStaffPendingRequests(state = STATE) {
 
 function mergeCloudStateIntoLocal(cloudData, { staffMerge = false } = {}) {
   if (!cloudData || typeof cloudData !== 'object') return false;
-  const localUi = STATE.ui;
+  const localUi = { ...STATE.ui };
   const localStaffConges = staffMerge ? collectStaffConges() : [];
   const localStaffRequests = staffMerge ? collectStaffPendingRequests() : [];
 
   suppressDirtyTracking = true;
-  STATE = cloudData;
+  const cloudCopy = JSON.parse(JSON.stringify(cloudData));
+  delete cloudCopy.ui;
+  STATE = cloudCopy;
   migrateState(STATE);
-  STATE.ui = { ...buildDefaultState().ui, ...localUi, ...(cloudData.ui || {}) };
+  /* L'UI (onglet actif, filtres locaux…) reste toujours celle du navigateur */
+  STATE.ui = { ...buildDefaultState().ui, ...localUi };
 
   if (staffMerge) {
     STATE.conges = mergeRecordsById(STATE.conges || [], localStaffConges);

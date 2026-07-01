@@ -6,4 +6,8 @@
 window.SUPABASE_CONFIG = {
   url: 'https://jzlkqizzgmnlmaagijrv.supabase.co',
   anonKey: 'VOTRE_CLE_ANON_ICI',
+  /* E-mails autorisés à lire toutes les suggestions (propriétaire de l'app).
+     Doit aussi être configuré côté Supabase :
+     update app_config set value = '["votre@email.com"]'::jsonb where key = 'feedback_owner_emails'; */
+  feedbackOwnerEmails: ['votre@email.com'],
 };

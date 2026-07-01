@@ -45,6 +45,7 @@ function refreshProfileInBackground(user) {
         if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
         if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
         else if (typeof render === 'function') render();
+        if (typeof updateFeedbackTabVisibility === 'function') updateFeedbackTabVisibility();
         if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
       }
     })
@@ -297,6 +298,22 @@ function isEmployee() {
 
 function isStaff() {
   return isEmployee() || isTeamLeader();
+}
+
+function getStaffAllowedTabs() {
+  const tabs = ['week', 'conges', 'help'];
+  if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
+    tabs.push('rgpd');
+  }
+  return tabs;
+}
+
+function ensureEmployeeTabAllowed() {
+  if (!isStaff()) return;
+  const allowed = getStaffAllowedTabs();
+  if (!allowed.includes(STATE.ui.currentTab)) {
+    STATE.ui.currentTab = allowed.includes('help') ? 'help' : 'week';
+  }
 }
 
 function getAuthRoleLabel() {
@@ -571,6 +588,8 @@ async function signOut() {
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
   renderAuthBar();
   if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+  if (typeof updateFeedbackTabVisibility === 'function') updateFeedbackTabVisibility();
+  if (typeof render === 'function') render();
 }
 
 async function updateProfile(updates) {
@@ -654,6 +673,7 @@ async function initAuth() {
       if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
       if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
       else if (typeof render === 'function') render();
+      if (typeof updateFeedbackTabVisibility === 'function') updateFeedbackTabVisibility();
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
     });
     await refreshAuthSession();
@@ -979,10 +999,7 @@ function applyEmployeeViewRestrictions() {
 
   STATE.ui.filtersEmp = STATE.employees.slice();
 
-  const allowedTabs = ['week', 'conges', 'help'];
-  if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
-    allowedTabs.push('rgpd');
-  }
+  const allowedTabs = getStaffAllowedTabs();
   const allowedGroups = ['planning', 'equipe', 'config'];
 
   document.querySelectorAll('#nav-groups button').forEach(btn => {
@@ -991,10 +1008,6 @@ function applyEmployeeViewRestrictions() {
   document.querySelectorAll('#tabs button').forEach(btn => {
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
-
-  if (!allowedTabs.includes(STATE.ui.currentTab)) {
-    STATE.ui.currentTab = 'week';
-  }
 
   const resetBtn = document.getElementById('btn-reset');
   if (resetBtn) resetBtn.style.display = 'none';
