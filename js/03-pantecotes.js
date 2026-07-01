@@ -1,5 +1,17 @@
-/* Pantecotes — éditions annuelles et heures de récupération */
+/* Journées de solidarité — éditions annuelles et heures de récupération */
 'use strict';
+
+const SOLIDARITE_LABEL = 'Journée de solidarité';
+const SOLIDARITE_LABELS = 'Journées de solidarité';
+
+function solidariteDefaultLabel(year) {
+  return `${SOLIDARITE_LABEL} ${year}`;
+}
+
+function migrateSolidariteLabel(label) {
+  return String(label || '')
+    .replace(/^Pantecotes?\s/i, `${SOLIDARITE_LABEL} `);
+}
 
 function makePantecoteId() {
   return 'pt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -12,7 +24,7 @@ function normalizePantecote(raw) {
   const start = raw.start || null;
   const end = raw.end || raw.start || null;
   if (start && end && end < start) return null;
-  const label = String(raw.label || `Pantecote ${year}`).trim() || `Pantecote ${year}`;
+  const label = migrateSolidariteLabel(String(raw.label || solidariteDefaultLabel(year)).trim() || solidariteDefaultLabel(year));
   return {
     id: raw.id || makePantecoteId(),
     year,
@@ -28,7 +40,7 @@ function defaultPantecotes() {
     year,
     start: null,
     end: null,
-    label: `Pantecote ${year}`,
+    label: solidariteDefaultLabel(year),
   }));
 }
 
@@ -186,14 +198,14 @@ function addPantecote(year, startIso, endIso, label, state = STATE) {
     return { ok: false, error: 'Année invalide.' };
   }
   if (state.pantecotes.some(p => p.year === y)) {
-    return { ok: false, error: `Une Pantecote ${y} existe déjà.` };
+    return { ok: false, error: `Une ${SOLIDARITE_LABEL.toLowerCase()} ${y} existe déjà.` };
   }
   const entry = normalizePantecote({
     id: makePantecoteId(),
     year: y,
     start: startIso || null,
     end: endIso || startIso || null,
-    label: label || `Pantecote ${y}`,
+    label: label || solidariteDefaultLabel(y),
   });
   if (!entry) return { ok: false, error: 'Édition invalide.' };
   state.pantecotes.push(entry);
@@ -206,7 +218,7 @@ function updatePantecote(id, { start, end, label }, state = STATE) {
   if (!p) return { ok: false, error: 'Édition introuvable.' };
   if (start !== undefined) p.start = start || null;
   if (end !== undefined) p.end = end || p.start || null;
-  if (label !== undefined) p.label = String(label || `Pantecote ${p.year}`).trim() || `Pantecote ${p.year}`;
+  if (label !== undefined) p.label = migrateSolidariteLabel(String(label || solidariteDefaultLabel(p.year)).trim() || solidariteDefaultLabel(p.year));
   if (p.start && p.end && p.end < p.start) {
     return { ok: false, error: 'La date de fin doit être postérieure ou égale au début.' };
   }

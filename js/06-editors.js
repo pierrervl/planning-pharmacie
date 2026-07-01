@@ -16,28 +16,50 @@ function renderPatternsEditor(root) {
   const defaultStart = STATE.ui.patternImportStart || toISO(getPatternAnchorMonday());
   const defaultEnd = STATE.ui.patternImportEnd || INITIAL_DATA.planningEnd;
   const anchorSummary = getPatternAnchorSummary();
+  const cycleWeeks = getPatternCycleWeekCount();
+  const cycleLabel = getPatternCycleWeeksLabel();
+  const cycleWeekOptions = Array.from(
+    { length: PATTERN_CYCLE_WEEKS_MAX - PATTERN_CYCLE_WEEKS_MIN + 1 },
+    (_, i) => {
+      const n = i + PATTERN_CYCLE_WEEKS_MIN;
+      return `<option value="${n}"${n === cycleWeeks ? ' selected' : ''}>${n} semaine${n > 1 ? 's' : ''}</option>`;
+    }
+  ).join('');
 
   const ctrl = document.createElement('div');
   ctrl.className = 'controls pattern-controls';
   ctrl.innerHTML = `
-    <div class="label">Modèle de cycle — 6 semaines</div>
+    <div class="label">Modèle de cycle — ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
     <div class="help-text">
-      Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A, 6 semaines-types
-      (<b>S1 → S2 → S3 → S1' → S2' → S3'</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
+      Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A,
+      <b>${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}-types</b>
+      (<b>${cycleLabel}</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
       (horaires demandés sur orange/rouge) · double-clic sur orange/rouge = modifier les horaires.
       Les cases affichent la durée calculée (ex. 5,5).
       Tous les salariés sont listés ici (filtres latéraux ignorés).
       L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
     <div class="spacer"></div>
+    <label>Durée du cycle :
+      <select id="pat-cycle-weeks">${cycleWeekOptions}</select>
+    </label>
     <label>Affichage :
       <select id="pat-layout">
-        <option value="unified" ${layout === 'unified' ? 'selected' : ''}>1 tableau — 6 semaines</option>
-        <option value="split" ${layout === 'split' ? 'selected' : ''}>6 tableaux — 1 par semaine</option>
+        <option value="unified" ${layout === 'unified' ? 'selected' : ''}>1 tableau — ${cycleWeeks} semaines</option>
+        <option value="split" ${layout === 'split' ? 'selected' : ''}>${cycleWeeks} tableaux — 1 par semaine</option>
       </select>
     </label>
   `;
   root.appendChild(ctrl);
+
+  ctrl.querySelector('#pat-cycle-weeks').onchange = (e) => {
+    const n = parseInt(e.target.value, 10);
+    if (!Number.isFinite(n)) return;
+    setPatternCycleWeekCount(n);
+    saveState();
+    toast(`Cycle modifié : ${n} semaine${n > 1 ? 's' : ''} (${getPatternCycleWeeksLabel()}).`);
+    persistAndRender();
+  };
 
   mountPatternShiftDefaultsPanel(root);
   mountPatternAnchorPanel(root);
@@ -47,7 +69,7 @@ function renderPatternsEditor(root) {
   importPanel.innerHTML = `
     <h3>Importer le cycle vers le planning</h3>
     <p class="muted">
-      Recopie les 6 semaines-types (S1…S3') sur une période calendaire, pour tous les salariés,
+      Recopie les ${getPatternCycleWeekCount()} semaines-types (${getPatternCycleWeeksLabel()}) sur une période calendaire, pour tous les salariés,
       selon l'ancrage défini ci-dessus. Les cellules existantes peuvent être écrasées ou conservées.
     </p>
     <div class="form-grid pattern-import-grid">
@@ -224,10 +246,11 @@ function mountPatternShiftDefaultsPanel(root) {
 }
 
 function mountPatternCopyPanel(root, patternEmps) {
-  const src = PATTERN_CYCLE_WEEKS.includes(STATE.ui.patternCopySrc) ? STATE.ui.patternCopySrc : PATTERN_CYCLE_WEEKS[0];
-  const dst = PATTERN_CYCLE_WEEKS.includes(STATE.ui.patternCopyDst) ? STATE.ui.patternCopyDst : PATTERN_CYCLE_WEEKS[1];
+  const weekNames = getPatternCycleWeeks();
+  const src = weekNames.includes(STATE.ui.patternCopySrc) ? STATE.ui.patternCopySrc : weekNames[0];
+  const dst = weekNames.includes(STATE.ui.patternCopyDst) ? STATE.ui.patternCopyDst : (weekNames[1] || weekNames[0]);
 
-  const weekOptions = (selected) => PATTERN_CYCLE_WEEKS
+  const weekOptions = (selected) => weekNames
     .map((w) => `<option value="${patternEscapeAttr(w)}" ${w === selected ? 'selected' : ''}>${escapeHtml(w)}</option>`)
     .join('');
 
@@ -494,11 +517,11 @@ function buildPatternTableBody(tbody, visibleEmps, weekNames, { showMonthCol = f
       });
     });
     if (showMonthCol) {
-      const monthH = weekNames.length === PATTERN_CYCLE_WEEKS.length
+      const monthH = weekNames.length === getPatternCycleWeekCount()
         ? computePatternMonthlyHours(emp)
         : computePatternWeekMonthlyProjection(emp, weekNames[0]);
-      const monthTitle = weekNames.length === PATTERN_CYCLE_WEEKS.length
-        ? `${emp} — moyenne mensuelle (cycle 6 sem.) — ${formatContractHours(monthH)} h`
+      const monthTitle = weekNames.length === getPatternCycleWeekCount()
+        ? `${emp} — moyenne mensuelle (cycle ${getPatternCycleWeekCount()} sem.) — ${formatContractHours(monthH)} h`
         : `${emp} — projection mensuelle (sem. ${weekNames[0]}) — ${formatContractHours(monthH)} h`;
       tr.innerHTML += renderHoursTotalCell(monthH, {
         extraClass: 'hours-col-month',
@@ -550,16 +573,17 @@ function attachPatternCellHandlers(container) {
 }
 
 function renderPatternsUnified(root, visibleEmps) {
+  const weekNames = getPatternCycleWeeks();
   const wrap = document.createElement('div');
   wrap.className = 'planning-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'planning';
 
   const thead = document.createElement('thead');
-  buildPatternTableHeader(thead, PATTERN_CYCLE_WEEKS, 3, { showMonthCol: true });
+  buildPatternTableHeader(thead, weekNames, 3, { showMonthCol: true });
 
   const tbody = document.createElement('tbody');
-  buildPatternTableBody(tbody, visibleEmps, PATTERN_CYCLE_WEEKS, { showMonthCol: true });
+  buildPatternTableBody(tbody, visibleEmps, weekNames, { showMonthCol: true });
 
   tbl.appendChild(thead);
   tbl.appendChild(tbody);
@@ -572,7 +596,7 @@ function renderPatternsSplit(root, visibleEmps) {
   const wrap = document.createElement('div');
   wrap.className = 'patterns-split';
 
-  for (const pname of PATTERN_CYCLE_WEEKS) {
+  for (const pname of getPatternCycleWeeks()) {
     const card = document.createElement('div');
     card.className = 'form-card pattern-week-card';
     card.innerHTML = `<h3>Semaine-type <span class="pname">${pname}</span></h3>`;
@@ -691,7 +715,7 @@ function mountPatternAnchorPanel(root, options = {}) {
       </label>
       <label>Semaine du cycle
         <select id="${idPrefix}-pattern">
-          ${PATTERN_CYCLE_WEEKS.map(p =>
+          ${getPatternCycleWeeks().map(p =>
             `<option value="${patternEscapeAttr(p)}"${p === defaultAnchorPattern ? ' selected' : ''}>${p}</option>`
           ).join('')}
         </select>
@@ -799,7 +823,7 @@ function renderAssignmentsEditor(root) {
         <input type="text" class="fr-date" data-fld="start" data-emp="${emp}" data-iso="${todayISO()}" value="${frFormatNumeric(todayISO())}">
         <input type="text" class="fr-date" data-fld="end" data-emp="${emp}" placeholder="jj/mm/aaaa (fin libre)">
         <select data-fld="pattern" data-emp="${emp}">
-          ${PATTERN_CYCLE_WEEKS.map(p => `<option value="${p}">${p} (début de cycle)</option>`).join('')}
+          ${getPatternCycleWeeks().map(p => `<option value="${p}">${p} (début de cycle)</option>`).join('')}
         </select>
         <button data-act="add" data-emp="${emp}">+ Ajouter</button>
       </div>
@@ -1418,7 +1442,7 @@ function renderPantecotesEditor(root) {
   const ctrl = document.createElement('div');
   ctrl.className = 'controls';
   ctrl.innerHTML = `
-    <div class="label">Pantecotes</div>
+    <div class="label">${SOLIDARITE_LABELS}</div>
     <div class="help-text">
       Définissez les dates de chaque édition, saisissez ou ajustez les heures travaillées,
       puis les heures récupérées en travail ou en formation.
@@ -1435,7 +1459,7 @@ function renderPantecotesEditor(root) {
       : new Date().getFullYear();
     const today = todayISO();
     addCard.innerHTML = `
-      <h3>Ajouter une édition Pantecote</h3>
+      <h3>Ajouter une ${SOLIDARITE_LABEL.toLowerCase()}</h3>
       <div class="form-grid">
         <div class="field">
           <label>Année</label>
@@ -1451,7 +1475,7 @@ function renderPantecotesEditor(root) {
         </div>
         <div class="field">
           <label>Libellé</label>
-          <input type="text" id="pt-add-label" placeholder="ex : Pantecote 2027">
+          <input type="text" id="pt-add-label" placeholder="ex : ${SOLIDARITE_LABEL} 2027">
         </div>
         <button class="primary" id="pt-add-btn">+ Ajouter</button>
       </div>
@@ -1463,13 +1487,13 @@ function renderPantecotesEditor(root) {
       const start = readFrDateInput($('#pt-add-start'));
       const end = readFrDateInput($('#pt-add-end'));
       const label = ($('#pt-add-label').value || '').trim();
-      const r = addPantecote(year, start, end, label || `Pantecote ${year}`);
+      const r = addPantecote(year, start, end, label || solidariteDefaultLabel(year));
       if (!r.ok) {
         toast(r.error, true);
         return;
       }
       persistAndRender();
-      toast(`Pantecote ${year} ajoutée`);
+      toast(`${SOLIDARITE_LABEL} ${year} ajoutée`);
     };
   }
 
@@ -1477,7 +1501,7 @@ function renderPantecotesEditor(root) {
   datesCard.className = 'form-card';
   let datesHtml = `<h3>Éditions (${pantecotes.length})</h3>`;
   if (!pantecotes.length) {
-    datesHtml += `<p class="muted">Aucune édition Pantecote. Ajoutez-en une ci-dessus.</p>`;
+    datesHtml += `<p class="muted">Aucune ${SOLIDARITE_LABEL.toLowerCase()}. Ajoutez-en une ci-dessus.</p>`;
   } else {
     datesHtml += `<table class="list pantecotes-editions-table"><thead><tr>
       <th>Édition</th><th>Du</th><th>Au</th><th>Jours</th>${editable ? '<th></th>' : ''}
@@ -1521,7 +1545,7 @@ function renderPantecotesEditor(root) {
       });
       if (!ok) return;
       persistAndRender();
-      toast('Dates Pantecote enregistrées');
+      toast('Dates enregistrées');
     };
 
     datesCard.querySelectorAll('[data-pt-rm]').forEach(btn => {
@@ -2352,9 +2376,9 @@ function renderSettingsEditor(root) {
         <span class="settings-related-desc">Périodes de garde affichées dans le planning</span>
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="pantecotes">
-        <span class="settings-related-icon">🎪</span>
-        <span class="settings-related-label">Pantecotes</span>
-        <span class="settings-related-desc">Heures travaillées et récupérées par édition</span>
+        <span class="settings-related-icon">🤝</span>
+        <span class="settings-related-label">${SOLIDARITE_LABELS}</span>
+        <span class="settings-related-desc">Heures travaillées et récupérées par journée de solidarité</span>
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="contract">
         <span class="settings-related-icon">📄</span>

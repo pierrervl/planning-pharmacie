@@ -17,10 +17,88 @@
    ========================================================================= */
 
 const STORAGE_KEY = 'planning_personnel_v3';
+const ACTIVE_PHARMACY_STORAGE_KEY = 'planning_active_pharmacy_id';
 
-/* 6 semaines du cycle de pattern (S1 … S3') */
-const PATTERN_CYCLE_WEEKS = ['S1', 'S2', 'S3', "S1'", "S2'", "S3'"];
-const PATTERN_CYCLE_DAYS = PATTERN_CYCLE_WEEKS.length * 7;
+function getStorageKey(pharmacyId) {
+  if (pharmacyId) return `${STORAGE_KEY}_${pharmacyId}`;
+  return STORAGE_KEY;
+}
+
+function getActivePharmacyIdFromStorage() {
+  try {
+    return localStorage.getItem(ACTIVE_PHARMACY_STORAGE_KEY) || null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function setActivePharmacyIdInStorage(pharmacyId) {
+  try {
+    if (pharmacyId) localStorage.setItem(ACTIVE_PHARMACY_STORAGE_KEY, pharmacyId);
+    else localStorage.removeItem(ACTIVE_PHARMACY_STORAGE_KEY);
+  } catch (_e) { /* ignore */ }
+}
+
+function switchPharmacyState(pharmacyId) {
+  const currentId = typeof getCurrentPharmacyId === 'function' ? getCurrentPharmacyId() : null;
+  if (currentId && currentId !== pharmacyId) {
+    saveState(currentId);
+  }
+  STATE = loadState(pharmacyId);
+  if (typeof persistAndRender === 'function') persistAndRender();
+  else if (typeof render === 'function') render();
+}
+
+/* Cycle de pattern configurable (1 à 10 semaines) */
+const LEGACY_PATTERN_CYCLE_WEEKS = ['S1', 'S2', 'S3', "S1'", "S2'", "S3'"];
+const DEFAULT_PATTERN_CYCLE_WEEKS = 6;
+const PATTERN_CYCLE_WEEKS_MIN = 1;
+const PATTERN_CYCLE_WEEKS_MAX = 10;
+
+function getPatternCycleWeekCount(state = STATE) {
+  const n = state?.patternCycleWeeks;
+  if (Number.isFinite(n) && n >= PATTERN_CYCLE_WEEKS_MIN && n <= PATTERN_CYCLE_WEEKS_MAX) {
+    return Math.round(n);
+  }
+  return DEFAULT_PATTERN_CYCLE_WEEKS;
+}
+
+function getPatternCycleWeeks(state = STATE) {
+  const n = getPatternCycleWeekCount(state);
+  if (n === DEFAULT_PATTERN_CYCLE_WEEKS) return LEGACY_PATTERN_CYCLE_WEEKS.slice();
+  const out = [];
+  for (let i = 1; i <= n; i++) out.push(`S${i}`);
+  return out;
+}
+
+function getPatternCycleDays(state = STATE) {
+  return getPatternCycleWeekCount(state) * 7;
+}
+
+function getPatternCycleWeeksLabel(state = STATE) {
+  return getPatternCycleWeeks(state).join(' → ');
+}
+
+function ensurePatternWeeksForEmployee(empName, state = STATE) {
+  if (!state.patterns[empName]) state.patterns[empName] = {};
+  for (const pname of getPatternCycleWeeks(state)) {
+    if (!state.patterns[empName][pname]) {
+      state.patterns[empName][pname] = makeEmptyPattern();
+    } else {
+      state.patterns[empName][pname] = normalizePatternWeek(state.patterns[empName][pname], state);
+    }
+  }
+}
+
+function setPatternCycleWeekCount(n, state = STATE) {
+  state.patternCycleWeeks = Math.max(
+    PATTERN_CYCLE_WEEKS_MIN,
+    Math.min(PATTERN_CYCLE_WEEKS_MAX, Math.round(Number(n) || DEFAULT_PATTERN_CYCLE_WEEKS))
+  );
+  for (const emp of state.employees || []) {
+    ensurePatternWeeksForEmployee(emp, state);
+  }
+}
 
 /* Données initiales extraites de l'Excel d'origine ------------------------ */
 const INITIAL_DATA = {
@@ -130,18 +208,16 @@ function normalizePatternWeek(pat, state) {
   return out;
 }
 
-/* Construit l'état par défaut ------------------------------------------- */
+/* Construit l'état par défaut (vierge — sans employés, patterns ni planning) */
 function buildDefaultState() {
+  const anchorMonday = toISO(mondayOf(fromISO(todayISO())));
   const state = {
-    employees: INITIAL_DATA.employees.slice(),
-    /* patterns : { empName: { S1: [7 jours], S2: …, S3' } }             */
+    employees: [],
     patterns: {},
-    /* affectations : { empName: [{ start, end|null, pattern }, ...] }  */
     affectations: {},
-    /* planning réel : { empName: { 'YYYY-MM-DD': { matin, aprem } } }   */
-    /* Valeurs : 1 = travail, 0 = repos, null = non défini               */
     planning: {},
-    patternAnchorDate: INITIAL_DATA.patternAnchorDate,
+    patternAnchorDate: anchorMonday,
+    patternCycleWeeks: DEFAULT_PATTERN_CYCLE_WEEKS,
     patternShiftDefaults: {
       matin: { start: '08:00', end: '12:30' },
       aprem: { start: '14:00', end: '19:30' },
@@ -160,7 +236,7 @@ function buildDefaultState() {
     feriesRemove: [],  // dates ISO retirées du calcul auto
     /* jours de garde pharmacie : [{ id, start, end, label }]            */
     gardes:       [],
-    /* éditions Pantecote : [{ id, year, start, end, label }]            */
+    /* journées de solidarité : [{ id, year, start, end, label }]            */
     pantecotes:   [],
     /* heures récupérées : { pantecoteId: { emp: { work, formation } } } */
     pantecoteRecovery: {},
@@ -184,14 +260,14 @@ function buildDefaultState() {
     ui: {
       currentTab:     'week',
       currentDate:    todayISO(),
-      monthEmp:       INITIAL_DATA.employees[0],
-      yearEmp:        INITIAL_DATA.employees[0],
-      employeeView:   INITIAL_DATA.employees[0],
+      monthEmp:       null,
+      yearEmp:        null,
+      employeeView:   null,
       employeePeriodStart: toISO(new Date(new Date().getFullYear(), 0, 1, 12)),
       employeePeriodEnd:   todayISO(),
-      employeeChartEmps:   INITIAL_DATA.employees.slice(),
+      employeeChartEmps:   [],
       yearShown:      new Date().getFullYear(),
-      filtersEmp:     INITIAL_DATA.employees.slice(),
+      filtersEmp:     [],
       filterShift:   'both',
       filterTypes:   ['work','rest','empty','CP','RTT','Maladie','Formation','Sans solde','Récupération'],
       patternLayout: 'unified', /* 'unified' | 'split' */
@@ -200,38 +276,6 @@ function buildDefaultState() {
       weekCellDisplay: 'cross', /* 'cross' | 'hours' */
     }
   };
-
-  // initialise patterns + affectations pour chaque salarié actif
-  for (const emp of state.employees) {
-    const raw = INITIAL_DATA.rawPatterns[emp];
-    if (raw) {
-      state.patterns[emp] = {};
-      for (const pname of PATTERN_CYCLE_WEEKS) {
-        state.patterns[emp][pname] = rawToPatternWeek(raw[pname]);
-      }
-      // affectation par défaut = S1 à partir de planningStart, sans fin
-      state.affectations[emp] = [{
-        start: INITIAL_DATA.planningStart,
-        end:   null,
-        pattern: "S1"
-      }];
-    } else {
-      // salarié sans pattern défini : on crée les 6 patterns vides
-      state.patterns[emp] = {};
-      for (const pname of PATTERN_CYCLE_WEEKS) {
-        state.patterns[emp][pname] = makeEmptyPattern();
-      }
-      state.affectations[emp] = []; // pas d'affectation tant que non créée
-    }
-    state.planning[emp] = {};
-  }
-
-  // remplit le planning à partir des affectations par défaut
-  for (const emp of state.employees) {
-    for (const a of (state.affectations[emp] || [])) {
-      applyPatternToPeriod(emp, a.start, a.end, a.pattern, state);
-    }
-  }
 
   ensureEmployeeTypeCatalog(state);
   ensureEmployeeTypes(state);
@@ -251,9 +295,12 @@ function buildDefaultState() {
 /* État global, chargé depuis le localStorage si présent ----------------- */
 let STATE = loadState();
 
-function loadState() {
+function loadState(pharmacyId) {
   try {
-    let raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey(pharmacyId);
+    let raw = localStorage.getItem(key);
+    if (!raw && !pharmacyId) raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw && pharmacyId) raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) raw = localStorage.getItem('planning_personnel_v2');
     if (!raw) raw = localStorage.getItem('planning_personnel_v1');
     if (raw) {
@@ -308,7 +355,7 @@ function migrateState(state) {
     (state.employees || []).includes(e)
   );
   if (!state.patternAnchorDate || state.patternAnchorDate === '2026-04-21') {
-    state.patternAnchorDate = INITIAL_DATA.patternAnchorDate;
+    state.patternAnchorDate = toISO(mondayOf(fromISO(todayISO())));
   }
   ensurePatternShiftDefaults(state);
   ensurePatternShiftDefaultsSaturday(state);
@@ -359,18 +406,14 @@ function migrateState(state) {
   if (state.ui.contractPharmacyName == null) state.ui.contractPharmacyName = '';
   if (!state.ui.employeeDetailsOpen) state.ui.employeeDetailsOpen = [];
 
+  if (!state.patternCycleWeeks) state.patternCycleWeeks = DEFAULT_PATTERN_CYCLE_WEEKS;
+  else setPatternCycleWeekCount(state.patternCycleWeeks, state);
+
   if (!state.affectations) state.affectations = {};
   for (const emp of (state.employees || [])) {
     if (!state.planning[emp]) state.planning[emp] = {};
     if (!state.affectations[emp]) state.affectations[emp] = [];
-    if (!state.patterns[emp]) state.patterns[emp] = {};
-    for (const pname of PATTERN_CYCLE_WEEKS) {
-      if (!state.patterns[emp][pname]) {
-        state.patterns[emp][pname] = makeEmptyPattern();
-      } else {
-        state.patterns[emp][pname] = normalizePatternWeek(state.patterns[emp][pname], state);
-      }
-    }
+    ensurePatternWeeksForEmployee(emp, state);
   }
   // si planning vide mais affectations existent : génère depuis les patterns
   const needsSeed = (state.employees || []).some(emp => {
@@ -386,9 +429,10 @@ function migrateState(state) {
   }
 }
 
-function saveState() {
+function saveState(pharmacyId) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+    const id = pharmacyId || (typeof getCurrentPharmacyId === 'function' ? getCurrentPharmacyId() : null);
+    localStorage.setItem(getStorageKey(id), JSON.stringify(STATE));
   } catch (e) {
     console.error('Échec sauvegarde localStorage', e);
     toast('⚠ Sauvegarde locale impossible (quota ?)', true);
@@ -435,7 +479,7 @@ function addEmployee(name, typeRef) {
 
   STATE.employees.push(n);
   STATE.patterns[n] = {};
-  for (const pname of PATTERN_CYCLE_WEEKS) {
+  for (const pname of getPatternCycleWeeks()) {
     STATE.patterns[n][pname] = makeEmptyPattern();
   }
   STATE.affectations[n] = [];

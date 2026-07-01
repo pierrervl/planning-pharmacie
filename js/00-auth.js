@@ -5,6 +5,9 @@ const AUTH = {
   client: null,
   session: null,
   profile: null,
+  pharmacy: null,
+  membership: null,
+  memberships: [],
   ready: false,
   listeners: [],
 };
@@ -125,6 +128,87 @@ async function loadProfile(userId) {
   return data;
 }
 
+async function loadPharmacyMemberships(userId) {
+  await ensureAuthClient();
+  const { data, error } = await AUTH.client
+    .from('pharmacy_members')
+    .select(`
+      id, role, employee_name, pharmacy_id,
+      pharmacies ( id, name, invite_code )
+    `)
+    .eq('user_id', userId);
+  if (error) throw error;
+  AUTH.memberships = (data || []).map(m => ({
+    id: m.id,
+    role: m.role,
+    employee_name: m.employee_name,
+    pharmacy_id: m.pharmacy_id,
+    pharmacy: m.pharmacies,
+  }));
+  return AUTH.memberships;
+}
+
+async function selectPharmacy(pharmacyId) {
+  const membership = AUTH.memberships.find(m => m.pharmacy_id === pharmacyId);
+  if (!membership) throw new Error('Vous n\'appartenez pas à cette pharmacie.');
+  AUTH.pharmacy = membership.pharmacy;
+  AUTH.membership = membership;
+  setActivePharmacyIdInStorage(pharmacyId);
+  if (typeof switchPharmacyState === 'function') switchPharmacyState(pharmacyId);
+  renderAuthBar();
+  notifyAuthChange();
+  if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
+  if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+  return membership;
+}
+
+async function ensurePharmacySelected() {
+  if (!AUTH.session?.user) return null;
+  if (AUTH.pharmacy && AUTH.membership) return AUTH.membership;
+
+  await loadPharmacyMemberships(AUTH.session.user.id);
+
+  if (AUTH.memberships.length === 0) {
+    return null;
+  }
+
+  const savedId = getActivePharmacyIdFromStorage();
+  const saved = savedId && AUTH.memberships.find(m => m.pharmacy_id === savedId);
+  if (saved) {
+    await selectPharmacy(saved.pharmacy_id);
+    return AUTH.membership;
+  }
+
+  if (AUTH.memberships.length === 1) {
+    await selectPharmacy(AUTH.memberships[0].pharmacy_id);
+    return AUTH.membership;
+  }
+
+  return null;
+}
+
+async function joinPharmacyByInvite(inviteCode) {
+  await ensureAuthClient();
+  const { data, error } = await AUTH.client.rpc('join_pharmacy_by_invite', {
+    p_invite_code: String(inviteCode || '').trim(),
+  });
+  if (error) throw error;
+  await loadPharmacyMemberships(AUTH.session.user.id);
+  await selectPharmacy(data);
+  return data;
+}
+
+async function createPharmacy(name) {
+  await ensureAuthClient();
+  const { data, error } = await AUTH.client.rpc('create_pharmacy', {
+    p_name: String(name || '').trim(),
+  });
+  if (error) throw error;
+  await loadPharmacyMemberships(AUTH.session.user.id);
+  await selectPharmacy(data);
+  return data;
+}
+
 async function ensureUserProfile(user) {
   if (!user) return null;
   AUTH.profile = fallbackProfileFromUser(user);
@@ -186,20 +270,28 @@ async function refreshAuthSession() {
   }
 }
 
+function getCurrentPharmacyId() {
+  return AUTH.pharmacy?.id || null;
+}
+
+function getMembershipRole() {
+  return AUTH.membership?.role || AUTH.profile?.role || null;
+}
+
 function isAuthenticated() {
   return !!AUTH.session?.user;
 }
 
 function isAdmin() {
-  return AUTH.profile?.role === 'admin';
+  return getMembershipRole() === 'admin';
 }
 
 function isTeamLeader() {
-  return AUTH.profile?.role === 'team_leader';
+  return getMembershipRole() === 'team_leader';
 }
 
 function isEmployee() {
-  return AUTH.profile?.role === 'employee';
+  return getMembershipRole() === 'employee';
 }
 
 function isStaff() {
@@ -246,7 +338,7 @@ function employeeNamesMatch(a, b) {
 }
 
 function getLinkedEmployeeName() {
-  const raw = AUTH.profile?.employee_name;
+  const raw = AUTH.membership?.employee_name || AUTH.profile?.employee_name;
   if (!raw) return null;
   const employees = (typeof STATE !== 'undefined' && STATE.employees) ? STATE.employees : [];
   if (employees.includes(raw)) return raw;
@@ -284,20 +376,47 @@ async function signIn(email, password) {
     if (typeof toast === 'function') toast(`Connecté — ${getAuthDisplayName()}`);
     if (data.user) refreshProfileInBackground(data.user);
     if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
-    if (typeof syncAfterAuth === 'function') void syncAfterAuth();
     return data;
   } finally {
     authHandlersPaused = false;
   }
 }
 
-async function signUp({ email, password, fullName, employeeName, role }) {
+async function completeAuthWithPharmacy() {
+  if (!AUTH.session?.user) return { needsPharmacy: false };
+  await loadPharmacyMemberships(AUTH.session.user.id);
+
+  if (AUTH.memberships.length === 0) {
+    return { needsPharmacy: true, action: 'join' };
+  }
+
+  const savedId = getActivePharmacyIdFromStorage();
+  const saved = savedId && AUTH.memberships.find(m => m.pharmacy_id === savedId);
+
+  if (saved) {
+    await selectPharmacy(saved.pharmacy_id);
+    if (typeof syncAfterAuth === 'function') void syncAfterAuth();
+    return { needsPharmacy: false };
+  }
+
+  if (AUTH.memberships.length === 1) {
+    await selectPharmacy(AUTH.memberships[0].pharmacy_id);
+    if (typeof syncAfterAuth === 'function') void syncAfterAuth();
+    return { needsPharmacy: false };
+  }
+
+  return { needsPharmacy: true, action: 'pick' };
+}
+
+async function signUp({ email, password, fullName, employeeName, role, pharmacyName, inviteCode }) {
   authHandlersPaused = true;
   try {
     const client = await ensureAuthClient();
     const meta = { full_name: fullName || '' };
     if (employeeName) meta.employee_name = employeeName;
     if (role === 'admin' || role === 'employee' || role === 'team_leader') meta.role = role;
+    if (pharmacyName) meta.pharmacy_name = pharmacyName;
+    if (inviteCode) meta.invite_code = inviteCode;
 
     const { data, error } = await withTimeout(
       client.auth.signUp({
@@ -324,11 +443,128 @@ async function signUp({ email, password, fullName, employeeName, role }) {
   }
 }
 
+function removePharmacyOverlay() {
+  document.querySelector('.pharmacy-overlay')?.remove();
+}
+
+function showPharmacyPicker() {
+  removePharmacyOverlay();
+  if (!AUTH.memberships.length) {
+    showJoinPharmacyOverlay();
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay pharmacy-overlay';
+  overlay.innerHTML = `
+    <div class="auth-card" role="dialog" aria-labelledby="pharmacy-picker-title">
+      <h2 id="pharmacy-picker-title">Choisir une pharmacie</h2>
+      <p class="auth-sub">Vous appartenez à plusieurs pharmacies. Sélectionnez celle à afficher.</p>
+      <div class="pharmacy-picker-list" id="pharmacy-picker-list"></div>
+      <button type="button" class="auth-skip" id="pharmacy-picker-join">Rejoindre une autre pharmacie…</button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  const list = overlay.querySelector('#pharmacy-picker-list');
+
+  for (const m of AUTH.memberships) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pharmacy-picker-item';
+    btn.innerHTML = `
+      <strong>${escapeHtml(m.pharmacy?.name || 'Pharmacie')}</strong>
+      <span class="muted">${escapeHtml(getRoleLabel(m.role))}</span>`;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await selectPharmacy(m.pharmacy_id);
+        removePharmacyOverlay();
+        if (typeof syncAfterAuth === 'function') await syncAfterAuth();
+        if (typeof toast === 'function') toast(`Pharmacie : ${m.pharmacy?.name || ''}`);
+      } catch (e) {
+        if (typeof toast === 'function') toast(e.message || 'Erreur', true);
+        btn.disabled = false;
+      }
+    };
+    list.appendChild(btn);
+  }
+
+  overlay.querySelector('#pharmacy-picker-join').onclick = () => {
+    removePharmacyOverlay();
+    showJoinPharmacyOverlay();
+  };
+}
+
+function showJoinPharmacyOverlay() {
+  removePharmacyOverlay();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay pharmacy-overlay';
+  overlay.innerHTML = `
+    <div class="auth-card" role="dialog" aria-labelledby="pharmacy-join-title">
+      <button type="button" class="auth-close" id="pharmacy-join-close">✕</button>
+      <h2 id="pharmacy-join-title">Rejoindre une pharmacie</h2>
+      <p class="auth-sub">Entrez le code d'invitation fourni par votre administrateur, ou créez une nouvelle pharmacie.</p>
+      <form class="auth-form" id="pharmacy-join-form">
+        <label>Code d'invitation<input type="text" name="inviteCode" placeholder="Ex. A1B2C3D4" autocomplete="off"></label>
+        <p class="auth-hint">— ou —</p>
+        <label>Créer une nouvelle pharmacie<input type="text" name="pharmacyName" placeholder="Nom de la pharmacie"></label>
+        <p class="auth-error" id="pharmacy-join-error" hidden></p>
+        <button type="submit" class="primary auth-submit">Continuer</button>
+      </form>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#pharmacy-join-close').onclick = removePharmacyOverlay;
+
+  overlay.querySelector('#pharmacy-join-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = overlay.querySelector('#pharmacy-join-error');
+    const submitBtn = form.querySelector('.auth-submit');
+    const fd = new FormData(form);
+    const inviteCode = String(fd.get('inviteCode') || '').trim();
+    const pharmacyName = String(fd.get('pharmacyName') || '').trim();
+    errEl.hidden = true;
+
+    if (!inviteCode && !pharmacyName) {
+      errEl.textContent = 'Entrez un code d\'invitation ou un nom de pharmacie.';
+      errEl.hidden = false;
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'En cours…';
+    try {
+      if (pharmacyName) await createPharmacy(pharmacyName);
+      else await joinPharmacyByInvite(inviteCode);
+      removePharmacyOverlay();
+      if (typeof syncAfterAuth === 'function') await syncAfterAuth();
+      if (typeof toast === 'function') toast(`Pharmacie : ${AUTH.pharmacy?.name || ''}`);
+    } catch (err) {
+      errEl.textContent = authErrorMessage(err);
+      errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Continuer';
+    }
+  };
+}
+
+function getRoleLabel(role) {
+  if (role === 'admin') return 'Administrateur';
+  if (role === 'team_leader') return 'Chef d\'équipe';
+  if (role === 'employee') return 'Employé';
+  return role || '';
+}
+
 async function signOut() {
   if (!AUTH.client) return;
   await AUTH.client.auth.signOut();
   AUTH.session = null;
   AUTH.profile = null;
+  AUTH.pharmacy = null;
+  AUTH.membership = null;
+  AUTH.memberships = [];
   notifyAuthChange();
   document.body.classList.remove('read-only-mode', 'employee-mode', 'team-leader-mode');
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
@@ -350,27 +586,49 @@ async function updateProfile(updates) {
   return data;
 }
 
-async function adminUpdateProfile(userId, updates) {
+async function adminUpdateMembership(memberId, updates) {
   if (!isAdmin()) throw new Error('Accès réservé aux administrateurs');
   const { data, error } = await AUTH.client
-    .from('profiles')
+    .from('pharmacy_members')
     .update(updates)
-    .eq('id', userId)
+    .eq('id', memberId)
     .select()
     .single();
   if (error) throw error;
+  if (AUTH.membership?.id === memberId) {
+    AUTH.membership = { ...AUTH.membership, ...data };
+  }
+  const idx = AUTH.memberships.findIndex(m => m.id === memberId);
+  if (idx >= 0) AUTH.memberships[idx] = { ...AUTH.memberships[idx], ...data };
   return data;
 }
 
 async function listProfiles() {
   if (!isAdmin()) throw new Error('Accès réservé aux administrateurs');
+  const pharmacyId = getCurrentPharmacyId();
+  if (!pharmacyId) throw new Error('Aucune pharmacie sélectionnée');
+
   const { data, error } = await AUTH.client
-    .from('profiles')
-    .select('id, email, full_name, role, employee_name, created_at, updated_at')
+    .from('pharmacy_members')
+    .select(`
+      id, role, employee_name, user_id,
+      profiles ( id, email, full_name, created_at, updated_at )
+    `)
+    .eq('pharmacy_id', pharmacyId)
     .order('role')
-    .order('full_name');
+    .order('employee_name');
   if (error) throw error;
-  return data || [];
+
+  return (data || []).map(m => ({
+    member_id: m.id,
+    id: m.profiles?.id || m.user_id,
+    email: m.profiles?.email || '',
+    full_name: m.profiles?.full_name || '',
+    role: m.role,
+    employee_name: m.employee_name,
+    created_at: m.profiles?.created_at,
+    updated_at: m.profiles?.updated_at,
+  }));
 }
 
 async function initAuth() {
@@ -397,6 +655,10 @@ async function initAuth() {
       if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
     });
     await refreshAuthSession();
+    if (AUTH.session?.user) {
+      await ensurePharmacySelected();
+      if (AUTH.pharmacy && typeof syncAfterAuth === 'function') void syncAfterAuth();
+    }
     AUTH.ready = true;
     return { configured: true, session: AUTH.session, error: null };
   } catch (e) {
@@ -438,9 +700,27 @@ function showAuthOverlay({ mode = 'login' } = {}) {
         <label>Nom complet<input type="text" name="fullName" autocomplete="name"></label>
         <label>Email<input type="email" name="email" required autocomplete="email"></label>
         <label>Mot de passe<input type="password" name="password" required autocomplete="new-password" minlength="6"></label>
+        <fieldset class="auth-pharmacy-fieldset">
+          <legend>Pharmacie</legend>
+          <label class="auth-radio">
+            <input type="radio" name="pharmacyMode" value="join" checked>
+            Rejoindre une pharmacie existante
+          </label>
+          <label class="auth-radio">
+            <input type="radio" name="pharmacyMode" value="create">
+            Créer une nouvelle pharmacie
+          </label>
+          <div id="auth-pharmacy-join">
+            <label>Code d'invitation<input type="text" name="inviteCode" placeholder="Ex. A1B2C3D4" autocomplete="off"></label>
+            <p class="auth-hint">Demandez ce code à l'administrateur de votre pharmacie.</p>
+          </div>
+          <div id="auth-pharmacy-create" hidden>
+            <label>Nom de la pharmacie<input type="text" name="pharmacyName" placeholder="Ex. Pharmacie du Centre"></label>
+          </div>
+        </fieldset>
         <label>Salarié lié (employés)<input type="text" name="employeeName" placeholder="Ex. Patricia" list="auth-employee-list"></label>
         <datalist id="auth-employee-list"></datalist>
-        <p class="auth-hint">Le premier compte créé devient administrateur. Les suivants sont des employés.</p>
+        <p class="auth-hint">Le premier compte d'une pharmacie devient administrateur. Les suivants sont des employés.</p>
         <p class="auth-error" id="auth-error-signup" hidden></p>
         <button type="submit" class="primary auth-submit" disabled>Chargement Supabase…</button>
       </form>
@@ -459,6 +739,14 @@ function showAuthOverlay({ mode = 'login' } = {}) {
   };
 
   void prepareAuthOverlay(overlay);
+
+  overlay.querySelectorAll('input[name="pharmacyMode"]').forEach(radio => {
+    radio.onchange = () => {
+      const mode = overlay.querySelector('input[name="pharmacyMode"]:checked')?.value;
+      overlay.querySelector('#auth-pharmacy-join').hidden = mode !== 'join';
+      overlay.querySelector('#auth-pharmacy-create').hidden = mode !== 'create';
+    };
+  });
 
   const employeeList = overlay.querySelector('#auth-employee-list');
   if (employeeList && typeof STATE !== 'undefined') {
@@ -490,8 +778,15 @@ function showAuthOverlay({ mode = 'login' } = {}) {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Connexion…';
     try {
-      await signIn(fd.get('email'), fd.get('password'));
+      const result = await signIn(fd.get('email'), fd.get('password'));
       removeAuthOverlay();
+      if (result && typeof completeAuthWithPharmacy === 'function') {
+        const phResult = await completeAuthWithPharmacy();
+        if (phResult.needsPharmacy) {
+          if (phResult.action === 'pick') showPharmacyPicker();
+          else showJoinPharmacyOverlay();
+        }
+      }
     } catch (err) {
       errEl.textContent = authErrorMessage(err);
       errEl.hidden = false;
@@ -510,15 +805,38 @@ function showAuthOverlay({ mode = 'login' } = {}) {
     const prevLabel = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Création…';
+    const pharmacyMode = fd.get('pharmacyMode');
+    const inviteCode = pharmacyMode === 'join' ? fd.get('inviteCode') : null;
+    const pharmacyName = pharmacyMode === 'create' ? fd.get('pharmacyName') : null;
+
+    if (pharmacyMode === 'join' && !String(inviteCode || '').trim()) {
+      errEl.textContent = 'Entrez le code d\'invitation fourni par votre pharmacie.';
+      errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
+      return;
+    }
+    if (pharmacyMode === 'create' && !String(pharmacyName || '').trim()) {
+      errEl.textContent = 'Entrez le nom de la nouvelle pharmacie.';
+      errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
+      return;
+    }
+
     try {
       const result = await signUp({
         email: fd.get('email'),
         password: fd.get('password'),
         fullName: fd.get('fullName'),
         employeeName: fd.get('employeeName'),
+        inviteCode,
+        pharmacyName,
       });
       if (result.session) {
         removeAuthOverlay();
+        const phResult = await completeAuthWithPharmacy();
+        if (phResult.needsPharmacy) showJoinPharmacyOverlay();
         if (typeof render === 'function') render();
       } else {
         errEl.textContent = 'Compte créé — vérifiez votre email pour confirmer l\'inscription.';
@@ -609,11 +927,15 @@ function renderAuthBar() {
     <span class="auth-bar-status">
       <strong>${escapeHtml(getAuthDisplayName())}</strong>
       <span class="auth-role-badge ${roleCls}">${roleLabel}</span>${empLink}
+      ${AUTH.pharmacy ? `<span class="auth-pharmacy-name">· ${escapeHtml(AUTH.pharmacy.name)}</span>` : ''}
     </span>
     <span class="auth-bar-actions">
+      ${AUTH.memberships.length > 1 ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
       <span class="sync-status" id="sync-status"></span>
       <button type="button" class="auth-bar-btn" id="auth-bar-logout">Déconnexion</button>
     </span>`;
+
+  bar.querySelector('#auth-bar-switch-pharmacy')?.addEventListener('click', () => showPharmacyPicker());
 
   bar.querySelector('#auth-bar-logout').onclick = async () => {
     await signOut();
@@ -713,11 +1035,19 @@ async function waitForAuthentication() {
 async function renderAdminUsersSection(root) {
   if (!isAdmin()) return;
 
+  const inviteCode = AUTH.pharmacy?.invite_code || '';
+  const pharmacyName = AUTH.pharmacy?.name || '';
+
   const card = document.createElement('div');
   card.className = 'form-card settings-section auth-users-card';
   card.id = 'cfg-users';
   card.innerHTML = `
-    <h3>Comptes utilisateurs</h3>
+    <h3>Comptes utilisateurs — ${escapeHtml(pharmacyName)}</h3>
+    ${inviteCode ? `
+    <p class="muted">Code d'invitation pour rejoindre cette pharmacie :</p>
+    <code class="auth-invite-code">${escapeHtml(inviteCode)}</code>
+    <p class="muted">Communiquez ce code aux nouveaux membres lors de leur inscription.</p>
+    ` : ''}
     <p class="muted">Associez chaque compte au nom du salarié dans le planning. Le rôle <strong>Chef d'équipe</strong> permet de voir tout le planning et de proposer des modifications ou congés pour l'équipe.</p>
     <div class="auth-users-loading muted">Chargement…</div>
     <table class="auth-users-table employees-list" hidden>
@@ -752,31 +1082,31 @@ async function renderAdminUsersSection(root) {
         <td>${escapeHtml(p.full_name || '—')}</td>
         <td>${escapeHtml(p.email)}</td>
         <td>
-          <select class="auth-user-role" data-user-id="${p.id}" ${p.id === AUTH.session?.user?.id ? 'disabled' : ''}>
+          <select class="auth-user-role" data-member-id="${p.member_id}" ${p.id === AUTH.session?.user?.id ? 'disabled' : ''}>
             <option value="admin" ${p.role === 'admin' ? 'selected' : ''}>Administrateur</option>
             <option value="team_leader" ${p.role === 'team_leader' ? 'selected' : ''}>Chef d'équipe</option>
             <option value="employee" ${p.role === 'employee' ? 'selected' : ''}>Employé</option>
           </select>
         </td>
         <td>
-          <select class="auth-user-emp" data-user-id="${p.id}">
+          <select class="auth-user-emp" data-member-id="${p.member_id}">
             <option value="">—</option>
             ${empOptions}
           </select>
         </td>
-        <td><button type="button" class="auth-user-save primary" data-user-id="${p.id}">Enregistrer</button></td>`;
+        <td><button type="button" class="auth-user-save primary" data-member-id="${p.member_id}">Enregistrer</button></td>`;
       tbody.appendChild(tr);
     }
 
     tbody.querySelectorAll('.auth-user-save').forEach(btn => {
       btn.onclick = async () => {
-        const userId = btn.dataset.userId;
+        const memberId = btn.dataset.memberId;
         const row = btn.closest('tr');
         const role = row.querySelector('.auth-user-role').value;
         const employee_name = row.querySelector('.auth-user-emp').value || null;
         btn.disabled = true;
         try {
-          await adminUpdateProfile(userId, { role, employee_name });
+          await adminUpdateMembership(memberId, { role, employee_name });
           toast('Compte mis à jour');
         } catch (e) {
           toast(e.message || 'Erreur', true);

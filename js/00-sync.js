@@ -10,6 +10,7 @@ const SYNC_DEBOUNCE_MS = 600;
 
 function canSyncToCloud() {
   if (!isSupabaseConfigured() || !isAuthenticated()) return false;
+  if (!getCurrentPharmacyId()) return false;
   if (isAdmin()) return true;
   if (isStaff()) return true;
   return false;
@@ -124,13 +125,14 @@ function extractPersonalDataFromState(employeeName) {
 
 async function loadPlanningFromCloud() {
   if (!canSyncToCloud()) return null;
+  const pharmacyId = getCurrentPharmacyId();
   setSyncStatus('Chargement…', 'pending');
 
   await ensureAuthClient();
   const { data, error } = await AUTH.client
     .from('pharmacy_planning')
     .select('data, updated_at')
-    .eq('id', 1)
+    .eq('pharmacy_id', pharmacyId)
     .maybeSingle();
 
   if (error) {
@@ -167,12 +169,14 @@ async function loadPersonalDataFromCloud() {
 
 async function pushPlanningToCloud() {
   if (!isAdmin()) return;
+  const pharmacyId = getCurrentPharmacyId();
+  if (!pharmacyId) return;
   await ensureAuthClient();
   const payload = stateForCloudExport(STATE);
   const { error } = await AUTH.client
     .from('pharmacy_planning')
     .upsert({
-      id: 1,
+      pharmacy_id: pharmacyId,
       data: payload,
       updated_by: AUTH.session.user.id,
     });
@@ -202,6 +206,7 @@ function isMissingRpcError(err) {
 async function pushStaffSharedChangesViaRpc(congesPatch, requestsPatch) {
   await ensureAuthClient();
   const { error } = await AUTH.client.rpc('merge_staff_planning_shared', {
+    p_pharmacy_id: getCurrentPharmacyId(),
     conges_patch: congesPatch,
     planning_change_requests_patch: requestsPatch,
   });
@@ -236,10 +241,23 @@ async function pushStaffSharedChangesViaProfile() {
 
 async function mergeStaffPatchesFromProfiles() {
   if (!isAdmin()) return;
+  const pharmacyId = getCurrentPharmacyId();
+  if (!pharmacyId) return;
   await ensureAuthClient();
+
+  const { data: members, error: membersErr } = await AUTH.client
+    .from('pharmacy_members')
+    .select('user_id')
+    .eq('pharmacy_id', pharmacyId);
+  if (membersErr) throw membersErr;
+
+  const userIds = (members || []).map(m => m.user_id);
+  if (!userIds.length) return false;
+
   const { data: profiles, error } = await AUTH.client
     .from('profiles')
-    .select('id, personal_data');
+    .select('id, personal_data')
+    .in('id', userIds);
   if (error) throw error;
 
   let mergedAny = false;
@@ -419,7 +437,7 @@ function setupCloudAutoSave() {
 }
 
 async function bootstrapCloudData() {
-  if (!isAuthenticated()) return;
+  if (!isAuthenticated() || !getCurrentPharmacyId()) return;
   await loadPlanningFromCloud();
   if (isAdmin()) await mergeStaffPatchesFromProfiles();
   await loadPersonalDataFromCloud();
@@ -427,7 +445,7 @@ async function bootstrapCloudData() {
 }
 
 async function syncAfterAuth() {
-  if (!isAuthenticated()) return;
+  if (!isAuthenticated() || !getCurrentPharmacyId()) return;
   try {
     await bootstrapCloudData();
     if (typeof saveState === 'function') saveState();

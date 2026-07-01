@@ -260,12 +260,12 @@ function getPatternAnchorMonday(state = STATE) {
 function getPatternWeekIndexForMonday(mondayDate, state = STATE) {
   const anchorMon = getPatternAnchorMonday(state);
   const weeks = Math.floor(diffDays(toISO(anchorMon), toISO(mondayDate)) / 7);
-  const n = PATTERN_CYCLE_WEEKS.length;
+  const n = getPatternCycleWeekCount(state);
   return ((weeks % n) + n) % n;
 }
 
 function getPatternWeekNameForMonday(mondayDate, state = STATE) {
-  return PATTERN_CYCLE_WEEKS[getPatternWeekIndexForMonday(mondayDate, state)];
+  return getPatternCycleWeeks(state)[getPatternWeekIndexForMonday(mondayDate, state)];
 }
 
 function getPatternWeekNameForDate(dateIso, state = STATE) {
@@ -283,7 +283,7 @@ function getPatternAnchorSummary(state = STATE) {
 }
 
 function setPatternAnchorFromISOWeek(isoYear, isoWeek, patternName, state = STATE) {
-  const idx = PATTERN_CYCLE_WEEKS.indexOf(patternName);
+  const idx = getPatternCycleWeeks(state).indexOf(patternName);
   if (idx < 0) return { ok: false, error: 'Semaine de cycle invalide.' };
   if (!Number.isFinite(isoYear) || !Number.isFinite(isoWeek) || isoWeek < 1 || isoWeek > 53) {
     return { ok: false, error: 'Année ou semaine ISO invalide.' };
@@ -294,8 +294,8 @@ function setPatternAnchorFromISOWeek(isoYear, isoWeek, patternName, state = STAT
   return { ok: true, ...getPatternAnchorSummary(state), refPattern: patternName, refIsoWeek: isoWeek, refIsoYear: isoYear };
 }
 
-function describePatternAnchorForISOWeek(isoYear, isoWeek, patternName) {
-  const idx = PATTERN_CYCLE_WEEKS.indexOf(patternName);
+function describePatternAnchorForISOWeek(isoYear, isoWeek, patternName, state = STATE) {
+  const idx = getPatternCycleWeeks(state).indexOf(patternName);
   if (idx < 0 || isoWeek < 1 || isoWeek > 53) return null;
   const weekMon = mondayOfISOWeek(isoYear, isoWeek);
   const anchorMon = addDays(weekMon, -7 * idx);
@@ -717,14 +717,15 @@ function weekHoursPatternMismatchTitle(empName, isoWeek, cmp) {
 
 function computePatternCycleHours(empName, state = STATE) {
   let total = 0;
-  for (const pname of PATTERN_CYCLE_WEEKS) {
+  for (const pname of getPatternCycleWeeks(state)) {
     total += computePatternWeekHours(empName, pname, state);
   }
   return Math.round(total * 100) / 100;
 }
 
 function computePatternMonthlyHours(empName, state = STATE) {
-  const weeklyAvg = computePatternCycleHours(empName, state) / PATTERN_CYCLE_WEEKS.length;
+  const n = getPatternCycleWeekCount(state);
+  const weeklyAvg = computePatternCycleHours(empName, state) / n;
   return Math.round(weeklyAvg * AVG_WEEKS_PER_MONTH * 100) / 100;
 }
 
