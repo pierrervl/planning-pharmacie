@@ -10,4 +10,7 @@ window.SUPABASE_CONFIG = {
      Doit aussi être configuré côté Supabase :
      update app_config set value = '["votre@email.com"]'::jsonb where key = 'feedback_owner_emails'; */
   feedbackOwnerEmails: ['votre@email.com'],
+  /* Support technique : changement de pharmacie / multi-officines (même config Supabase) :
+     update app_config set value = '["votre@email.com"]'::jsonb where key = 'super_admin_emails'; */
+  superAdminEmails: ['votre@email.com'],
 };

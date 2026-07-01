@@ -47,6 +47,9 @@ function refreshProfileInBackground(user) {
         else if (typeof render === 'function') render();
         if (typeof updateFeedbackTabVisibility === 'function') updateFeedbackTabVisibility();
         if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
+        if (typeof refreshSuperAdminCache === 'function') {
+          void refreshSuperAdminCache().then(() => renderAuthBar());
+        }
       }
     })
     .catch((e) => console.warn('Profil cloud non chargé', e));
@@ -187,10 +190,17 @@ async function ensurePharmacySelected() {
     return AUTH.membership;
   }
 
-  return null;
+  if (!isSuperAdmin()) {
+    await selectPharmacy(AUTH.memberships[0].pharmacy_id);
+    return AUTH.membership;
+  }
+
+  await selectPharmacy(AUTH.memberships[0].pharmacy_id);
+  return AUTH.membership;
 }
 
 async function joinPharmacyByInvite(inviteCode) {
+  assertCanAddPharmacyMembership();
   await ensureAuthClient();
   const { data, error } = await AUTH.client.rpc('join_pharmacy_by_invite', {
     p_invite_code: String(inviteCode || '').trim(),
@@ -202,6 +212,7 @@ async function joinPharmacyByInvite(inviteCode) {
 }
 
 async function createPharmacy(name) {
+  assertCanAddPharmacyMembership();
   await ensureAuthClient();
   const { data, error } = await AUTH.client.rpc('create_pharmacy', {
     p_name: String(name || '').trim(),
@@ -296,16 +307,20 @@ function isAdminEditUnlocked() {
 }
 
 function isAdminReadOnly() {
-  return isAdmin() && isAuthenticated() && isSupabaseConfigured() && !adminEditUnlocked;
+  return isSuperAdmin() && isAdmin() && isAuthenticated() && isSupabaseConfigured() && !adminEditUnlocked;
 }
 
 function resetAdminEditLock() {
+  if (!isSuperAdmin()) {
+    document.body.classList.remove('admin-read-only');
+    return;
+  }
   adminEditUnlocked = false;
   applyAdminReadOnlyUi();
 }
 
 function setAdminEditUnlocked(unlocked) {
-  if (!isAdmin()) return;
+  if (!isSuperAdmin()) return;
   adminEditUnlocked = !!unlocked;
   applyAdminReadOnlyUi();
   if (typeof renderAuthBar === 'function') renderAuthBar();
@@ -363,14 +378,14 @@ function getAuthRoleLabel() {
 function canEditPlanning() {
   if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  if (isAdmin()) return isAdminEditUnlocked();
+  if (isAdmin()) return isSuperAdmin() ? isAdminEditUnlocked() : true;
   return false;
 }
 
 function canEditEmployeeData(empName) {
   if (!isAuthenticated()) return true;
   if (!isSupabaseConfigured()) return true;
-  if (isAdmin()) return isAdminEditUnlocked();
+  if (isAdmin()) return isSuperAdmin() ? isAdminEditUnlocked() : true;
   if (isTeamLeader()) return true;
   if (isEmployee()) return employeeNamesMatch(getLinkedEmployeeName(), empName);
   return false;
@@ -407,6 +422,72 @@ function getLinkedEmployeeName() {
 function getAuthDisplayName() {
   if (!AUTH.profile) return '';
   return AUTH.profile.full_name || AUTH.profile.email || '';
+}
+
+function getAuthUserEmail() {
+  const u = AUTH?.session?.user;
+  return String(
+    u?.email
+    || AUTH?.profile?.email
+    || u?.user_metadata?.email
+    || ''
+  ).trim().toLowerCase();
+}
+
+let superAdminResolved = null;
+
+function getSuperAdminEmails() {
+  const fromConfig = window.SUPABASE_CONFIG?.superAdminEmails;
+  if (Array.isArray(fromConfig)) {
+    return fromConfig.map(e => String(e || '').trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
+
+async function loadSuperAdminEmailsFromCloud() {
+  if (!isAuthenticated() || !isSupabaseConfigured()) return [];
+  try {
+    await ensureAuthClient();
+    const { data, error } = await AUTH.client
+      .from('app_config')
+      .select('value')
+      .eq('key', 'super_admin_emails')
+      .maybeSingle();
+    if (error) throw error;
+    if (data?.value && Array.isArray(data.value)) {
+      return data.value.map(e => String(e || '').trim().toLowerCase()).filter(Boolean);
+    }
+  } catch (_e) { /* table absente ou RLS */ }
+  return [];
+}
+
+async function refreshSuperAdminCache() {
+  superAdminResolved = false;
+  if (!isAuthenticated()) return false;
+  const email = getAuthUserEmail();
+  if (!email) return false;
+  const emails = new Set(getSuperAdminEmails());
+  const cloud = await loadSuperAdminEmailsFromCloud();
+  cloud.forEach(e => emails.add(e));
+  superAdminResolved = emails.has(email);
+  return superAdminResolved;
+}
+
+function isSuperAdmin() {
+  if (superAdminResolved === true) return true;
+  if (!isAuthenticated()) return false;
+  const email = getAuthUserEmail();
+  return !!email && getSuperAdminEmails().includes(email);
+}
+
+function canSwitchPharmacy() {
+  return isSuperAdmin() && isAuthenticated() && !!AUTH.pharmacy;
+}
+
+function assertCanAddPharmacyMembership() {
+  if (AUTH.memberships.length > 0 && !isSuperAdmin()) {
+    throw new Error('Rejoindre ou créer une autre pharmacie est réservé au support technique.');
+  }
 }
 
 async function signIn(email, password) {
@@ -461,6 +542,13 @@ async function completeAuthWithPharmacy() {
     return { needsPharmacy: false };
   }
 
+  if (!isSuperAdmin()) {
+    const fallback = AUTH.memberships[0];
+    await selectPharmacy(fallback.pharmacy_id);
+    if (typeof syncAfterAuth === 'function') void syncAfterAuth();
+    return { needsPharmacy: false };
+  }
+
   return { needsPharmacy: true, action: 'pick' };
 }
 
@@ -504,6 +592,10 @@ function removePharmacyOverlay() {
 }
 
 function showPharmacyPicker() {
+  if (!isSuperAdmin()) {
+    if (typeof toast === 'function') toast('Changement de pharmacie réservé au support technique.', true);
+    return;
+  }
   removePharmacyOverlay();
   if (!AUTH.memberships.length) {
     showJoinPharmacyOverlay();
@@ -515,7 +607,7 @@ function showPharmacyPicker() {
   overlay.innerHTML = `
     <div class="auth-card" role="dialog" aria-labelledby="pharmacy-picker-title">
       <h2 id="pharmacy-picker-title">Choisir une pharmacie</h2>
-      <p class="auth-sub">Vous appartenez à plusieurs pharmacies. Sélectionnez celle à afficher.</p>
+      <p class="auth-sub">Sélectionnez la pharmacie à consulter ou modifiez.</p>
       <div class="pharmacy-picker-list" id="pharmacy-picker-list"></div>
       <button type="button" class="auth-skip" id="pharmacy-picker-join">Rejoindre une autre pharmacie…</button>
     </div>`;
@@ -554,17 +646,28 @@ function showPharmacyPicker() {
 function showJoinPharmacyOverlay() {
   removePharmacyOverlay();
 
+  const hasMembership = AUTH.memberships.length > 0;
+  if (hasMembership && !isSuperAdmin()) {
+    if (typeof toast === 'function') toast('Rejoindre une autre pharmacie est réservé au support technique.', true);
+    return;
+  }
+
+  const showCreate = isSuperAdmin();
   const overlay = document.createElement('div');
   overlay.className = 'auth-overlay pharmacy-overlay';
   overlay.innerHTML = `
     <div class="auth-card" role="dialog" aria-labelledby="pharmacy-join-title">
       <button type="button" class="auth-close" id="pharmacy-join-close">✕</button>
-      <h2 id="pharmacy-join-title">Rejoindre une pharmacie</h2>
-      <p class="auth-sub">Entrez le code d'invitation fourni par votre administrateur, ou créez une nouvelle pharmacie.</p>
+      <h2 id="pharmacy-join-title">${showCreate ? 'Rejoindre ou créer une pharmacie' : 'Rejoindre une pharmacie'}</h2>
+      <p class="auth-sub">${showCreate
+        ? 'Entrez un code d\'invitation ou créez une nouvelle pharmacie.'
+        : 'Entrez le code d\'invitation fourni par votre administrateur.'}</p>
       <form class="auth-form" id="pharmacy-join-form">
         <label>Code d'invitation<input type="text" name="inviteCode" placeholder="Ex. A1B2C3D4" autocomplete="off"></label>
+        ${showCreate ? `
         <p class="auth-hint">— ou —</p>
         <label>Créer une nouvelle pharmacie<input type="text" name="pharmacyName" placeholder="Nom de la pharmacie"></label>
+        ` : ''}
         <p class="auth-error" id="pharmacy-join-error" hidden></p>
         <button type="submit" class="primary auth-submit">Continuer</button>
       </form>
@@ -584,7 +687,15 @@ function showJoinPharmacyOverlay() {
     errEl.hidden = true;
 
     if (!inviteCode && !pharmacyName) {
-      errEl.textContent = 'Entrez un code d\'invitation ou un nom de pharmacie.';
+      errEl.textContent = showCreate
+        ? 'Entrez un code d\'invitation ou un nom de pharmacie.'
+        : 'Entrez le code d\'invitation de votre pharmacie.';
+      errEl.hidden = false;
+      return;
+    }
+
+    if (pharmacyName && !showCreate) {
+      errEl.textContent = 'Seul le support technique peut créer une pharmacie depuis ce compte.';
       errEl.hidden = false;
       return;
     }
@@ -621,6 +732,7 @@ async function signOut() {
   AUTH.pharmacy = null;
   AUTH.membership = null;
   AUTH.memberships = [];
+  superAdminResolved = null;
   notifyAuthChange();
   document.body.classList.remove('read-only-mode', 'employee-mode', 'team-leader-mode');
   if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
@@ -716,6 +828,7 @@ async function initAuth() {
     });
     await refreshAuthSession();
     if (AUTH.session?.user) {
+      if (typeof refreshSuperAdminCache === 'function') await refreshSuperAdminCache();
       await ensurePharmacySelected();
       if (AUTH.pharmacy && typeof syncAfterAuth === 'function') void syncAfterAuth();
     }
@@ -992,8 +1105,8 @@ function renderAuthBar() {
         ? '<span class="auth-rgpd-badge">RGPD à valider</span>' : ''}
     </span>
     <span class="auth-bar-actions">
-      ${AUTH.pharmacy ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
-      ${isAdmin() && AUTH.pharmacy ? `
+      ${canSwitchPharmacy() ? '<button type="button" class="auth-bar-btn" id="auth-bar-switch-pharmacy">Changer de pharmacie</button>' : ''}
+      ${isSuperAdmin() && AUTH.pharmacy ? `
         <button type="button" class="auth-bar-btn auth-edit-toggle${isAdminEditUnlocked() ? ' is-editing' : ''}" id="auth-bar-edit-toggle" title="${isAdminEditUnlocked() ? 'Repasser en lecture seule' : 'Activer les modifications'}">
           ${isAdminEditUnlocked() ? '🔒 Lecture seule' : '✏️ Modifier'}
         </button>
