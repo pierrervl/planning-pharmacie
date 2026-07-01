@@ -1,6 +1,111 @@
 /* Onglet Aide — procédure de démarrage pour les pharmacies */
 'use strict';
 
+const WELCOME_SEEN_KEY = 'planning_welcome_seen_v1';
+let helpStartupSpotlight = false;
+
+function hasSeenWelcome() {
+  try { return localStorage.getItem(WELCOME_SEEN_KEY) === '1'; } catch (_e) { return false; }
+}
+
+function markWelcomeSeen() {
+  try { localStorage.setItem(WELCOME_SEEN_KEY, '1'); } catch (_e) { /* ignore */ }
+}
+
+function shouldShowWelcomeOverlay() {
+  if (hasSeenWelcome()) return false;
+  if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) return false;
+  if (typeof isStaff === 'function' && isStaff()
+    && typeof isAdmin === 'function' && !isAdmin()) return false;
+  return true;
+}
+
+function getWelcomePharmacyLabel() {
+  const local = typeof getPharmacyInfo === 'function' ? getPharmacyInfo().name : '';
+  if (String(local || '').trim()) return String(local).trim();
+  if (typeof AUTH !== 'undefined' && AUTH.pharmacy?.name) return AUTH.pharmacy.name;
+  return 'votre pharmacie';
+}
+
+function dismissWelcomeOverlay() {
+  document.querySelector('.welcome-overlay')?.remove();
+  document.body.classList.remove('welcome-active');
+}
+
+function pulseHelpNavTab() {
+  const helpBtn = document.querySelector('#tabs button[data-tab="help"]');
+  if (!helpBtn) return;
+  helpBtn.classList.add('nav-tab-pulse');
+  window.setTimeout(() => helpBtn.classList.remove('nav-tab-pulse'), 4500);
+}
+
+function startWelcomeTutorial() {
+  markWelcomeSeen();
+  dismissWelcomeOverlay();
+  helpStartupSpotlight = true;
+  if (typeof STATE !== 'undefined') STATE.ui.currentTab = 'help';
+  if (typeof persistAndRender === 'function') persistAndRender();
+  else if (typeof render === 'function') render();
+  pulseHelpNavTab();
+}
+
+function showWelcomeOverlayIfNeeded() {
+  if (!shouldShowWelcomeOverlay()) return;
+  if (document.querySelector('.welcome-overlay')) return;
+
+  const pharmacy = escapeHtml(getWelcomePharmacyLabel());
+  const overlay = document.createElement('div');
+  overlay.className = 'welcome-overlay import-dialog-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-labelledby', 'welcome-title');
+  overlay.innerHTML = `
+    <div class="welcome-panel">
+      <div class="welcome-icon-wrap" aria-hidden="true">
+        <span class="welcome-icon welcome-icon--calendar">📅</span>
+        <span class="welcome-icon welcome-icon--pharmacy">💊</span>
+      </div>
+      <h2 id="welcome-title" class="welcome-title">Planning de ${pharmacy}</h2>
+      <p class="welcome-lead">
+        Bienvenue sur l'outil de gestion du planning de votre officine.
+        Vous allez pouvoir créer votre environnement&nbsp;: équipe, horaires, congés et synchronisation cloud.
+      </p>
+      <p class="welcome-hint muted">
+        Suivez le tutoriel pas à pas dans l'onglet <strong>Aide</strong> pour démarrer.
+      </p>
+      <div class="welcome-actions">
+        <button type="button" class="help-action-btn primary welcome-start-btn">Commencer le tutoriel</button>
+        <button type="button" class="help-action-btn welcome-skip-btn">Plus tard</button>
+      </div>
+    </div>`;
+
+  overlay.querySelector('.welcome-start-btn').onclick = () => startWelcomeTutorial();
+  overlay.querySelector('.welcome-skip-btn').onclick = () => {
+    markWelcomeSeen();
+    dismissWelcomeOverlay();
+  };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      markWelcomeSeen();
+      dismissWelcomeOverlay();
+    }
+  });
+
+  document.body.classList.add('welcome-active');
+  document.body.appendChild(overlay);
+  window.requestAnimationFrame(() => overlay.classList.add('is-visible'));
+}
+
+function applyHelpStartupSpotlight(root) {
+  if (!helpStartupSpotlight) return;
+  helpStartupSpotlight = false;
+  const accordion = root.querySelector('#help-startup-admin');
+  if (!accordion) return;
+  accordion.open = true;
+  accordion.classList.add('help-accordion--spotlight');
+  accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.setTimeout(() => accordion.classList.remove('help-accordion--spotlight'), 6000);
+}
+
 function helpStepClass(done) {
   return done ? 'help-step is-done' : 'help-step';
 }
@@ -79,15 +184,26 @@ function renderHelpEditor(root) {
 
   const header = document.createElement('div');
   header.className = 'controls help-header';
+  const headerIntro = isAdmin && progress.doneCount < progress.total
+    ? 'Commencez par <strong>Mise en route — titulaire</strong> ci-dessous pour créer l\'environnement de votre pharmacie.'
+    : 'Guides et procédures — ouvrez les sections ci-dessous selon vos besoins.';
   header.innerHTML = `
     <div class="label">Aide</div>
-    <div class="help-text">
-      Guides et procédures — ouvrez les sections ci-dessous selon vos besoins.
-    </div>`;
+    <div class="help-text">${headerIntro}</div>`;
   root.appendChild(header);
 
   const accordions = document.createElement('div');
   accordions.className = 'help-accordions';
+
+  if (isAdmin) {
+    accordions.appendChild(createHelpAccordion({
+      id: 'help-startup-admin',
+      title: 'Mise en route — titulaire / administrateur',
+      hint: `${progress.doneCount}/${progress.total} étapes · à lire en premier`,
+      open: progress.doneCount < progress.total,
+      bodyHtml: buildAdminStartupHtml({ progress, cloudConfigured, pharmacyName, inviteCode, pct }),
+    }));
+  }
 
   if (isStaffUser) {
     accordions.appendChild(createHelpAccordion({
@@ -103,19 +219,9 @@ function renderHelpEditor(root) {
     id: 'help-planning-tuto',
     title: 'Utiliser le planning (vue Semaine)',
     hint: isAdmin ? 'Clics, couleurs, heures' : 'Administrateurs',
-    open: isAdmin || !isStaffUser,
+    open: false,
     bodyHtml: buildPlanningTutorialHtml({ forAdmin: isAdmin || !isStaffUser }),
   }));
-
-  if (isAdmin) {
-    accordions.appendChild(createHelpAccordion({
-      id: 'help-startup-admin',
-      title: 'Mise en route — titulaire / administrateur',
-      hint: `${progress.doneCount}/${progress.total} étapes`,
-      open: progress.doneCount < progress.total,
-      bodyHtml: buildAdminStartupHtml({ progress, cloudConfigured, pharmacyName, inviteCode, pct }),
-    }));
-  }
 
   accordions.appendChild(createHelpAccordion({
     id: 'help-startup-join',
@@ -148,6 +254,7 @@ function renderHelpEditor(root) {
   }));
 
   root.appendChild(accordions);
+  applyHelpStartupSpotlight(root);
   bindHelpActions(root);
 }
 

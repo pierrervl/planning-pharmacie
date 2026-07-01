@@ -927,6 +927,10 @@ function initApp() {
   updateTopbarAppearance();
   sessionInitialized = true;
   setupSessionLifecycle();
+  if (typeof showWelcomeOverlayIfNeeded === 'function'
+    && (typeof isSupabaseConfigured !== 'function' || !isSupabaseConfigured())) {
+    window.setTimeout(() => showWelcomeOverlayIfNeeded(), 500);
+  }
 
   // tentative d'export à la fermeture (Ctrl+W / fermeture onglet)
   window.addEventListener('keydown', (e) => {
@@ -948,6 +952,7 @@ async function bootstrapApp() {
       if (typeof applyEmployeeViewRestrictions === 'function') applyEmployeeViewRestrictions();
       if (typeof render === 'function') render();
       if (typeof refreshRgpdUi === 'function') refreshRgpdUi();
+      if (typeof showWelcomeOverlayIfNeeded === 'function') showWelcomeOverlayIfNeeded();
       if (typeof isAuthenticated === 'function' && isAuthenticated()
         && typeof syncAfterAuth === 'function') {
         void syncAfterAuth();

@@ -427,4 +427,7 @@ function refreshRgpdUi() {
   updateRgpdTabVisibility();
   if (typeof renderAuthBar === 'function') renderAuthBar();
   if (typeof syncNavTabs === 'function') syncNavTabs();
+  if (!needsRgpdAcceptance() && typeof showWelcomeOverlayIfNeeded === 'function') {
+    window.setTimeout(() => showWelcomeOverlayIfNeeded(), 450);
+  }
 }

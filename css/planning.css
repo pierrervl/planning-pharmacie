@@ -4622,3 +4622,128 @@ body.rgpd-locked .app {
   background: var(--warn);
   color: #fff;
 }
+
+/* Accueil première visite (titulaire) ------------------------------------- */
+
+.welcome-overlay {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  backdrop-filter: blur(2px);
+  z-index: 11000;
+}
+
+.welcome-overlay.is-visible {
+  opacity: 1;
+}
+
+.welcome-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--r) + 4px);
+  padding: 28px 26px 22px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  animation: welcomePanelIn 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes welcomePanelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.welcome-icon-wrap {
+  position: relative;
+  height: 72px;
+  margin-bottom: 12px;
+}
+
+.welcome-icon {
+  position: absolute;
+  left: 50%;
+  font-size: 2.4rem;
+  line-height: 1;
+  animation: welcomeFloat 2.4s ease-in-out infinite;
+}
+
+.welcome-icon--calendar {
+  --wx: -85%;
+  transform: translateX(-85%);
+}
+
+.welcome-icon--pharmacy {
+  --wx: -15%;
+  transform: translateX(-15%);
+  font-size: 2rem;
+  animation-delay: 0.35s;
+}
+
+@keyframes welcomeFloat {
+  0%, 100% { transform: translateX(var(--wx)) translateY(0); }
+  50% { transform: translateX(var(--wx)) translateY(-10px); }
+}
+
+.welcome-title {
+  font-size: 1.25rem;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+.welcome-lead {
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+}
+
+.welcome-hint {
+  font-size: 13px;
+  margin: 0 0 18px;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welcome-actions .help-action-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.help-accordion--spotlight {
+  animation: helpSpotlight 1.8s ease-in-out 3;
+  border-color: var(--accent);
+}
+
+@keyframes helpSpotlight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+#tabs button.nav-tab-pulse {
+  animation: navTabPulse 1.1s ease-in-out 4;
+}
+
+@keyframes navTabPulse {
+  0%, 100% {
+    box-shadow: none;
+    transform: none;
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+    transform: translateY(-1px);
+  }
+}
