@@ -111,6 +111,9 @@ function render() {
 /* Vue semaine : semaine courante + N semaines suivantes */
 const WEEK_VIEW_EXTRA = 2; /* +2 semaines = 3 semaines au total */
 const WEEK_PRINT_WEEKS_PER_PAGE = 3;
+/* Impression mode Détail : 2 semaines empilées, fenêtre glissante (S1+S2, S2+S3…) */
+const WEEK_DETAIL_PRINT_WEEKS_PER_PAGE = 2;
+const WEEK_DETAIL_PRINT_SLIDE = 1;
 
 function shortEmpName(fullName) {
   const first = fullName.trim().split(/\s+/)[0];
@@ -141,6 +144,28 @@ function chunkDaysForPrint(days, weeksPerPage) {
     chunks.push(days.slice(i, i + size));
   }
   return chunks;
+}
+
+/* Découpe en semaines (7 jours) pour l'impression détail ------------------- */
+function splitDaysIntoWeeks(days) {
+  const weeks = [];
+  for (let i = 0; i + 6 < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+/* Fenêtre glissante : [[S1,S2], [S2,S3], …] — une page = 2 semaines empilées */
+function chunkWeeksForDetailPrint(weeks, weeksPerPage = WEEK_DETAIL_PRINT_WEEKS_PER_PAGE, slide = WEEK_DETAIL_PRINT_SLIDE) {
+  if (!weeks.length) return [];
+  if (weeks.length <= weeksPerPage) return [weeks.slice()];
+  const pages = [];
+  const step = Math.max(1, slide);
+  for (let i = 0; i + weeksPerPage - 1 < weeks.length; i += step) {
+    pages.push(weeks.slice(i, i + weeksPerPage));
+    if (step >= weeks.length) break;
+  }
+  return pages;
 }
 
 function renderShiftCell(emp, iso, shift, d, weekBoundary, options = {}) {
@@ -547,14 +572,17 @@ function attachWeekTableHandlers(wrap) {
   });
 }
 
-function buildPrintLegendEl() {
+function buildPrintLegendEl({ detail = false } = {}) {
   const leg = document.createElement('div');
-  leg.className = 'print-legend';
+  leg.className = 'print-legend' + (detail ? ' print-legend-detail' : '');
   let congeSpans = '';
   for (const ct of getCongeTypeCatalog()) {
     const cls = congeTypeCssClass(ct.id);
     congeSpans += `<span><i class="lg ${cls}"></i> ${escapeHtml(ct.label)}</span>`;
   }
+  const note = detail
+    ? 'Barres = horaires réels · Eff./h = effectif par heure (rouge ≤2 · jaune 3 · vert ≥4)'
+    : 'M = matin · A = après-midi · Effectif en bas de grille';
   leg.innerHTML = `
     <span><i class="lg plein"></i> Présent</span>
     <span><i class="lg special"></i> Présence orange</span>
@@ -564,7 +592,7 @@ function buildPrintLegendEl() {
     ${congeSpans}
     <span><i class="lg ferie"></i> Férié (rayures)</span>
     <span><i class="lg garde"></i> Garde (en-tête rouge clair)</span>
-    <span class="print-legend-note">M = matin · A = après-midi · Effectif en bas de grille</span>`;
+    <span class="print-legend-note">${note}</span>`;
   return leg;
 }
 
@@ -577,6 +605,105 @@ function syncWeekPrintDatesFromDom() {
   return { startIso: STATE.ui.weekPrintStart, endIso: STATE.ui.weekPrintEnd };
 }
 
+function openWeekPrintDocument(root, { detail = false } = {}) {
+  document.body.appendChild(root);
+  document.body.classList.add('printing-week');
+  if (detail) document.body.classList.add('printing-week-detail');
+
+  const cleanup = () => {
+    root.remove();
+    document.body.classList.remove('printing-week', 'printing-week-detail');
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+}
+
+function printWeekDetailPeriod(startIso, endIso) {
+  const allDays = buildDaysForPrintRange(startIso, endIso);
+  const weeks = splitDaysIntoWeeks(allDays);
+  if (!weeks.length) {
+    toast('Aucune semaine complète à imprimer pour cette période.', true);
+    return;
+  }
+  const pages = chunkWeeksForDetailPrint(weeks);
+  const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
+  const sharedBounds = getWeekDetailTimeBounds(visibleEmps, allDays);
+  const empCount = visibleEmps.length;
+  const numWeeks = weeks.length;
+
+  const root = document.createElement('div');
+  root.id = 'week-print-root';
+  root.className = 'week-print-root week-print-root-detail';
+
+  pages.forEach((pageWeeks, pageIdx) => {
+    const page = document.createElement('section');
+    page.className = 'print-detail-page' + (pageIdx < pages.length - 1 ? ' page-break-after' : '');
+
+    const meta = document.createElement('header');
+    meta.className = 'print-doc-header print-detail-header';
+    const wkNums = pageWeeks.map(w => getISOWeek(w[0]));
+    const wkLabel = wkNums.length === 1
+      ? `Semaine ${wkNums[0]}`
+      : `Semaines ${wkNums[0]} + ${wkNums[wkNums.length - 1]}`;
+    const rangeLabel = `${frFormat(pageWeeks[0][0])} → ${frFormat(pageWeeks[pageWeeks.length - 1][6])}`;
+    meta.innerHTML = `
+      <div class="print-detail-header-row">
+        <h1>Planning — vue détail</h1>
+        <span class="print-detail-page-num">Feuille ${pageIdx + 1}/${pages.length}</span>
+      </div>
+      <p>${wkLabel} · ${rangeLabel}
+         · ${empCount} salarié${empCount > 1 ? 's' : ''}
+         · ${formatPatternTime(minutesToTime(sharedBounds.startMin))}–${formatPatternTime(minutesToTime(sharedBounds.endMin))}
+         · imprimé le ${frFormat(new Date())}</p>`;
+    page.appendChild(meta);
+    page.appendChild(buildPrintLegendEl({ detail: true }));
+
+    const stack = document.createElement('div');
+    stack.className = 'print-detail-stack';
+
+    pageWeeks.forEach((weekDays, wi) => {
+      const slot = document.createElement('div');
+      slot.className = 'print-detail-week-slot';
+      const isoWk = getISOWeek(weekDays[0]);
+      const pName = getPatternWeekNameForMonday(weekDays[0]);
+      const label = document.createElement('div');
+      label.className = 'print-detail-week-label';
+      label.innerHTML = `<strong>Semaine ${isoWk}</strong>
+        <span class="print-detail-week-pat">${escapeHtml(pName)}</span>
+        <span class="muted">${frFormat(weekDays[0])} → ${frFormat(weekDays[6])}</span>`;
+      slot.appendChild(label);
+      slot.appendChild(createWeekDetailView(weekDays, {
+        editable: false,
+        forPrint: true,
+        timeBounds: sharedBounds,
+        compactMeta: true,
+      }));
+      stack.appendChild(slot);
+      if (wi === 0 && pageWeeks.length > 1) {
+        const sep = document.createElement('div');
+        sep.className = 'print-detail-week-sep';
+        sep.setAttribute('aria-hidden', 'true');
+        stack.appendChild(sep);
+      }
+    });
+
+    page.appendChild(stack);
+    root.appendChild(page);
+  });
+
+  /* Bandeau récap en tête de doc (écran / première page) */
+  if (pages.length > 1) {
+    const firstP = root.querySelector('.print-detail-header p');
+    if (firstP) {
+      firstP.insertAdjacentHTML('beforeend',
+        ` · période ${frFormat(fromISO(startIso))} → ${frFormat(fromISO(endIso))} (${numWeeks} sem.)`);
+    }
+  }
+
+  openWeekPrintDocument(root, { detail: true });
+}
+
 function printWeekPeriod() {
   if ($('#wk-print-start')) syncWeekPrintDatesFromDom();
   const startIso = STATE.ui.weekPrintStart;
@@ -587,6 +714,11 @@ function printWeekPeriod() {
   }
   if (startIso > endIso) {
     toast('La date de début doit être antérieure ou égale à la date de fin.', true);
+    return;
+  }
+
+  if ((STATE.ui.weekCellDisplay || 'cross') === 'detail') {
+    printWeekDetailPeriod(startIso, endIso);
     return;
   }
 
@@ -621,28 +753,16 @@ function printWeekPeriod() {
       ? `Semaines ${wkFrom}${wkFrom !== wkTo ? ' – ' + wkTo : ''} (${frFormat(chunkDays[0])} → ${frFormat(chunkDays[chunkDays.length - 1])})`
       : '';
     if (sub.textContent) block.appendChild(sub);
-    const printDisplay = STATE.ui.weekCellDisplay === 'detail'
-      ? 'hours'
-      : (STATE.ui.weekCellDisplay || 'cross');
     block.appendChild(createWeekPlanningTable(chunkDays, {
       editable: false,
       showImportRow: false,
       forPrint: true,
-      weekCellDisplay: printDisplay,
+      weekCellDisplay: STATE.ui.weekCellDisplay || 'cross',
     }));
     root.appendChild(block);
   });
 
-  document.body.appendChild(root);
-  document.body.classList.add('printing-week');
-
-  const cleanup = () => {
-    root.remove();
-    document.body.classList.remove('printing-week');
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
+  openWeekPrintDocument(root, { detail: false });
 }
 
 /* Vue détail : barres horaires positionnées début→fin + effectif / heure */
@@ -722,14 +842,18 @@ function renderWeekDetailShiftBlock(emp, iso, shift, c, options = {}) {
   const label = `${formatPatternTime(slotStart)}–${formatPatternTime(slotEnd)}`;
   const data = forPrint ? '' : ` data-emp="${escapeHtml(emp)}" data-date="${iso}" data-shift="${shift}"`;
   const style = `left:${Math.max(0, left).toFixed(3)}%;width:${Math.min(100 - Math.max(0, left), width).toFixed(3)}%`;
-  return `<button type="button" class="${cls.join(' ')}" style="${style}"${data} title="${escapeHtml(title)}" ${interactive ? '' : 'tabindex="-1"'}>
+  const tag = forPrint ? 'span' : 'button';
+  const typeAttr = forPrint ? '' : ' type="button"';
+  const tabAttr = forPrint || interactive ? '' : ' tabindex="-1"';
+  return `<${tag}${typeAttr} class="${cls.join(' ')}" style="${style}"${data} title="${escapeHtml(title)}"${tabAttr}>
     <span class="week-detail-block-label">${escapeHtml(label)}</span>
-  </button>`;
+  </${tag}>`;
 }
 
-function createWeekDetailView(days, { editable = true, forPrint = false } = {}) {
+function createWeekDetailView(days, { editable = true, forPrint = false, timeBounds = null, compactMeta = false } = {}) {
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
-  if (requestMode) editable = true;
+  if (requestMode && !forPrint) editable = true;
+  if (forPrint) editable = false;
   const showM = STATE.ui.filterShift !== 'aprem';
   const showA = STATE.ui.filterShift !== 'matin';
   const shifts = [];
@@ -737,7 +861,7 @@ function createWeekDetailView(days, { editable = true, forPrint = false } = {}) 
   if (showA) shifts.push('aprem');
 
   const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
-  const bounds = getWeekDetailTimeBounds(visibleEmps, days);
+  const bounds = timeBounds || getWeekDetailTimeBounds(visibleEmps, days);
   const { startMin, endMin } = bounds;
   const span = endMin - startMin;
   const hourStarts = [];
@@ -748,15 +872,17 @@ function createWeekDetailView(days, { editable = true, forPrint = false } = {}) 
   const isoWeek = getISOWeek(weekMon);
 
   const wrap = document.createElement('div');
-  wrap.className = 'planning-wrap week-detail-wrap' + (forPrint ? ' planning-wrap-print' : '');
+  wrap.className = 'planning-wrap week-detail-wrap' + (forPrint ? ' planning-wrap-print week-detail-print' : '');
 
-  const meta = document.createElement('div');
-  meta.className = 'week-detail-meta';
-  meta.innerHTML = `
-    <span class="week-detail-meta-pat">${escapeHtml(pName)}</span>
-    <span class="week-detail-meta-week">Semaine ${isoWeek}</span>
-    <span class="week-detail-meta-range muted">${formatPatternTime(minutesToTime(startMin))} → ${formatPatternTime(minutesToTime(endMin))}</span>`;
-  wrap.appendChild(meta);
+  if (!compactMeta) {
+    const meta = document.createElement('div');
+    meta.className = 'week-detail-meta';
+    meta.innerHTML = `
+      <span class="week-detail-meta-pat">${escapeHtml(pName)}</span>
+      <span class="week-detail-meta-week">Semaine ${isoWeek}</span>
+      <span class="week-detail-meta-range muted">${formatPatternTime(minutesToTime(startMin))} → ${formatPatternTime(minutesToTime(endMin))}</span>`;
+    wrap.appendChild(meta);
+  }
 
   const scroller = document.createElement('div');
   scroller.className = 'week-detail-scroll';
@@ -810,7 +936,7 @@ function createWeekDetailView(days, { editable = true, forPrint = false } = {}) 
     if (requestMode && linkedEmp && typeof employeeNamesMatch === 'function' && employeeNamesMatch(emp, linkedEmp)) {
       tr.classList.add('planning-own-row');
     }
-    tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${escapeHtml(emp)} — ${escapeHtml(getEmployeeType(emp))}">${forPrint ? escapeHtml(emp) : escapeHtml(shortEmpName(emp))}</td>`;
+    tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${escapeHtml(emp)} — ${escapeHtml(getEmployeeType(emp))}">${escapeHtml(shortEmpName(emp))}</td>`;
 
     days.forEach((d) => {
       const iso = toISO(d);
@@ -1073,9 +1199,12 @@ function renderWeekView(root) {
   const printEnd = STATE.ui.weekPrintEnd || toISO(lastDay);
   const printPanel = document.createElement('div');
   printPanel.className = 'form-card week-print-panel no-print';
+  const printHint = detailMode
+    ? `Mode <b>Détail</b> : paysage, 1 semaine en largeur, ${WEEK_DETAIL_PRINT_WEEKS_PER_PAGE} semaines empilées par feuille (fenêtre glissante : S1+S2, S2+S3…).`
+    : `Format paysage, ${WEEK_PRINT_WEEKS_PER_PAGE} semaines par page.`;
   printPanel.innerHTML = `
     <h3>Impression</h3>
-    <p class="muted">Choisissez la période à imprimer (format paysage, ${WEEK_PRINT_WEEKS_PER_PAGE} semaines par page).${detailMode ? ' En mode Détail, l’impression utilise la grille Heures.' : ''}</p>
+    <p class="muted">${printHint}</p>
     <div class="week-print-fields">
       <label>Du <input type="text" class="fr-date" id="wk-print-start" data-iso="${printStart}" value="${frFormatNumeric(printStart)}"></label>
       <label>Au <input type="text" class="fr-date" id="wk-print-end" data-iso="${printEnd}" value="${frFormatNumeric(printEnd)}"></label>
@@ -1098,7 +1227,8 @@ function renderWeekView(root) {
   $('#wk-print-run').onclick = () => printWeekPeriod();
   $('#wk-print-sync').onclick = () => {
     STATE.ui.weekPrintStart = toISO(monday);
-    STATE.ui.weekPrintEnd = toISO(detailMode ? addDays(monday, 6) : lastDay);
+    /* En détail : proposer au moins 3 semaines pour illustrer la fenêtre glissante */
+    STATE.ui.weekPrintEnd = toISO(detailMode ? addDays(monday, 7 * 3 - 1) : lastDay);
     persistAndRender();
   };
   }

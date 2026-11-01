@@ -3753,6 +3753,202 @@ body.printing-cdi #cdi-print-root {
     print-color-adjust: exact !important;
   }
 
+  /* ——— Impression vue Détail (2 semaines empilées, paysage) ——— */
+  body.printing-week-detail {
+    background: #fff !important;
+  }
+  body.printing-week-detail #week-print-root {
+    font-size: 10px;
+  }
+  body.printing-week-detail .print-detail-page {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  body.printing-week-detail .print-detail-page.page-break-after {
+    break-after: page;
+    page-break-after: always;
+  }
+  body.printing-week-detail .print-detail-header {
+    margin-bottom: 3px;
+  }
+  body.printing-week-detail .print-detail-header-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  body.printing-week-detail .print-detail-header h1 {
+    font-size: 13px;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  body.printing-week-detail .print-detail-page-num {
+    font-size: 10px;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
+  }
+  body.printing-week-detail .print-detail-header p {
+    font-size: 9px;
+    color: #444;
+    margin: 2px 0 0;
+  }
+  body.printing-week-detail .print-legend-detail {
+    margin-bottom: 5px;
+    padding-bottom: 4px;
+    gap: 4px 10px;
+    font-size: 8.5px;
+  }
+  body.printing-week-detail .print-legend-detail .lg {
+    width: 9px;
+    height: 9px;
+  }
+  body.printing-week-detail .print-detail-stack {
+    display: block;
+    width: 100%;
+  }
+  body.printing-week-detail .print-detail-week-slot {
+    display: block;
+    width: 100%;
+    margin: 0 0 8px;
+    border: 1px solid #b8b5a8;
+    border-radius: 4px;
+    overflow: visible;
+    background: #fff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  body.printing-week-detail .print-detail-week-slot:last-child {
+    margin-bottom: 0;
+  }
+  body.printing-week-detail .print-detail-week-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+    padding: 3px 8px;
+    background: #eef3f0;
+    border-bottom: 1px solid #c8c2b4;
+    font-size: 10px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.printing-week-detail .print-detail-week-label strong {
+    font-size: 11px;
+    color: #1a1a1a;
+  }
+  body.printing-week-detail .print-detail-week-pat {
+    font-weight: 700;
+    color: #1f5f4a;
+  }
+  body.printing-week-detail .print-detail-week-sep {
+    display: none;
+  }
+  body.printing-week-detail .week-detail-print {
+    display: block;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+    width: 100%;
+  }
+  body.printing-week-detail .week-detail-print .week-detail-scroll {
+    display: block;
+    overflow: visible;
+    width: 100%;
+  }
+  body.printing-week-detail table.planning.week-detail-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  body.printing-week-detail table.planning.week-detail-table th,
+  body.printing-week-detail table.planning.week-detail-table td {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-corner,
+  body.printing-week-detail table.planning.week-detail-table td.empname {
+    width: 72px;
+    min-width: 72px;
+    max-width: 80px;
+    font-size: 9px;
+    padding: 2px 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.hours-col-week,
+  body.printing-week-detail table.planning.week-detail-table td.hours-total-cell {
+    width: 36px;
+    min-width: 36px;
+    font-size: 9px;
+    padding: 1px 2px;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day {
+    padding: 2px 1px;
+    font-size: 9px;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .date-lbl {
+    font-weight: 700;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .ferie-name,
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .garde-name {
+    display: block;
+    font-size: 7.5px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-hour {
+    font-size: 7.5px;
+    padding: 0;
+    line-height: 1.2;
+    color: #555;
+  }
+  body.printing-week-detail table.planning.week-detail-table td.week-detail-daycell {
+    height: 20px;
+    padding: 0;
+  }
+  body.printing-week-detail .week-detail-track {
+    height: 18px;
+    margin: 1px 0;
+  }
+  body.printing-week-detail .week-detail-block {
+    top: 1px;
+    height: 16px;
+    border-radius: 2px;
+    font-size: 7.5px;
+    padding: 0 2px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.printing-week-detail .week-detail-block-label {
+    text-shadow: none;
+    letter-spacing: -0.01em;
+  }
+  body.printing-week-detail .week-detail-status {
+    font-size: 7.5px;
+  }
+  body.printing-week-detail .week-detail-gridline {
+    border-left-color: rgba(0, 0, 0, 0.12);
+  }
+  body.printing-week-detail table.planning.week-detail-table td.week-detail-hour-sum {
+    font-size: 8px;
+    font-weight: 700;
+    padding: 1px 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.printing-week-detail table.planning.week-detail-table tbody tr.emp-row {
+    page-break-inside: avoid;
+  }
+  body.printing-week-detail table.planning.week-detail-table th.day-header.is-today,
+  body.printing-week-detail table.planning.week-detail-table td.week-detail-daycell.is-today {
+    box-shadow: none;
+  }
+
   body.printing-contract .app { display: none !important; }
   body.printing-contract #contract-print-root {
     display: block !important;
