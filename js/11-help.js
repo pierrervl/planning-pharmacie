@@ -398,6 +398,9 @@ function buildPlanningTutorialHtml({ forAdmin = true } = {}) {
     <p>En mode <strong>Détail</strong>, chaque demi-journée travaillée apparaît comme une barre
     calée sur son début et sa fin (ex. 14h30 → 19h). La ligne <strong>Eff./h</strong> indique
     combien de personnes sont présentes sur chaque heure, avec le même code couleur que l'effectif demi-journée.</p>
+    <p><strong>Impression (mode Détail)</strong> : format paysage, une semaine en largeur,
+    <strong>deux semaines empilées</strong> par feuille avec fenêtre glissante
+    (feuille 1 = S1+S2, feuille 2 = S2+S3…). Choisissez la période dans le panneau Impression.</p>
 
     <h3 class="help-subtitle">Colonne H./sem. et formatage conditionnel</h3>
     <p>À droite de chaque semaine, la colonne <strong>H./sem.</strong> totalise les heures travaillées du salarié
