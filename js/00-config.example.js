@@ -3,6 +3,10 @@
    https://supabase.com/dashboard/project/jzlkqizzgmnlmaagijrv/settings/api */
 'use strict';
 
+/* Mot de passe oublié : le lien du mail revient sur la page du planning.
+   Ajoutez cette URL dans Supabase → Authentication → URL Configuration
+   → Redirect URLs (ex. http://localhost:8080/planning_personnel.html
+   et l'URL publique, avec un joker si besoin : https://….github.io/**). */
 window.SUPABASE_CONFIG = {
   url: 'https://jzlkqizzgmnlmaagijrv.supabase.co',
   anonKey: 'VOTRE_CLE_ANON_ICI',
