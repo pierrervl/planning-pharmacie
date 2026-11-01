@@ -3883,6 +3883,12 @@ body.auth-locked .app { filter: blur(2px); }
   border-bottom: 1px solid var(--line);
 }
 
+.auth-tabs[hidden],
+.auth-form[hidden],
+.auth-skip[hidden] {
+  display: none !important;
+}
+
 .auth-tab {
   background: none;
   border: none;
@@ -3938,6 +3944,35 @@ body.auth-locked .app { filter: blur(2px); }
 .auth-error:not([hidden]) {
   display: block;
   margin: 8px 0;
+  color: var(--warn);
+}
+
+.auth-success:not([hidden]) {
+  display: block;
+  margin: 8px 0;
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.auth-text-btn {
+  display: block;
+  margin: -4px 0 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-align: left;
+}
+
+.auth-text-btn:hover {
+  color: var(--ink-soft);
+}
+
+.auth-overlay.auth-overlay-priority {
+  z-index: 13000;
 }
 
 .auth-form .auth-submit:disabled {
