@@ -621,11 +621,14 @@ function printWeekPeriod() {
       ? `Semaines ${wkFrom}${wkFrom !== wkTo ? ' – ' + wkTo : ''} (${frFormat(chunkDays[0])} → ${frFormat(chunkDays[chunkDays.length - 1])})`
       : '';
     if (sub.textContent) block.appendChild(sub);
+    const printDisplay = STATE.ui.weekCellDisplay === 'detail'
+      ? 'hours'
+      : (STATE.ui.weekCellDisplay || 'cross');
     block.appendChild(createWeekPlanningTable(chunkDays, {
       editable: false,
       showImportRow: false,
       forPrint: true,
-      weekCellDisplay: STATE.ui.weekCellDisplay || 'cross',
+      weekCellDisplay: printDisplay,
     }));
     root.appendChild(block);
   });
@@ -642,10 +645,351 @@ function printWeekPeriod() {
   window.print();
 }
 
+/* Vue détail : barres horaires positionnées début→fin + effectif / heure */
+function renderWeekDetailShiftBlock(emp, iso, shift, c, options = {}) {
+  const { editable = true, forPrint = false, startMin, endMin, span } = options;
+  const afterContract = isAfterEmployeeContractEnd(emp, iso);
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  const canRequest = requestMode && canRequestPlanningFor(emp) && !afterContract && !forPrint;
+  const canEdit = editable && !afterContract && !requestMode
+    && (typeof canEditPlanning !== 'function' || canEditPlanning());
+  const pendingReq = typeof getPendingPlanningChangeRequest === 'function'
+    ? getPendingPlanningChangeRequest(emp, iso, shift) : null;
+
+  let slotStart = null;
+  let slotEnd = null;
+  let hours = null;
+  let present = false;
+  let blockClass = cellDisplayClass(c);
+
+  if (pendingReq) {
+    present = !!pendingReq.present;
+    if (present) {
+      slotStart = pendingReq.start;
+      slotEnd = pendingReq.end;
+      hours = pendingReq.hours;
+    }
+    blockClass = 'request-pending';
+  } else if (c.full) {
+    present = true;
+    const slot = getPlanningCellSlot(emp, iso, shift);
+    slotStart = slot.start;
+    slotEnd = slot.end;
+    hours = getPlanningCellHours(emp, iso, shift);
+  }
+
+  if (!present || !slotStart || !slotEnd) return '';
+
+  const a = timeToMinutes(slotStart);
+  const b = timeToMinutes(slotEnd);
+  if (a == null || b == null || b <= a || span <= 0) return '';
+
+  const left = ((a - startMin) / span) * 100;
+  const width = ((b - a) / span) * 100;
+  if (width <= 0) return '';
+
+  const hint = canEdit ? ' — clic : plein ↔ repos · clic droit : orange → rouge → vert' : '';
+  const requestHint = canRequest
+    ? (typeof isTeamLeader === 'function' && isTeamLeader()
+      ? ' — clic : proposer une modification'
+      : ' — clic : proposer une modification')
+    : '';
+  const adminReqHint = pendingReq && canEdit && !canRequest ? ' — clic : traiter la demande' : '';
+  const contractHint = afterContract ? ' — après fin de contrat' : '';
+  let title = `${emp} — ${frFormat(fromISO(iso))} — ${shift === 'matin' ? 'Matin' : 'Après-midi'}`;
+  if (pendingReq) {
+    title += pendingReq.present
+      ? ` — demande : ${formatPatternTime(slotStart)} → ${formatPatternTime(slotEnd)} (${formatContractHours(hours)} h)`
+      : ' — demande : non présent';
+  } else {
+    title += ` — ${cellStatusLabel(c)} — ${formatPatternTime(slotStart)} → ${formatPatternTime(slotEnd)}`;
+    if (hours != null) title += ` (${formatContractHours(hours)} h)`;
+  }
+  title += contractHint + hint + requestHint + adminReqHint;
+  if (pendingReq) title += ' — en attente de validation';
+
+  const interactive = (canEdit || canRequest) && !forPrint;
+  const cls = [
+    'week-detail-block',
+    blockClass,
+    shift === 'matin' ? 'shift-matin' : 'shift-aprem',
+  ];
+  if (interactive) cls.push('editable');
+  if (canRequest) cls.push('requestable');
+  if (c.ferie) cls.push('ferie');
+  if (afterContract) cls.push('post-contract');
+
+  const label = `${formatPatternTime(slotStart)}–${formatPatternTime(slotEnd)}`;
+  const data = forPrint ? '' : ` data-emp="${escapeHtml(emp)}" data-date="${iso}" data-shift="${shift}"`;
+  const style = `left:${Math.max(0, left).toFixed(3)}%;width:${Math.min(100 - Math.max(0, left), width).toFixed(3)}%`;
+  return `<button type="button" class="${cls.join(' ')}" style="${style}"${data} title="${escapeHtml(title)}" ${interactive ? '' : 'tabindex="-1"'}>
+    <span class="week-detail-block-label">${escapeHtml(label)}</span>
+  </button>`;
+}
+
+function createWeekDetailView(days, { editable = true, forPrint = false } = {}) {
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  if (requestMode) editable = true;
+  const showM = STATE.ui.filterShift !== 'aprem';
+  const showA = STATE.ui.filterShift !== 'matin';
+  const shifts = [];
+  if (showM) shifts.push('matin');
+  if (showA) shifts.push('aprem');
+
+  const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
+  const bounds = getWeekDetailTimeBounds(visibleEmps, days);
+  const { startMin, endMin } = bounds;
+  const span = endMin - startMin;
+  const hourStarts = [];
+  for (let m = startMin; m < endMin; m += 60) hourStarts.push(m);
+
+  const weekMon = days[0];
+  const pName = getPatternWeekNameForMonday(weekMon);
+  const isoWeek = getISOWeek(weekMon);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'planning-wrap week-detail-wrap' + (forPrint ? ' planning-wrap-print' : '');
+
+  const meta = document.createElement('div');
+  meta.className = 'week-detail-meta';
+  meta.innerHTML = `
+    <span class="week-detail-meta-pat">${escapeHtml(pName)}</span>
+    <span class="week-detail-meta-week">Semaine ${isoWeek}</span>
+    <span class="week-detail-meta-range muted">${formatPatternTime(minutesToTime(startMin))} → ${formatPatternTime(minutesToTime(endMin))}</span>`;
+  wrap.appendChild(meta);
+
+  const scroller = document.createElement('div');
+  scroller.className = 'week-detail-scroll';
+
+  const tbl = document.createElement('table');
+  tbl.className = 'planning week-detail-table';
+
+  const thead = document.createElement('thead');
+  const trDays = document.createElement('tr');
+  trDays.innerHTML = `<th class="empname week-detail-corner" rowspan="2">Nom</th>`;
+  days.forEach((d) => {
+    const iso = toISO(d);
+    const fr = getFerieLabel(iso);
+    const gd = getGardeLabel(iso);
+    const today = iso === todayISO();
+    const cls = ['day-header', 'day-group', 'week-detail-day', weekParityClass(d)];
+    if (fr) cls.push('is-ferie');
+    if (gd) cls.push('is-garde');
+    if (today) cls.push('is-today');
+    trDays.innerHTML += `
+      <th class="${cls.join(' ')}" colspan="${hourStarts.length}">
+        <span class="date-lbl">${DAY_NAMES_ABBR[d.getDay()]}</span>
+        <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
+        ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
+        ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
+      </th>`;
+  });
+  trDays.innerHTML += `<th class="hours-col hours-col-week" rowspan="2" title="Heures travaillées — fond rouge si écart avec le pattern">H./sem.</th>`;
+  thead.appendChild(trDays);
+
+  const trHours = document.createElement('tr');
+  trHours.className = 'week-detail-hours-row';
+  days.forEach((d) => {
+    const parity = weekParityClass(d);
+    hourStarts.forEach((hm, hi) => {
+      const h = Math.floor(hm / 60);
+      const edge = hi === 0 ? ' week-detail-hour-first' : '';
+      trHours.innerHTML += `<th class="week-detail-hour ${parity}${edge}">${h}h</th>`;
+    });
+  });
+  thead.appendChild(trHours);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
+  const blockOpts = { editable, forPrint, startMin, endMin, span };
+
+  for (const emp of visibleEmps) {
+    const tr = document.createElement('tr');
+    tr.className = 'emp-row week-detail-emp-row';
+    if (requestMode && linkedEmp && typeof employeeNamesMatch === 'function' && employeeNamesMatch(emp, linkedEmp)) {
+      tr.classList.add('planning-own-row');
+    }
+    tr.innerHTML = `<td class="empname ${employeeTypeClass(emp)}" title="${escapeHtml(emp)} — ${escapeHtml(getEmployeeType(emp))}">${forPrint ? escapeHtml(emp) : escapeHtml(shortEmpName(emp))}</td>`;
+
+    days.forEach((d) => {
+      const iso = toISO(d);
+      const afterContract = isAfterEmployeeContractEnd(emp, iso);
+      const parity = weekParityClass(d);
+      const fr = getFerieLabel(iso);
+      let blocksHtml = '';
+      let statusNote = '';
+
+      for (const shift of shifts) {
+        const c = computeCell(emp, iso, shift);
+        const pendingReq = typeof getPendingPlanningChangeRequest === 'function'
+          ? getPendingPlanningChangeRequest(emp, iso, shift) : null;
+        const passesFilter = forPrint || cellPassesTypeFilter(c) || !!pendingReq;
+        if (!passesFilter) continue;
+        blocksHtml += renderWeekDetailShiftBlock(emp, iso, shift, c, blockOpts);
+        if (!c.full && !pendingReq?.present) {
+          if (c.status === 'rest' && !statusNote) statusNote = 'Repos';
+          else if (c.status === 'empty' && !statusNote) statusNote = '';
+          else if (isCongeTypeLabel(c.status) && !statusNote) statusNote = c.status;
+        }
+      }
+
+      const dayCls = ['week-detail-daycell', parity];
+      if (fr) dayCls.push('ferie');
+      if (afterContract) dayCls.push('post-contract');
+      if (iso === todayISO()) dayCls.push('is-today');
+
+      const noteHtml = (!blocksHtml && statusNote)
+        ? `<span class="week-detail-status">${escapeHtml(statusNote)}</span>`
+        : '';
+
+      const hourLines = hourStarts.map((_, hi) =>
+        `<span class="week-detail-gridline${hi === 0 ? ' first' : ''}" style="left:${(hi / hourStarts.length) * 100}%"></span>`
+      ).join('');
+
+      tr.innerHTML += `
+        <td class="${dayCls.join(' ')}" colspan="${hourStarts.length}">
+          <div class="week-detail-track">
+            ${hourLines}
+            ${blocksHtml}
+            ${noteHtml}
+          </div>
+        </td>`;
+    });
+
+    tr.innerHTML += renderWeekHoursTotalCell(emp, weekMon, `hours-col-week ${weekParityClass(weekMon)}`);
+    tbody.appendChild(tr);
+  }
+  tbl.appendChild(tbody);
+
+  const tfoot = document.createElement('tfoot');
+  const trSum = document.createElement('tr');
+  trSum.className = 'sum-row week-detail-sum-row';
+  trSum.innerHTML = `<td class="empname sum-label" title="Effectif présent par heure">Eff./h</td>`;
+
+  days.forEach((d) => {
+    const iso = toISO(d);
+    const parity = weekParityClass(d);
+    hourStarts.forEach((hm, hi) => {
+      const n = countPresencesInHour(visibleEmps, iso, hm, hm + 60);
+      const bg = presenceCountColor(n);
+      const hLabel = `${Math.floor(hm / 60)}h–${Math.floor(hm / 60) + 1}h`;
+      const title = `${frFormat(d)} · ${hLabel} — ${n} présent${n > 1 ? 's' : ''} (rouge ≤2 · jaune 3 · vert ≥4)`;
+      const edge = hi === 0 ? ' week-detail-hour-first' : '';
+      trSum.innerHTML += `<td class="cell sum-cell week-detail-hour-sum ${parity}${edge}" style="background:${bg}" title="${title}">${n}</td>`;
+    });
+  });
+
+  const weekStart = toISO(weekMon);
+  const weekEnd = toISO(days[days.length - 1]);
+  let teamWeekH = 0;
+  for (const emp of visibleEmps) {
+    teamWeekH += computePlanningHoursForPeriod(emp, weekStart, weekEnd);
+  }
+  trSum.innerHTML += renderHoursTotalCell(Math.round(teamWeekH * 100) / 100, {
+    extraClass: `hours-col-week sum-row-hours ${weekParityClass(weekMon)}`,
+    title: `Total équipe — sem. ${isoWeek} — ${formatContractHours(teamWeekH)} h`,
+  });
+  tfoot.appendChild(trSum);
+  tbl.appendChild(tfoot);
+
+  scroller.appendChild(tbl);
+  wrap.appendChild(scroller);
+  return wrap;
+}
+
+function attachWeekDetailHandlers(wrap) {
+  const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
+  const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
+
+  if (requestMode) {
+    const needsLinkedEmp = !(typeof isTeamLeader === 'function' && isTeamLeader());
+    if (needsLinkedEmp && !linkedEmp) return;
+    wrap.querySelectorAll('.week-detail-block[data-emp]').forEach(el => {
+      if (!canRequestPlanningFor(el.dataset.emp)) return;
+      el.classList.add('editable', 'requestable');
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const emp = el.dataset.emp;
+        const iso = el.dataset.date;
+        const shift = el.dataset.shift;
+        if (!iso || !shift) return;
+        if (isAfterEmployeeContractEnd(emp, iso)) {
+          toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+          return;
+        }
+        openEmployeePlanningChangeRequest(emp, iso, shift);
+      };
+      el.oncontextmenu = (e) => e.preventDefault();
+    });
+    return;
+  }
+
+  wrap.querySelectorAll('.week-detail-block.editable[data-emp]').forEach(el => {
+    el.onclick = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.emp;
+      const iso = el.dataset.date;
+      const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) {
+        toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
+      if (el.classList.contains('request-pending')
+        && typeof openAdminPlanningChangeRequest === 'function') {
+        e.stopPropagation();
+        openAdminPlanningChangeRequest(emp, iso, shift);
+        return;
+      }
+      const cur = getPlanningValue(emp, iso, shift);
+      setPlanningValue(emp, iso, shift, nextPlanningValueOnLeftClick(cur, e));
+      persistAndRender();
+    };
+    el.oncontextmenu = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.emp;
+      const iso = el.dataset.date;
+      const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) {
+        toast(`Après la fin de contrat (${frFormatNumeric(getEmployeeContractEndDate(emp))})`, true);
+        return;
+      }
+      if (el.classList.contains('request-pending')
+        && typeof openAdminPlanningChangeRequest === 'function') {
+        openAdminPlanningChangeRequest(emp, iso, shift);
+        return;
+      }
+      const cur = getPlanningValue(emp, iso, shift);
+      const next = nextPlanningValueOnRightClick(cur);
+      setPlanningValue(emp, iso, shift, next);
+      saveState();
+      if (isPlanningSpecialVal(next)) {
+        promptPlanningCellHours({ emp, iso, shift, onDone: persistAndRender });
+      } else {
+        persistAndRender();
+      }
+    };
+    el.ondblclick = (e) => {
+      e.preventDefault();
+      const emp = el.dataset.emp;
+      const iso = el.dataset.date;
+      const shift = el.dataset.shift;
+      if (isAfterEmployeeContractEnd(emp, iso)) return;
+      if (el.classList.contains('request-pending')) return;
+      const cur = getPlanningValue(emp, iso, shift);
+      if (!isPlanningSpecialVal(cur)) return;
+      promptPlanningCellHours({ emp, iso, shift, onDone: persistAndRender });
+    };
+  });
+}
+
 function renderWeekView(root) {
   const current = fromISO(STATE.ui.currentDate);
   const monday  = mondayOf(current);
-  const numWeeks = 1 + WEEK_VIEW_EXTRA;
+  const displayMode = STATE.ui.weekCellDisplay || 'cross';
+  const detailMode = displayMode === 'detail';
+  const numWeeks = detailMode ? 1 : 1 + WEEK_VIEW_EXTRA;
   const days    = [];
   for (let i = 0; i < numWeeks * 7; i++) days.push(addDays(monday, i));
   const lastDay = days[days.length - 1];
@@ -663,12 +1007,16 @@ function renderWeekView(root) {
       <button class="nav" id="wk-next">Semaine ›</button>
     </div>
     <div class="label">${frFormat(monday)} → ${frFormat(lastDay)}</div>
-    <div class="week-num">${numWeeks} semaines · S${isoWeek}–S${getISOWeek(lastDay)} · ${isoYear}</div>
+    <div class="week-num">${detailMode
+      ? `Vue détail · S${isoWeek} · ${isoYear}`
+      : `${numWeeks} semaines · S${isoWeek}–S${getISOWeek(lastDay)} · ${isoYear}`}</div>
     <div class="spacer"></div>
     <label>Aller à : <input type="text" class="fr-date" id="wk-jump" data-iso="${STATE.ui.currentDate}" value="${frFormatNumeric(STATE.ui.currentDate)}"></label>
     <span class="help-text no-print">${requestMode
       ? (typeof getPlanningRequestHelpText === 'function' ? getPlanningRequestHelpText() : 'Cliquez sur une demi-journée pour proposer une modification en <b>violet</b>')
-      : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · <b>cases violettes</b> : clic pour traiter une demande' : ''}`}</span>
+      : detailMode
+        ? `Chaque barre = une demi-journée, calée sur ses horaires · ligne <b>Eff./h</b> = effectif par heure${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · barres <b>violettes</b> : demandes en attente' : ''}`
+        : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · <b>cases violettes</b> : clic pour traiter une demande' : ''}`}</span>
   `;
   root.appendChild(ctrl);
 
@@ -689,20 +1037,16 @@ function renderWeekView(root) {
     }
   }
 
-  const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });
-  root.appendChild(wrap);
-  attachWeekTableHandlers(wrap);
-
-  const displayMode = STATE.ui.weekCellDisplay || 'cross';
   const viewBar = document.createElement('div');
   viewBar.className = 'week-view-bar no-print';
   viewBar.innerHTML = `
-    <span class="week-view-bar-label">Affichage des cellules</span>
+    <span class="week-view-bar-label">Affichage</span>
     <div class="week-display-switch" role="group" aria-label="Mode d'affichage du planning">
       <button type="button" class="week-display-btn${displayMode === 'cross' ? ' active' : ''}" data-week-display="cross" aria-pressed="${displayMode === 'cross'}">Croix</button>
       <button type="button" class="week-display-btn${displayMode === 'hours' ? ' active' : ''}" data-week-display="hours" aria-pressed="${displayMode === 'hours'}">Heures</button>
+      <button type="button" class="week-display-btn${displayMode === 'detail' ? ' active' : ''}" data-week-display="detail" aria-pressed="${displayMode === 'detail'}">Détail</button>
     </div>`;
-  root.insertBefore(viewBar, wrap);
+  root.appendChild(viewBar);
 
   viewBar.querySelectorAll('[data-week-display]').forEach(btn => {
     btn.onclick = () => {
@@ -714,6 +1058,16 @@ function renderWeekView(root) {
     };
   });
 
+  if (detailMode) {
+    const wrap = createWeekDetailView(days, { editable: true });
+    root.appendChild(wrap);
+    attachWeekDetailHandlers(wrap);
+  } else {
+    const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });
+    root.appendChild(wrap);
+    attachWeekTableHandlers(wrap);
+  }
+
   if (!requestMode) {
   const printStart = STATE.ui.weekPrintStart || toISO(monday);
   const printEnd = STATE.ui.weekPrintEnd || toISO(lastDay);
@@ -721,7 +1075,7 @@ function renderWeekView(root) {
   printPanel.className = 'form-card week-print-panel no-print';
   printPanel.innerHTML = `
     <h3>Impression</h3>
-    <p class="muted">Choisissez la période à imprimer (format paysage, ${WEEK_PRINT_WEEKS_PER_PAGE} semaines par page).</p>
+    <p class="muted">Choisissez la période à imprimer (format paysage, ${WEEK_PRINT_WEEKS_PER_PAGE} semaines par page).${detailMode ? ' En mode Détail, l’impression utilise la grille Heures.' : ''}</p>
     <div class="week-print-fields">
       <label>Du <input type="text" class="fr-date" id="wk-print-start" data-iso="${printStart}" value="${frFormatNumeric(printStart)}"></label>
       <label>Au <input type="text" class="fr-date" id="wk-print-end" data-iso="${printEnd}" value="${frFormatNumeric(printEnd)}"></label>
@@ -744,7 +1098,7 @@ function renderWeekView(root) {
   $('#wk-print-run').onclick = () => printWeekPeriod();
   $('#wk-print-sync').onclick = () => {
     STATE.ui.weekPrintStart = toISO(monday);
-    STATE.ui.weekPrintEnd = toISO(lastDay);
+    STATE.ui.weekPrintEnd = toISO(detailMode ? addDays(monday, 6) : lastDay);
     persistAndRender();
   };
   }

@@ -390,10 +390,14 @@ function buildPlanningTutorialHtml({ forAdmin = true } = {}) {
       <li><span class="help-swatch request-pending"></span> <strong>Violet</strong> — demande de modification en attente (validation admin)</li>
     </ul>
 
-    <h3 class="help-subtitle">Affichage Croix / Heures</h3>
-    <p>Au-dessus du tableau, basculez entre <strong>Croix</strong> (✕ sur fond bleu) et <strong>Heures</strong>
-    (durée calculée, ex. 5,5 h). En mode Heures, les cellules orange/rouge affichent la durée saisie ;
+    <h3 class="help-subtitle">Affichage Croix / Heures / Détail</h3>
+    <p>Au-dessus du tableau, basculez entre <strong>Croix</strong> (✕ sur fond bleu), <strong>Heures</strong>
+    (durée calculée, ex. 5,5 h) et <strong>Détail</strong> (timeline d'une semaine).
+    En mode Heures, les cellules orange/rouge affichent la durée saisie ;
     survolez une cellule pour voir le détail des horaires.</p>
+    <p>En mode <strong>Détail</strong>, chaque demi-journée travaillée apparaît comme une barre
+    calée sur son début et sa fin (ex. 14h30 → 19h). La ligne <strong>Eff./h</strong> indique
+    combien de personnes sont présentes sur chaque heure, avec le même code couleur que l'effectif demi-journée.</p>
 
     <h3 class="help-subtitle">Colonne H./sem. et formatage conditionnel</h3>
     <p>À droite de chaque semaine, la colonne <strong>H./sem.</strong> totalise les heures travaillées du salarié
