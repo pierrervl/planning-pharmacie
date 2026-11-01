@@ -273,7 +273,7 @@ function buildDefaultState() {
       patternLayout: 'unified', /* 'unified' | 'split' */
       weekPrintStart: null,
       weekPrintEnd: null,
-      weekCellDisplay: 'cross', /* 'cross' | 'hours' */
+      weekCellDisplay: 'cross', /* 'cross' | 'hours' | 'detail' */
     }
   };
 
@@ -344,7 +344,7 @@ function migrateState(state) {
   if (!state.ui.weekPrintEnd) {
     state.ui.weekPrintEnd = toISO(addDays(curMon, (1 + 2) * 7 - 1)); /* 3 semaines */
   }
-  if (!state.ui.weekCellDisplay || !['cross', 'hours'].includes(state.ui.weekCellDisplay)) {
+  if (!state.ui.weekCellDisplay || !['cross', 'hours', 'detail'].includes(state.ui.weekCellDisplay)) {
     state.ui.weekCellDisplay = 'cross';
   }
   if (state.ui.topbarColor != null && state.ui.topbarColor !== '') {

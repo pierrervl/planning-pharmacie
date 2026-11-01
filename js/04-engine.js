@@ -644,6 +644,68 @@ function computePlanningShiftHours(empName, dateIso, shift, state = STATE) {
   return h != null ? h : 0;
 }
 
+/* Plage horaire d'affichage (vue détail) — bornes arrondies à l'heure --- */
+function getWeekDetailTimeBounds(employees, days, state = STATE) {
+  let min = Infinity;
+  let max = -Infinity;
+  const consider = (start, end) => {
+    const a = timeToMinutes(start);
+    const b = timeToMinutes(end);
+    if (a != null) min = Math.min(min, a);
+    if (b != null) max = Math.max(max, b);
+  };
+  const defs = ensurePatternShiftDefaults(state);
+  const sat = ensurePatternShiftDefaultsSaturday(state);
+  for (const d of [defs, sat]) {
+    for (const shift of ['matin', 'aprem']) consider(d[shift].start, d[shift].end);
+  }
+  const shifts = shiftsForHoursFilter(state);
+  for (const emp of employees || []) {
+    for (const day of days || []) {
+      const iso = typeof day === 'string' ? day : toISO(day);
+      if (isAfterEmployeeContractEnd(emp, iso, state)) continue;
+      for (const shift of shifts) {
+        const c = computeCell(emp, iso, shift);
+        if (!c.full) continue;
+        const slot = getPlanningCellSlot(emp, iso, shift, state);
+        consider(slot.start, slot.end);
+      }
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+    min = timeToMinutes('08:00');
+    max = timeToMinutes('19:30');
+  }
+  const startMin = Math.floor(min / 60) * 60;
+  let endMin = Math.ceil(max / 60) * 60;
+  if (endMin <= startMin) endMin = startMin + 60;
+  return { startMin, endMin };
+}
+
+/* Effectif présent sur un créneau [hourStart, hourEnd) (minutes) -------- */
+function countPresencesInHour(employees, dateIso, hourStartMin, hourEndMin, state = STATE) {
+  let n = 0;
+  const shifts = shiftsForHoursFilter(state);
+  for (const emp of employees || []) {
+    if (isAfterEmployeeContractEnd(emp, dateIso, state)) continue;
+    let present = false;
+    for (const shift of shifts) {
+      const c = computeCell(emp, dateIso, shift);
+      if (!c.full) continue;
+      const slot = getPlanningCellSlot(emp, dateIso, shift, state);
+      const a = timeToMinutes(slot.start);
+      const b = timeToMinutes(slot.end);
+      if (a == null || b == null) continue;
+      if (a < hourEndMin && b > hourStartMin) {
+        present = true;
+        break;
+      }
+    }
+    if (present) n++;
+  }
+  return n;
+}
+
 function computePlanningHoursForPeriod(empName, startIso, endIso, state = STATE) {
   let total = 0;
   const shifts = shiftsForHoursFilter(state);
