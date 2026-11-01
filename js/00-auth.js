@@ -233,6 +233,7 @@ async function ensureUserProfile(user) {
 function enableAuthFormButtons(overlay) {
   const loginBtn = overlay.querySelector('#auth-form-login .auth-submit');
   const signupBtn = overlay.querySelector('#auth-form-signup .auth-submit');
+  const resetBtn = overlay.querySelector('#auth-form-reset .auth-submit');
   if (loginBtn) {
     loginBtn.disabled = false;
     loginBtn.textContent = 'Se connecter';
@@ -240,6 +241,10 @@ function enableAuthFormButtons(overlay) {
   if (signupBtn) {
     signupBtn.disabled = false;
     signupBtn.textContent = 'Créer un compte';
+  }
+  if (resetBtn) {
+    resetBtn.disabled = false;
+    resetBtn.textContent = 'Envoyer le lien';
   }
 }
 
@@ -435,6 +440,22 @@ function getAuthUserEmail() {
 }
 
 let superAdminResolved = null;
+let pendingPasswordRecovery = false;
+
+function urlHasPasswordRecovery() {
+  const raw = `${window.location.hash || ''}${window.location.search || ''}`;
+  return /(?:^|[?#&])type=recovery(?:&|$)/.test(raw);
+}
+
+function getPasswordResetRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function isUnknownAccountResetError(error) {
+  const msg = error?.message || '';
+  const code = error?.code || '';
+  return code === 'user_not_found' || /user not found/i.test(msg);
+}
 
 function getSuperAdminEmails() {
   const fromConfig = window.SUPABASE_CONFIG?.superAdminEmails;
@@ -517,6 +538,108 @@ async function signIn(email, password) {
   } finally {
     authHandlersPaused = false;
   }
+}
+
+async function requestPasswordReset(email) {
+  const client = await ensureAuthClient();
+  const { error } = await withTimeout(
+    client.auth.resetPasswordForEmail(String(email || '').trim(), {
+      redirectTo: getPasswordResetRedirectUrl(),
+    }),
+    AUTH_SIGNIN_TIMEOUT_MS,
+    'Envoi du mail expiré (15 s). Vérifiez votre connexion internet.'
+  );
+  if (error && !isUnknownAccountResetError(error)) throw error;
+}
+
+async function updatePassword(password) {
+  const client = await ensureAuthClient();
+  const { data, error } = await withTimeout(
+    client.auth.updateUser({ password: String(password || '') }),
+    AUTH_SIGNIN_TIMEOUT_MS,
+    'Mise à jour du mot de passe expirée (15 s). Vérifiez votre connexion internet.'
+  );
+  if (error) throw error;
+  pendingPasswordRecovery = false;
+  return data;
+}
+
+function showNewPasswordOverlay() {
+  if (!pendingPasswordRecovery || !AUTH.session?.user) return;
+  if (document.getElementById('auth-form-new-password')) return;
+  removeAuthOverlay();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay auth-overlay-priority';
+  overlay.innerHTML = `
+    <div class="auth-card" role="dialog" aria-labelledby="auth-new-password-title">
+      <h2 id="auth-new-password-title">Nouveau mot de passe</h2>
+      <p class="auth-sub">Choisissez un mot de passe d'au moins 6 caractères. Il remplace l'ancien.</p>
+      <form class="auth-form" id="auth-form-new-password">
+        <label>Nouveau mot de passe
+          <input type="password" name="password" required autocomplete="new-password" minlength="6">
+        </label>
+        <label>Confirmation
+          <input type="password" name="passwordConfirm" required autocomplete="new-password" minlength="6">
+        </label>
+        <p class="auth-error" id="auth-error-new-password" hidden></p>
+        <button type="submit" class="primary auth-submit">Enregistrer le mot de passe</button>
+      </form>
+      <button type="button" class="auth-skip" id="auth-new-password-later">Continuer sans changer</button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  const card = overlay.querySelector('.auth-card');
+  if (card) card.onclick = (e) => e.stopPropagation();
+  overlay.querySelector('#auth-new-password-later').onclick = () => {
+    pendingPasswordRecovery = false;
+    removeAuthOverlay();
+  };
+
+  overlay.querySelector('#auth-form-new-password').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = overlay.querySelector('#auth-error-new-password');
+    const submitBtn = form.querySelector('.auth-submit');
+    const fd = new FormData(form);
+    const password = String(fd.get('password') || '');
+    const confirm = String(fd.get('passwordConfirm') || '');
+    errEl.hidden = true;
+    errEl.style.color = '';
+
+    if (password.length < 6) {
+      errEl.textContent = 'Mot de passe trop court (6 caractères minimum).';
+      errEl.hidden = false;
+      return;
+    }
+    if (password !== confirm) {
+      errEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+      errEl.hidden = false;
+      return;
+    }
+
+    const prevLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enregistrement…';
+    try {
+      await updatePassword(password);
+      removeAuthOverlay();
+      if (typeof toast === 'function') toast('Mot de passe mis à jour');
+      if (!AUTH.pharmacy && typeof completeAuthWithPharmacy === 'function') {
+        const phResult = await completeAuthWithPharmacy();
+        if (phResult.needsPharmacy) {
+          if (phResult.action === 'pick') showPharmacyPicker();
+          else showJoinPharmacyOverlay();
+        }
+      }
+      if (typeof render === 'function') render();
+    } catch (err) {
+      errEl.textContent = authErrorMessage(err);
+      errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
+    }
+  };
 }
 
 async function completeAuthWithPharmacy() {
@@ -808,8 +931,15 @@ async function initAuth() {
   }
   try {
     await waitForSupabaseLib();
+    if (urlHasPasswordRecovery()) pendingPasswordRecovery = true;
     initSupabaseClient();
-    AUTH.client.auth.onAuthStateChange((_event, session) => {
+    AUTH.client.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        pendingPasswordRecovery = true;
+        AUTH.session = session;
+        if (session?.user && !AUTH.profile) AUTH.profile = fallbackProfileFromUser(session.user);
+        showNewPasswordOverlay();
+      }
       if (authHandlersPaused) return;
       AUTH.session = session;
       if (session?.user) {
@@ -832,6 +962,7 @@ async function initAuth() {
       await ensurePharmacySelected();
       if (AUTH.pharmacy && typeof syncAfterAuth === 'function') void syncAfterAuth();
     }
+    if (pendingPasswordRecovery) showNewPasswordOverlay();
     AUTH.ready = true;
     return { configured: true, session: AUTH.session, error: null };
   } catch (e) {
@@ -866,8 +997,17 @@ function showAuthOverlay({ mode = 'login' } = {}) {
       <form class="auth-form" id="auth-form-login" ${mode !== 'login' ? 'hidden' : ''}>
         <label>Email<input type="email" name="email" required autocomplete="email"></label>
         <label>Mot de passe<input type="password" name="password" required autocomplete="current-password" minlength="6"></label>
+        <button type="button" class="auth-text-btn" id="auth-forgot">Mot de passe oublié ?</button>
         <p class="auth-error" id="auth-error-login" hidden></p>
         <button type="submit" class="primary auth-submit" disabled>Chargement Supabase…</button>
+      </form>
+      <form class="auth-form" id="auth-form-reset" hidden>
+        <label>Email<input type="email" name="email" required autocomplete="email"></label>
+        <p class="auth-hint" id="auth-reset-hint">Si un compte existe pour cette adresse, vous recevrez un lien pour choisir un nouveau mot de passe.</p>
+        <p class="auth-error" id="auth-error-reset" hidden></p>
+        <p class="auth-success" id="auth-reset-success" hidden></p>
+        <button type="submit" class="primary auth-submit" disabled>Chargement Supabase…</button>
+        <button type="button" class="auth-skip" id="auth-reset-back">Retour à la connexion</button>
       </form>
       <form class="auth-form" id="auth-form-signup" ${mode !== 'signup' ? 'hidden' : ''}>
         <label>Nom complet<input type="text" name="fullName" autocomplete="name"></label>
@@ -930,15 +1070,36 @@ function showAuthOverlay({ mode = 'login' } = {}) {
     }
   }
 
+  function setAuthMode(mode) {
+    overlay.querySelector('#auth-form-login').hidden = mode !== 'login';
+    overlay.querySelector('#auth-form-signup').hidden = mode !== 'signup';
+    overlay.querySelector('#auth-form-reset').hidden = mode !== 'reset';
+    overlay.querySelector('.auth-tabs').hidden = mode === 'reset';
+    const skip = overlay.querySelector('#auth-skip');
+    if (skip) skip.hidden = mode === 'reset';
+    overlay.querySelectorAll('.auth-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.authTab === mode);
+    });
+    const sub = overlay.querySelector('.auth-sub');
+    if (sub) {
+      sub.textContent = mode === 'reset'
+        ? 'Indiquez l\'adresse du compte pour recevoir un lien de nouveau mot de passe.'
+        : 'Connectez-vous pour synchroniser le planning avec Supabase.';
+    }
+  }
+
+  if (mode === 'reset') setAuthMode('reset');
+
   overlay.querySelectorAll('[data-auth-tab]').forEach(btn => {
-    btn.onclick = () => {
-      overlay.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.authTab;
-      overlay.querySelector('#auth-form-login').hidden = tab !== 'login';
-      overlay.querySelector('#auth-form-signup').hidden = tab !== 'signup';
-    };
+    btn.onclick = () => setAuthMode(btn.dataset.authTab);
   });
+
+  overlay.querySelector('#auth-forgot').onclick = () => {
+    const email = overlay.querySelector('#auth-form-login input[name="email"]').value;
+    overlay.querySelector('#auth-form-reset input[name="email"]').value = email;
+    setAuthMode('reset');
+  };
+  overlay.querySelector('#auth-reset-back').onclick = () => setAuthMode('login');
 
   overlay.querySelector('#auth-form-login').onsubmit = async (e) => {
     e.preventDefault();
@@ -1026,6 +1187,35 @@ function showAuthOverlay({ mode = 'login' } = {}) {
       submitBtn.textContent = prevLabel;
     }
   };
+
+  overlay.querySelector('#auth-form-reset').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = overlay.querySelector('#auth-error-reset');
+    const okEl = overlay.querySelector('#auth-reset-success');
+    const submitBtn = form.querySelector('.auth-submit');
+    const email = String(new FormData(form).get('email') || '').trim();
+    errEl.hidden = true;
+    okEl.hidden = true;
+    const hint = overlay.querySelector('#auth-reset-hint');
+    if (hint) hint.hidden = false;
+    const prevLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi…';
+    try {
+      await requestPasswordReset(email);
+      okEl.textContent = 'Si un compte existe pour cette adresse, un e-mail vient d\'être envoyé. Ouvrez le lien pour choisir un nouveau mot de passe.';
+      okEl.hidden = false;
+      if (hint) hint.hidden = true;
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Renvoyer le lien';
+    } catch (err) {
+      errEl.textContent = authErrorMessage(err);
+      errEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
+    }
+  };
 }
 
 function authErrorMessage(err) {
@@ -1034,6 +1224,11 @@ function authErrorMessage(err) {
   if (/already registered/i.test(msg)) return 'Cet email est déjà utilisé.';
   if (/expir/i.test(msg)) return msg;
   if (/password/i.test(msg) && /short|least/i.test(msg)) return 'Mot de passe trop court (6 caractères minimum).';
+  if (/different from the old/i.test(msg)) return 'Choisissez un mot de passe différent de l\'ancien.';
+  if (/rate limit|only request this|once every/i.test(msg)) return 'Trop de demandes. Réessayez dans une minute.';
+  if (/redirect/i.test(msg)) {
+    return 'Adresse de retour non autorisée. Ajoutez l\'URL du planning dans Supabase → Authentication → URL Configuration → Redirect URLs.';
+  }
   return msg;
 }
 
