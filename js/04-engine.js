@@ -427,6 +427,32 @@ function periodHasPlanningData(startIso, endIso, employees, state = STATE) {
   return false;
 }
 
+/* Empreinte du modèle (semaines-types + horaires + ancrage) pour savoir s'il a changé
+   depuis le dernier import vers le planning. */
+function patternsSignature(state = STATE) {
+  const str = JSON.stringify([
+    state.patterns, state.patternShiftDefaults, state.patternShiftDefaultsSaturday,
+    state.patternAnchorDate, state.patternCycleWeeks,
+  ]);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function markPatternsApplied(state = STATE) {
+  if (state !== STATE) return;
+  if (!STATE.ui) STATE.ui = {};
+  STATE.ui.patternsAppliedSig = patternsSignature(STATE);
+}
+
+function patternsNeedApply() {
+  const hasPat = typeof hasPatternContent === 'function' && hasPatternContent();
+  if (!hasPat) return false;
+  const saved = STATE.ui?.patternsAppliedSig;
+  if (!saved) return !(typeof hasPlanningContent === 'function' && hasPlanningContent());
+  return saved !== patternsSignature();
+}
+
 function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 'fillEmpty' */, state = STATE) {
   let updated = 0;
   let skipped = 0;
@@ -455,6 +481,7 @@ function importPatternPeriod(startIso, endIso, employees, mode /* 'overwrite' | 
     }
     d = addDays(d, 1);
   }
+  markPatternsApplied(state);
   return { updated, skipped, startIso, endIso, dayCount: diffDays(startIso, endIso) + 1 };
 }
 
@@ -462,6 +489,7 @@ function importPatternWeek(weekMondayIso, employees, mode /* 'overwrite' | 'fill
   const weekMon = fromISO(weekMondayIso);
   const endIso = toISO(addDays(weekMon, 6));
   const r = importPatternPeriod(weekMondayIso, endIso, employees, mode);
+  markPatternsApplied();
   return {
     ...r,
     pname: getPatternWeekNameForMonday(weekMon),

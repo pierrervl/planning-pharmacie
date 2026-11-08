@@ -8,7 +8,7 @@ const PATTERN_CONCEPT_NOTE = `
     Le <strong>planning</strong> (onglet Semaine) est d'abord un <strong>calendrier vierge</strong>.
     Le <strong>pattern</strong>, c'est le modèle — comme un <strong>tampon</strong> avec l'empreinte
     des horaires de travail habituels de chaque salarié. Vous le préparez ici, puis vous l'« estampez »
-    sur le calendrier via <em>Importer le cycle vers le planning</em>.
+    sur le calendrier via <em>Appliquer au planning</em>.
   </p>`;
 
 function patternEscapeAttr(s) {
@@ -26,6 +26,9 @@ function renderPatternsEditor(root) {
   const anchorSummary = getPatternAnchorSummary();
   const cycleWeeks = getPatternCycleWeekCount();
   const cycleLabel = getPatternCycleWeeksLabel();
+  const editable = typeof canEditPlanning !== 'function' || canEditPlanning();
+  const hasContent = typeof hasPatternContent === 'function' ? hasPatternContent() : true;
+  const open = STATE.ui.patternSectionsOpen || (STATE.ui.patternSectionsOpen = {});
   const cycleWeekOptions = Array.from(
     { length: PATTERN_CYCLE_WEEKS_MAX - PATTERN_CYCLE_WEEKS_MIN + 1 },
     (_, i) => {
@@ -37,17 +40,8 @@ function renderPatternsEditor(root) {
   const ctrl = document.createElement('div');
   ctrl.className = 'controls pattern-controls';
   ctrl.innerHTML = `
-    <div class="label">Modèle de cycle — ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
-    <div class="pattern-concept-note">${PATTERN_CONCEPT_NOTE}</div>
-    <div class="help-text">
-      Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A,
-      <b>${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}-types</b>
-      (<b>${cycleLabel}</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
-      (horaires demandés sur orange/rouge) · double-clic sur orange/rouge = modifier les horaires.
-      Les cases affichent la durée calculée (ex. 5,5).
-      Tous les salariés sont listés ici (filtres latéraux ignorés).
-      L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
-    </div>
+    <div class="label">Semaines-types — cycle de ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
+    <div class="help-text">Horaires habituels de chaque salarié (${cycleLabel}), à appliquer ensuite sur le planning.</div>
     <div class="spacer"></div>
     <label>Durée du cycle :
       <select id="pat-cycle-weeks">${cycleWeekOptions}</select>
@@ -69,42 +63,56 @@ function renderPatternsEditor(root) {
     toast(`Cycle modifié : ${n} semaine${n > 1 ? 's' : ''} (${getPatternCycleWeeksLabel()}).`);
     persistAndRender();
   };
+  ctrl.querySelector('#pat-layout').onchange = (e) => {
+    STATE.ui.patternLayout = e.target.value;
+    persistAndRender();
+  };
 
-  mountPatternShiftDefaultsPanel(root);
-  mountPatternAnchorPanel(root);
-
-  const importPanel = document.createElement('div');
-  importPanel.className = 'form-card pattern-import-panel no-print';
-  importPanel.innerHTML = `
-    <h3>Importer le cycle vers le planning</h3>
-    <p class="muted">
-      Recopie les ${getPatternCycleWeekCount()} semaines-types (${getPatternCycleWeeksLabel()}) sur une période calendaire, pour tous les salariés,
-      selon l'ancrage défini ci-dessus. Les cellules existantes peuvent être écrasées ou conservées.
-    </p>
-    <div class="form-grid pattern-import-grid">
-      <label>Du <input type="text" class="fr-date" id="pat-import-start" data-iso="${defaultStart}" value="${frFormatNumeric(defaultStart)}"></label>
-      <label>Au <input type="text" class="fr-date" id="pat-import-end" data-iso="${defaultEnd}" value="${frFormatNumeric(defaultEnd)}"></label>
-      <button type="button" class="primary" id="pat-import-run">↓ Importer sur la période</button>
-    </div>
-  `;
-  root.appendChild(importPanel);
-  attachPatternPeriodImportHandlers(importPanel);
-
-  if (patternEmps.length > 0) {
-    mountPatternCopyPanel(root, patternEmps);
-  }
+  /* Repère « comment ça marche », ouvert d'office tant que le modèle est vide */
+  const howto = createPatternSection('howto', 'Comment ça marche ?', open.howto ?? !hasContent);
+  howto.body.innerHTML = `
+    <div class="pattern-concept-note">${PATTERN_CONCEPT_NOTE}</div>
+    <ol class="pattern-steps">
+      <li><strong>Remplissez</strong> la grille ci-dessous : chaque ligne est un salarié, chaque colonne une demi-journée (M = matin, A = après-midi) des ${cycleWeeks} semaines du cycle.</li>
+      <li><strong>Appliquez</strong> le cycle au planning sur la période voulue (bloc « Appliquer au planning » sous la grille).</li>
+      <li>Ajustez ensuite le planning semaine par semaine dans l'onglet <strong>Semaine</strong> (congés, remplacements…).</li>
+    </ol>
+    <p class="muted">L'ancrage (réglages du cycle) indique quelle semaine du calendrier correspond à S1 :
+      actuellement S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
+      Les filtres de la vue Semaine ne s'appliquent pas ici : tous les salariés sont listés.</p>`;
+  root.appendChild(howto.el);
 
   if (patternEmps.length === 0) {
-    const msg = document.createElement('p');
-    msg.className = 'muted';
-    msg.textContent = 'Aucun salarié dans l\'équipe. Ajoutez des salariés dans l\'onglet Équipe.';
+    const msg = document.createElement('div');
+    msg.className = 'form-card pattern-empty';
+    msg.innerHTML = `<p>Aucun salarié dans l'équipe pour l'instant.</p>
+      <button type="button" class="primary settings-goto" data-tab="employees">→ Ajouter des salariés</button>`;
     root.appendChild(msg);
-    $('#pat-layout').onchange = (e) => {
-      STATE.ui.patternLayout = e.target.value;
-      persistAndRender();
-    };
+    msg.querySelector('.settings-goto').onclick = () => goToTab('employees');
     return;
   }
+
+  /* Barre d'aide aux gestes + rappel si le modèle n'est pas appliqué */
+  const bar = document.createElement('div');
+  bar.className = 'pattern-toolbar no-print';
+  const dirty = editable && typeof patternsNeedApply === 'function' && patternsNeedApply();
+  bar.innerHTML = `
+    <div class="pattern-gestures">
+      ${editable ? `<span><kbd>Clic</kbd> ou <kbd>glisser</kbd> présent ↔ repos</span>
+      <span><kbd>Clic droit</kbd> horaire spécial (orange → rouge → vert)</span>
+      <span><kbd>Double-clic</kbd> modifier les horaires</span>` : '<span>Consultation seule</span>'}
+    </div>
+    ${dirty ? `<div class="pattern-apply-hint" role="status">
+      <span>Semaines-types modifiées depuis le dernier import.</span>
+      <button type="button" class="primary" data-goto-apply>Appliquer au planning ↓</button>
+    </div>` : ''}`;
+  root.appendChild(bar);
+  bar.querySelector('[data-goto-apply]')?.addEventListener('click', () => {
+    const card = document.getElementById('pattern-apply');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card?.classList.add('pattern-apply--flash');
+    window.setTimeout(() => card?.classList.remove('pattern-apply--flash'), 1600);
+  });
 
   if (layout === 'split') {
     renderPatternsSplit(root, patternEmps);
@@ -112,10 +120,58 @@ function renderPatternsEditor(root) {
     renderPatternsUnified(root, patternEmps);
   }
 
-  $('#pat-layout').onchange = (e) => {
-    STATE.ui.patternLayout = e.target.value;
-    persistAndRender();
-  };
+  if (editable) {
+    const importPanel = document.createElement('div');
+    importPanel.className = 'form-card pattern-import-panel no-print';
+    importPanel.id = 'pattern-apply';
+    importPanel.innerHTML = `
+      <h3>Appliquer au planning</h3>
+      <p class="muted">
+        Recopie les ${cycleWeeks} semaines-types (${cycleLabel}) sur une période du calendrier, pour tous les salariés.
+        S1 tombe sur la semaine du ${anchorSummary.anchorLabel} (ancrage) puis le cycle se répète.
+        Si la période contient déjà des présences, vous choisirez de tout écraser ou de ne remplir que les cases vides.
+      </p>
+      <div class="form-grid pattern-import-grid">
+        <label>Du <input type="text" class="fr-date" id="pat-import-start" data-iso="${defaultStart}" value="${frFormatNumeric(defaultStart)}"></label>
+        <label>Au <input type="text" class="fr-date" id="pat-import-end" data-iso="${defaultEnd}" value="${frFormatNumeric(defaultEnd)}"></label>
+        <button type="button" class="primary" id="pat-import-run">↓ Appliquer sur la période</button>
+      </div>
+    `;
+    root.appendChild(importPanel);
+    attachPatternPeriodImportHandlers(importPanel);
+
+    /* Sections insérées dans la page avant d'être remplies (certains panneaux
+       cherchent leurs champs dans le document). */
+    const tools = createPatternSection('tools', 'Outils : copier une semaine-type', open.tools ?? false);
+    root.appendChild(tools.el);
+    mountPatternCopyPanel(tools.body, patternEmps);
+
+    const wantSettings = STATE.ui.settingsScrollHash === 'pattern-settings';
+    if (wantSettings) STATE.ui.settingsScrollHash = null;
+    const settings = createPatternSection('settings', 'Réglages du cycle : horaires par défaut et ancrage', wantSettings || (open.settings ?? false));
+    settings.el.id = 'pattern-settings';
+    root.appendChild(settings.el);
+    mountPatternShiftDefaultsPanel(settings.body);
+    mountPatternAnchorPanel(settings.body);
+    if (wantSettings) window.setTimeout(() => settings.el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+}
+
+/* Section repliable de l'onglet Patterns (état mémorisé dans STATE.ui) */
+function createPatternSection(key, title, isOpen) {
+  const el = document.createElement('details');
+  el.className = 'pattern-section no-print';
+  el.open = !!isOpen;
+  el.innerHTML = `<summary class="pattern-section-summary"><span class="pattern-section-chevron" aria-hidden="true"></span>${escapeHtml(title)}</summary>`;
+  const body = document.createElement('div');
+  body.className = 'pattern-section-body';
+  el.appendChild(body);
+  el.addEventListener('toggle', () => {
+    if (!STATE.ui.patternSectionsOpen) STATE.ui.patternSectionsOpen = {};
+    STATE.ui.patternSectionsOpen[key] = el.open;
+    saveState();
+  });
+  return { el, body };
 }
 
 function mountPatternShiftDefaultsPanel(root) {
@@ -455,7 +511,7 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
       inner = `<span class="pattern-cell-hours">${formatContractHours(h)}</span>`;
     }
   }
-  title += ' — clic : plein ↔ repos · clic droit : orange → rouge → vert';
+  title += ' — clic ou glisser : plein ↔ repos · clic droit : orange → rouge → vert';
   if (isPlanningSpecialVal(v)) {
     title += ' · double-clic : modifier les horaires';
   }
@@ -543,43 +599,93 @@ function buildPatternTableBody(tbody, visibleEmps, weekNames, { showMonthCol = f
   }
 }
 
+function patternCellInfo(el) {
+  return {
+    emp: el.dataset.patEmp,
+    pname: el.dataset.patName,
+    dayIdx: parseInt(el.dataset.patDay, 10),
+    shift: el.dataset.patShift,
+  };
+}
+
+/* Clic ou glisser sur plusieurs cases : la valeur de la 1re case est appliquée à toutes
+   celles survolées tant que le bouton reste enfoncé. Un seul rendu à la fin. */
 function attachPatternCellHandlers(container) {
-  container.querySelectorAll('td.pattern-cell[data-pat-emp]').forEach(el => {
-    el.onclick = (e) => {
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      setPatternWeekValue(emp, pname, dayIdx, shift, nextPlanningValueOnLeftClick(cur, e));
+  if (typeof canEditPlanning === 'function' && !canEditPlanning()) return;
+  const cellSel = 'td.pattern-cell[data-pat-emp]';
+  let paint = null;
+
+  const applyTo = (el, value) => {
+    const i = patternCellInfo(el);
+    if (paint.done.has(el.dataset.patKey)) return;
+    paint.done.add(el.dataset.patKey);
+    if (getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift) === value) return;
+    setPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift, value);
+    const html = renderPatternEditorCell(i.emp, i.pname, i.dayIdx, i.shift, el.classList.contains('week-start'));
+    const tmp = document.createElement('tbody');
+    tmp.innerHTML = `<tr>${html}</tr>`;
+    const fresh = tmp.querySelector('td');
+    fresh.dataset.patKey = el.dataset.patKey;
+    fresh.classList.add('pattern-cell--painted');
+    el.replaceWith(fresh);
+    paint.changed++;
+  };
+
+  const keyOf = (el) => `${el.dataset.patEmp}|${el.dataset.patName}|${el.dataset.patDay}|${el.dataset.patShift}`;
+  container.querySelectorAll(cellSel).forEach(el => { el.dataset.patKey = keyOf(el); });
+
+  const finish = () => {
+    document.removeEventListener('mouseup', finish);
+    if (!paint) return;
+    const changed = paint.changed;
+    paint = null;
+    container.classList.remove('pattern-painting');
+    if (changed) persistAndRender();
+  };
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const el = e.target.closest(cellSel);
+    if (!el || !container.contains(el)) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const value = nextPlanningValueOnLeftClick(getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift), e);
+    paint = { value, changed: 0, done: new Set() };
+    container.classList.add('pattern-painting');
+    applyTo(el, value);
+    document.addEventListener('mouseup', finish);
+  });
+
+  container.addEventListener('mouseover', (e) => {
+    if (!paint) return;
+    const el = e.target.closest(cellSel);
+    if (el && container.contains(el)) applyTo(el, paint.value);
+  });
+
+  container.addEventListener('contextmenu', (e) => {
+    const el = e.target.closest(cellSel);
+    if (!el) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const cur = getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift);
+    const next = nextPlanningValueOnRightClick(cur);
+    setPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift, next);
+    saveState();
+    if (isPlanningSpecialVal(next)) {
+      promptPatternCellHours({ emp: i.emp, pname: i.pname, dayIdx: i.dayIdx, shift: i.shift, onDone: persistAndRender });
+    } else {
       persistAndRender();
-    };
-    el.oncontextmenu = (e) => {
-      e.preventDefault();
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      const next = nextPlanningValueOnRightClick(cur);
-      setPatternWeekValue(emp, pname, dayIdx, shift, next);
-      saveState();
-      if (isPlanningSpecialVal(next)) {
-        promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
-      } else {
-        persistAndRender();
-      }
-    };
-    el.ondblclick = (e) => {
-      e.preventDefault();
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      if (!isPlanningSpecialVal(cur)) return;
-      promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
-    };
+    }
+  });
+
+  container.addEventListener('dblclick', (e) => {
+    const el = e.target.closest(cellSel);
+    if (!el) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const cur = getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift);
+    if (!isPlanningSpecialVal(cur)) return;
+    promptPatternCellHours({ emp: i.emp, pname: i.pname, dayIdx: i.dayIdx, shift: i.shift, onDone: persistAndRender });
   });
 }
 
@@ -686,7 +792,7 @@ function attachPatternPeriodImportHandlers(panel) {
     }
 
     showPlanningImportDialog({
-      title: `Importer le cycle — ${startLbl} → ${endLbl}`,
+      title: `Appliquer le cycle — ${startLbl} → ${endLbl}`,
       message: 'Cette période contient déjà des présences dans le planning.',
       onChoose: runImport
     });
@@ -711,7 +817,7 @@ function mountPatternAnchorPanel(root, options = {}) {
       Indique quelle semaine ISO correspond à quelle semaine du cycle (S1, S2, S3…).
       <strong>Cela ne modifie pas le planning en vue Semaine</strong> — seul un import explicite
       recopie le modèle dans les cellules.
-      ${compactHelp ? ` <button type="button" class="nav settings-goto" data-tab="patterns">→ Import depuis Patterns</button>` : ''}
+      ${compactHelp ? ` <button type="button" class="nav settings-goto" data-tab="patterns">→ Semaines-types</button>` : ''}
     </p>
     <p class="pattern-anchor-current">
       <strong>Actuellement :</strong> S1 = semaine ISO <b>${anchorSummary.isoWeek}</b> (${anchorSummary.isoYear})
@@ -808,7 +914,7 @@ function renderAssignmentsEditor(root) {
     const list = STATE.affectations[emp] || [];
     const patNames = Object.keys(STATE.patterns[emp] || {});
     if (patNames.length === 0) {
-      card.innerHTML = `<h3>${emp}</h3><p class="muted">Aucun pattern défini. Va dans l'onglet Patterns pour en créer.</p>`;
+      card.innerHTML = `<h3>${emp}</h3><p class="muted">Aucune semaine-type définie. Remplissez-les dans Planning → Semaines-types.</p>`;
       root.appendChild(card);
       continue;
     }
@@ -2322,93 +2428,104 @@ function bindSettingsNavLinks(root) {
   });
 }
 
+const SETTINGS_ICON = (d) => `<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+
+/* Sections de la page Paramètres (dans l'ordre d'affichage) */
+const SETTINGS_SECTIONS = [
+  { id: 'cfg-contract-party', title: 'Pharmacie et employeur', desc: 'Nom, adresse, SIRET, employeur : repris dans le bandeau et les contrats PDF',
+    icon: '<path d="M3 17V7l7-4 7 4v10"/><path d="M8 17v-5h4v5M3 17h14"/>' },
+  { id: 'cfg-users', title: 'Comptes utilisateurs', desc: "Code d'invitation, rôles et lien de chaque compte avec un salarié", adminOnly: true,
+    icon: '<circle cx="7.5" cy="7" r="2.8"/><path d="M2.5 16c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/><path d="M13 9.5l1.6 1.6 3-3.2"/>' },
+  { id: 'cfg-emp-types', title: 'Types de salariés', desc: 'Catégories (pharmacien, préparateur…) et leurs couleurs dans le planning',
+    icon: '<circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M13.5 4.2a3 3 0 010 5.6M15.5 12.5c1 .8 1.7 2 2 4"/>' },
+  { id: 'cfg-conge-types', title: 'Modes de congés', desc: 'CP, RTT, maladie, formation… et leurs couleurs',
+    icon: '<path d="M3 10a7 7 0 0114 0z"/><path d="M10 10v6a1.5 1.5 0 01-3 0"/>' },
+  { id: 'cfg-appearance', title: 'Apparence', desc: 'Thème de couleurs (Sauge, Océan, Papier) et couleur du bandeau',
+    icon: '<circle cx="10" cy="10" r="7"/><circle cx="7" cy="8" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="13.5" cy="11.5" r="1"/><path d="M8 14.5a2 2 0 002-2"/>' },
+];
+
 function renderSettingsEditor(root) {
+  const isAdminUser = typeof isAdmin === 'function' && isAdmin();
+  const open = STATE.ui.settingsOpen || (STATE.ui.settingsOpen = {});
+  /* Lien direct vers une section (aide, tutoriel) : on l'ouvre */
+  if (STATE.ui.settingsScrollHash && SETTINGS_SECTIONS.some(sec => sec.id === STATE.ui.settingsScrollHash)) {
+    open[STATE.ui.settingsScrollHash] = true;
+  }
+
   const header = document.createElement('div');
   header.className = 'controls settings-header';
   header.innerHTML = `
-    <div class="label">Configuration</div>
-    <div class="help-text">
-      Paramètres globaux de l'application : types et couleurs, ancrage du cycle patterns,
-      informations pharmacie pour les contrats PDF.
-    </div>`;
+    <div class="label">Paramètres</div>
+    <div class="help-text">Choisissez une rubrique : elle s'ouvre plus bas.</div>`;
   root.appendChild(header);
 
-  const toc = document.createElement('nav');
-  toc.className = 'settings-toc';
-  toc.setAttribute('aria-label', 'Sections de configuration');
-  toc.innerHTML = `
-    <a href="#cfg-emp-types" class="settings-toc-link">Types de salariés</a>
-    <a href="#cfg-conge-types" class="settings-toc-link">Modes de congés</a>
-    <a href="#cfg-pattern-anchor" class="settings-toc-link">Ancrage cycle</a>
-    <a href="#cfg-appearance" class="settings-toc-link">En-tête</a>
-    <a href="#cfg-contract-party" class="settings-toc-link">Pharmacie &amp; employeur</a>
-    <a href="#cfg-users" class="settings-toc-link auth-admin-only">Comptes utilisateurs</a>
-    <a href="#cfg-related" class="settings-toc-link">Autres réglages</a>`;
-  root.appendChild(toc);
+  const sections = SETTINGS_SECTIONS.filter(sec => !sec.adminOnly || isAdminUser);
+  const tiles = document.createElement('div');
+  tiles.className = 'settings-home';
+  tiles.innerHTML = `
+    <h2 class="settings-group-title">Réglages de l'application</h2>
+    <div class="settings-tiles">
+      ${sections.map(sec => `
+        <button type="button" class="settings-tile" data-open-section="${sec.id}">
+          <span class="settings-tile-icon">${SETTINGS_ICON(sec.icon)}</span>
+          <span class="settings-tile-text">
+            <span class="settings-tile-title">${escapeHtml(sec.title)}</span>
+            <span class="settings-tile-desc">${escapeHtml(sec.desc)}</span>
+          </span>
+        </button>`).join('')}
+    </div>`;
+  root.appendChild(tiles);
 
-  toc.querySelectorAll('.settings-toc-link').forEach(link => {
-    link.onclick = (e) => {
-      e.preventDefault();
-      const id = link.getAttribute('href').slice(1);
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /* Les sections sont construites normalement (elles cherchent parfois leurs champs
+     dans la page), puis rangées chacune dans un panneau repliable. */
+  const mountArea = document.createElement('div');
+  mountArea.className = 'settings-panels';
+  root.appendChild(mountArea);
+
+  mountContractPartySection(mountArea, { sectionId: 'cfg-contract-party' });
+  if (typeof renderAdminUsersSection === 'function') renderAdminUsersSection(mountArea);
+  mountEmployeeTypeCatalogSection(mountArea, { sectionId: 'cfg-emp-types' });
+  mountCongeTypeCatalogSection(mountArea, { sectionId: 'cfg-conge-types' });
+  if (typeof mountTopbarAppearanceSection === 'function') {
+    mountTopbarAppearanceSection(mountArea, { sectionId: 'cfg-appearance' });
+  }
+
+  for (const sec of sections) {
+    const card = mountArea.querySelector(`#${sec.id}`);
+    if (!card) continue;
+    const panel = document.createElement('details');
+    panel.className = 'settings-panel';
+    panel.dataset.section = sec.id;
+    panel.open = !!open[sec.id];
+    panel.innerHTML = `
+      <summary class="settings-panel-summary">
+        <span class="settings-panel-icon">${SETTINGS_ICON(sec.icon)}</span>
+        <span class="settings-panel-head">
+          <span class="settings-panel-title">${escapeHtml(sec.title)}</span>
+          <span class="settings-panel-desc">${escapeHtml(sec.desc)}</span>
+        </span>
+        <span class="settings-panel-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="settings-panel-body"></div>`;
+    mountArea.insertBefore(panel, card);
+    panel.querySelector('.settings-panel-body').appendChild(card);
+    panel.addEventListener('toggle', () => {
+      if (!STATE.ui.settingsOpen) STATE.ui.settingsOpen = {};
+      STATE.ui.settingsOpen[sec.id] = panel.open;
+      saveState();
+    });
+  }
+
+  tiles.querySelectorAll('[data-open-section]').forEach(btn => {
+    btn.onclick = () => {
+      const panel = mountArea.querySelector(`.settings-panel[data-section="${btn.dataset.openSection}"]`);
+      if (!panel) return;
+      panel.open = true;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      panel.classList.add('settings-panel--flash');
+      window.setTimeout(() => panel.classList.remove('settings-panel--flash'), 1400);
     };
   });
-
-  mountEmployeeTypeCatalogSection(root, { sectionId: 'cfg-emp-types' });
-  mountCongeTypeCatalogSection(root, { sectionId: 'cfg-conge-types' });
-  mountPatternAnchorPanel(root, { sectionId: 'cfg-pattern-anchor', idPrefix: 'cfg-pat-anchor', compactHelp: true });
-
-  if (typeof mountTopbarAppearanceSection === 'function') {
-    mountTopbarAppearanceSection(root, { sectionId: 'cfg-appearance' });
-  }
-
-  mountContractPartySection(root, { sectionId: 'cfg-contract-party' });
-
-  if (typeof renderAdminUsersSection === 'function') {
-    renderAdminUsersSection(root);
-  }
-
-  const related = document.createElement('div');
-  related.className = 'form-card settings-related-card settings-section';
-  related.id = 'cfg-related';
-  related.innerHTML = `
-    <h3>Autres réglages</h3>
-    <p class="muted">Ces éléments se gèrent dans leurs onglets dédiés :</p>
-    <div class="settings-related-grid">
-      <button type="button" class="settings-related-item settings-goto" data-tab="patterns">
-        <span class="settings-related-icon">🧩</span>
-        <span class="settings-related-label">Modèle de cycle (patterns)</span>
-        <span class="settings-related-desc">Grille 6 semaines-types et import vers le planning</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="feries">
-        <span class="settings-related-icon">🎉</span>
-        <span class="settings-related-label">Jours fériés</span>
-        <span class="settings-related-desc">Ponts et jours offerts personnalisés</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="gardes">
-        <span class="settings-related-icon">🏥</span>
-        <span class="settings-related-label">Jours de garde</span>
-        <span class="settings-related-desc">Périodes de garde affichées dans le planning</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="pantecotes">
-        <span class="settings-related-icon">🤝</span>
-        <span class="settings-related-label">${SOLIDARITE_LABELS}</span>
-        <span class="settings-related-desc">Heures travaillées et récupérées par journée de solidarité</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="contract">
-        <span class="settings-related-icon">📄</span>
-        <span class="settings-related-label">Contrats PDF</span>
-        <span class="settings-related-desc">Journées travaillées par salarié</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="cdi">
-        <span class="settings-related-icon">📋</span>
-        <span class="settings-related-label">CDI</span>
-        <span class="settings-related-desc">Semaines de demi-journées travaillées</span>
-      </button>
-    </div>`;
-  root.appendChild(related);
-  bindSettingsNavLinks(related);
 }
 
 function escapeHtml(s) {
