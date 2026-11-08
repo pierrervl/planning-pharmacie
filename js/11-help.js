@@ -157,6 +157,19 @@ function getStartupProgress(state = STATE) {
   return { steps, doneCount, total: steps.length };
 }
 
+const HELP_VIDEOS = [
+  {
+    title: '1. La vue Semaine', duration: '1 min 35',
+    src: 'assets/tutos/tutoriel-1-vue-semaine.mp4', poster: 'assets/tutos/tutoriel-1-vue-semaine.jpg',
+    desc: 'Naviguer, lire le planning, modifier une demi-journée, horaire spécial, affichages Croix / Heures / Détail, filtres, impression.',
+  },
+  {
+    title: '2. Les semaines-types', duration: '1 min 25', adminOnly: true,
+    src: 'assets/tutos/tutoriel-2-semaines-types.mp4', poster: 'assets/tutos/tutoriel-2-semaines-types.jpg',
+    desc: 'Remplir le cycle au glisser, horaires particuliers, appliquer au planning, copier une semaine, réglages du cycle.',
+  },
+];
+
 function createHelpAccordion({ id, title, hint, open = false, bodyHtml }) {
   const details = document.createElement('details');
   details.className = 'help-accordion';
@@ -196,6 +209,31 @@ function renderHelpEditor(root) {
 
   const accordions = document.createElement('div');
   accordions.className = 'help-accordions';
+
+  /* Tutoriels vidéo (fichiers dans assets/tutos/) */
+  const videos = HELP_VIDEOS.filter(v => !v.adminOnly || isAdminUser);
+  if (videos.length) {
+    accordions.appendChild(createHelpAccordion({
+      id: 'help-videos',
+      title: 'Tutoriels vidéo',
+      hint: `${videos.length} vidéo${videos.length > 1 ? 's' : ''} · ${videos.map(v => v.duration).join(' + ')}`,
+      open: false,
+      bodyHtml: `
+        <p class="help-section-intro">Démonstrations filmées dans une pharmacie fictive. Lancez la lecture, mettez en plein écran si besoin.</p>
+        <div class="help-videos">
+          ${videos.map(v => `
+            <figure class="help-video">
+              <video controls preload="none" playsinline poster="${v.poster}" aria-label="${escapeHtml(v.title)}">
+                <source src="${v.src}" type="video/mp4">
+              </video>
+              <figcaption>
+                <strong>${escapeHtml(v.title)}</strong> <span class="muted">· ${escapeHtml(v.duration)}</span>
+                <span class="help-video-desc">${escapeHtml(v.desc)}</span>
+              </figcaption>
+            </figure>`).join('')}
+        </div>`,
+    }));
+  }
 
   if (isAdminUser) {
     accordions.appendChild(createHelpAccordion({
