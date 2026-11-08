@@ -8,10 +8,10 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
+const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'reunions', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
 
 const TAB_GROUPS = {
-  planning: ['week', 'patterns', 'planning-requests'],
+  planning: ['week', 'patterns', 'planning-requests', 'reunions'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
   journees: ['feries', 'gardes', 'pantecotes'],
@@ -69,6 +69,11 @@ function applyConfigTabLayout() {
   main.classList.toggle('main-no-sidebar', hide);
 }
 
+function decorateWeekReunions(wrap, days) {
+  if (typeof buildReunionIndex !== 'function' || !days.length) return;
+  decorateReunionCells(wrap, buildReunionIndex(toISO(days[0]), toISO(days[days.length - 1])));
+}
+
 function getSidePanel() {
   if (STATE.ui.currentTab !== 'week') return null;
   const p = STATE.ui.sidePanel;
@@ -122,6 +127,7 @@ function render() {
     case 'conges':         renderCongesEditor(content); break;
     case 'feries':         renderFeriesEditor(content); break;
     case 'gardes':         renderGardesEditor(content); break;
+    case 'reunions':       renderReunionsEditor(content); break;
     case 'pantecotes':     renderPantecotesEditor(content); break;
     case 'settings':       renderSettingsEditor(content); break;
     case 'help':           renderHelpEditor(content); break;
@@ -344,6 +350,8 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
   const headRows = showImportRow ? 5 : 4;
   const cellOpts = { editable, forPrint, weekCellDisplay: displayMode };
   const visibleEmps = STATE.employees.filter(e => (STATE.ui.filtersEmp || STATE.employees).includes(e));
+  const reuIdx = typeof buildReunionIndex === 'function'
+    ? buildReunionIndex(toISO(days[0]), toISO(days[days.length - 1])) : null;
 
   const wrap = document.createElement('div');
   wrap.className = 'planning-wrap week-display-' + displayMode + (forPrint ? ' planning-wrap-print' : '');
@@ -406,6 +414,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
         <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
         ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
         ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
+        ${reuIdx ? reunionHeaderHtml(iso, reuIdx) : ''}
       </th>`;
   });
   thead.appendChild(trDays);
@@ -948,6 +957,7 @@ function createWeekDetailView(days, { editable = true, forPrint = false, timeBou
         <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
         ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
         ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
+        ${typeof buildReunionIndex === 'function' ? reunionHeaderHtml(iso, buildReunionIndex(iso, iso)) : ''}
       </th>`;
   });
   trDays.innerHTML += `<th class="hours-col hours-col-week" rowspan="2" title="Heures travaillées — fond rouge si écart avec le pattern">H./sem.</th>`;
@@ -1255,10 +1265,12 @@ function renderWeekView(root) {
     const wrap = createWeekDetailView(days, { editable: true });
     root.appendChild(wrap);
     attachWeekDetailHandlers(wrap);
+    decorateWeekReunions(wrap, days);
   } else {
     const wrap = createWeekPlanningTable(days, { editable: true, showImportRow: !requestMode });
     root.appendChild(wrap);
     attachWeekTableHandlers(wrap);
+    decorateWeekReunions(wrap, days);
   }
 
   if (!requestMode) {
@@ -1930,6 +1942,7 @@ function renderSidebar() {
     h += `<div class="side-subhead"><span>Jours</span></div>
       <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
       <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde</div>
+      <div class="legend-item"><span class="sw sw-reunion-legend"><span class="reunion-dot-inline"></span></span> Réunion (participants)</div>
     </div>`;
   }
   side.innerHTML = h;

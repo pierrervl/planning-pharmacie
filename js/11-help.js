@@ -226,6 +226,22 @@ function renderHelpEditor(root) {
   }));
 
   accordions.appendChild(createHelpAccordion({
+    id: 'help-reunions',
+    title: 'Réunions',
+    hint: 'Ponctuelles ou régulières',
+    open: false,
+    bodyHtml: `
+      <ul class="help-tips-list">
+        <li>Menu <strong>Planning → Réunions</strong> : titre, date, horaire, participants (toute l'équipe ou certains salariés).</li>
+        <li><strong>Répétition</strong> : ne se répète pas, tous les N jours, toutes les N semaines (jours au choix),
+          tous les N mois (le 14, le 2<sup>e</sup> mardi ou le dernier mardi) ou tous les N ans.</li>
+        <li><strong>Fin</strong> : jamais, à une date, ou après un nombre de réunions. Un résumé s'affiche sous le formulaire.</li>
+        <li>Dans la vue Semaine, la réunion apparaît dans l'en-tête du jour et un point bleu marque la demi-journée de chaque participant.</li>
+        <li>« Annuler cette date » retire une seule occurrence d'une réunion régulière.</li>
+      </ul>`,
+  }));
+
+  accordions.appendChild(createHelpAccordion({
     id: 'help-startup-join',
     title: 'Rejoindre une pharmacie existante',
     hint: 'Salariés invités',

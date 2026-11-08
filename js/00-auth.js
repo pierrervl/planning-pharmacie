@@ -358,7 +358,7 @@ function isStaff() {
 }
 
 function getStaffAllowedTabs() {
-  const tabs = ['week', 'conges', 'help'];
+  const tabs = ['week', 'reunions', 'conges', 'help'];
   if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
     tabs.push('rgpd');
   }

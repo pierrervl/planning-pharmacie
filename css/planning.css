@@ -57,6 +57,7 @@
   --week-odd-empty: #ccc6b8;
   --empty:          #f0eee6;       /* case vide non définie */
   --topbar:         #1a1a1a;
+  --reunion:        #2f6fdb;       /* repère réunion */
 }
 
 /* =========================================================================
@@ -120,6 +121,7 @@ html[data-theme="ocean"] {
   --week-odd-empty: #d2dbe7;
   --empty:          #f1f4f8;
   --topbar:         #14243a;
+  --reunion:        #c0267a;
   --pattern-ref-odd: #bcd2ec;
   --pattern-ref-odd-text: #12365f;
 }
@@ -745,6 +747,158 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
     z-index: 999;
     background: rgba(15, 20, 18, 0.4);
   }
+}
+
+/* =========================================================================
+   RÉUNIONS
+   ========================================================================= */
+th.day-header .reunion-name {
+  display: block;
+  max-width: 52px;
+  margin: 2px auto 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--reunion);
+}
+td.has-reunion { position: relative; }
+td.has-reunion::before,
+.week-detail-block.has-reunion::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--reunion);
+  box-shadow: 0 0 0 1.5px #fff;
+  pointer-events: none;
+  z-index: 1;
+}
+.reunion-dot-inline {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--reunion);
+  vertical-align: middle;
+}
+.sw.sw-reunion-legend {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  background: var(--accent);
+  padding: 1px;
+  box-sizing: border-box;
+}
+.sw.sw-reunion-legend .reunion-dot-inline { width: 5px; height: 5px; box-shadow: 0 0 0 1px #fff; }
+
+.reunion-form .field label { display: block; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+.reunion-form input[type=text],
+.reunion-form input[type=number],
+.reunion-form input[type=time],
+.reunion-form select,
+.reunion-form textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.reunion-form textarea { width: 100%; resize: vertical; }
+.reunion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 16px;
+  margin-bottom: 14px;
+}
+.reunion-field-wide { grid-column: span 2; }
+.reunion-field-wide input { width: 100%; }
+.reunion-time-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); }
+.reunion-fieldset {
+  margin: 0 0 14px;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.reunion-fieldset legend { padding: 0 6px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.reunion-radio-row { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.reunion-radio-row label, .reunion-radio-col label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.reunion-radio-col { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.reunion-inline { flex-wrap: wrap; }
+.reunion-inline input[type=number] { width: 70px; }
+.reunion-emps { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+.reunion-emps[hidden], .reunion-sub[hidden], .reunion-interval[hidden] { display: none; }
+.reunion-emp { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.reunion-repeat-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reunion-interval { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); }
+.reunion-interval input { width: 64px; }
+.reunion-sub { display: flex; gap: 14px; align-items: flex-start; margin-top: 12px; }
+.reunion-sub-label { min-width: 64px; padding-top: 4px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.reunion-weekdays { display: flex; flex-wrap: wrap; gap: 6px; }
+.reunion-wd {
+  width: 38px;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reunion-wd:hover { background: var(--bg-soft); }
+.reunion-wd.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.reunion-summary {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.reunion-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.reunion-table-wrap { overflow-x: auto; }
+.reunion-table tr.is-editing td { background: var(--accent-soft); }
+.reunion-row-actions { white-space: nowrap; text-align: right; }
+.reunion-row-actions button { margin-left: 4px; }
+.reunion-upcoming { list-style: none; margin: 0; padding: 0; }
+.reunion-upcoming li {
+  display: grid;
+  grid-template-columns: 90px 90px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.reunion-upcoming li.is-cancelled .reunion-up-title,
+.reunion-upcoming li.is-cancelled .reunion-up-time,
+.reunion-upcoming li.is-cancelled .reunion-up-date { text-decoration: line-through; color: var(--ink-mute); }
+.reunion-up-time { color: var(--reunion); font-weight: 600; }
+.reunion-up-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+}
+.reunion-up-btn { font-size: 12px; padding: 4px 10px; }
+.reunion-up-hint { margin-top: 8px; font-size: 12px; }
+@media (max-width: 600px) {
+  .reunion-field-wide { grid-column: auto; }
+  .reunion-upcoming li { grid-template-columns: 80px minmax(0, 1fr); }
+  .reunion-up-time { grid-column: 1; }
+  .reunion-up-btn, .reunion-upcoming li > span:last-child { grid-column: 2; justify-self: start; }
 }
 
 /* Paramètres → Apparence : choix du thème */
