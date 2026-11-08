@@ -30,10 +30,86 @@ function setSyncStatus(text, kind = '') {
   el.className = 'sync-status' + (kind ? ` sync-${kind}` : '');
 }
 
-function stateForCloudExport(state) {
+/* Données personnelles des salariés : jamais dans le planning partagé (lisible par
+   tous les membres), mais dans la table pharmacy_private réservée aux administrateurs.
+   Même liste que public.private_planning_keys() côté Supabase. */
+const PRIVATE_STATE_KEYS = ['employeeInfo', 'contractDays', 'contractDescriptions', 'cdiDescriptions'];
+
+/* null = pas encore vérifié ; false = migration de sécurité non appliquée */
+let privateTableAvailable = null;
+
+function stateForCloudExport(state, { includePrivate = false } = {}) {
   const copy = JSON.parse(JSON.stringify(state));
   delete copy.ui;
+  if (!includePrivate) {
+    for (const k of PRIVATE_STATE_KEYS) delete copy[k];
+  }
   return copy;
+}
+
+function privateStateForCloud(state = STATE) {
+  const out = {};
+  for (const k of PRIVATE_STATE_KEYS) {
+    if (state[k] !== undefined) out[k] = JSON.parse(JSON.stringify(state[k]));
+  }
+  return out;
+}
+
+function isMissingTableError(err) {
+  const msg = String(err?.message || err?.details || err || '');
+  return err?.code === '42P01' || err?.code === 'PGRST205' || /pharmacy_private/.test(msg) && /exist|schema cache|find/i.test(msg);
+}
+
+/* Charge les données personnelles (administrateurs) ; renvoie true si l'état a changé */
+async function loadPrivateFromCloud() {
+  if (!isAdmin() || !getCurrentPharmacyId()) return false;
+  await ensureAuthClient();
+  const { data, error } = await AUTH.client
+    .from('pharmacy_private')
+    .select('data')
+    .eq('pharmacy_id', getCurrentPharmacyId())
+    .maybeSingle();
+  if (error) {
+    if (isMissingTableError(error)) {
+      privateTableAvailable = false;
+      return false;
+    }
+    throw error;
+  }
+  privateTableAvailable = true;
+  if (!data?.data) return false;
+  let changed = false;
+  suppressDirtyTracking = true;
+  for (const k of PRIVATE_STATE_KEYS) {
+    if (data.data[k] === undefined) continue;
+    if (JSON.stringify(STATE[k]) !== JSON.stringify(data.data[k])) {
+      STATE[k] = data.data[k];
+      changed = true;
+    }
+  }
+  if (changed) migrateState(STATE);
+  suppressDirtyTracking = false;
+  return changed;
+}
+
+async function pushPrivateToCloud() {
+  if (!isAdmin() || privateTableAvailable === false) return false;
+  const { error } = await AUTH.client
+    .from('pharmacy_private')
+    .upsert({
+      pharmacy_id: getCurrentPharmacyId(),
+      data: privateStateForCloud(STATE),
+      updated_by: AUTH.session.user.id,
+    });
+  if (error) {
+    if (isMissingTableError(error)) {
+      privateTableAvailable = false;
+      return false;
+    }
+    throw error;
+  }
+  privateTableAvailable = true;
+  return true;
 }
 
 function mergeRecordsById(baseList = [], patchList = [], idKey = 'id') {
@@ -73,6 +149,22 @@ function mergeCloudStateIntoLocal(cloudData, { staffMerge = false } = {}) {
   suppressDirtyTracking = true;
   const cloudCopy = JSON.parse(JSON.stringify(cloudData));
   delete cloudCopy.ui;
+  const keepPrivate = typeof isAdmin === 'function' && isAdmin();
+  const localPrivate = privateStateForCloud(STATE);
+  const ownName = !keepPrivate && typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
+  for (const k of PRIVATE_STATE_KEYS) {
+    if (keepPrivate) {
+      if (cloudCopy[k] === undefined && localPrivate[k] !== undefined) cloudCopy[k] = localPrivate[k];
+      continue;
+    }
+    /* Salarié : uniquement ses propres données, jamais celles des collègues */
+    const own = {};
+    const local = localPrivate[k] && typeof localPrivate[k] === 'object' ? localPrivate[k] : {};
+    for (const name of Object.keys(local)) {
+      if (ownName && employeeNamesMatch(name, ownName)) own[name] = local[name];
+    }
+    cloudCopy[k] = own;
+  }
   STATE = cloudCopy;
   migrateState(STATE);
   /* L'UI (onglet actif, filtres locaux…) reste toujours celle du navigateur */
@@ -177,6 +269,7 @@ async function loadPlanningFromCloud() {
 
   if (data.data && Object.keys(data.data).length > 0) {
     mergeCloudStateIntoLocal(data.data, { staffMerge });
+    if (isAdmin()) await loadPrivateFromCloud();
     setSyncStatus('Synchronisé', 'ok');
     return data;
   }
@@ -193,6 +286,15 @@ async function loadPlanningFromCloud() {
 async function loadPersonalDataFromCloud() {
   if (!isStaff() || !AUTH.profile) return;
   const empName = getLinkedEmployeeName();
+  /* Ancien cache : retire les données personnelles des collègues */
+  if (!isAdmin()) {
+    for (const k of PRIVATE_STATE_KEYS) {
+      if (!STATE[k] || typeof STATE[k] !== 'object') continue;
+      for (const name of Object.keys(STATE[k])) {
+        if (!empName || !employeeNamesMatch(name, empName)) delete STATE[k][name];
+      }
+    }
+  }
   const personal = AUTH.profile.personal_data;
   if (personal && Object.keys(personal).length > 0) {
     mergePersonalDataIntoState(personal, empName);
@@ -205,7 +307,10 @@ async function pushPlanningToCloud() {
   const pharmacyId = getCurrentPharmacyId();
   if (!pharmacyId) return;
   await ensureAuthClient();
-  const payload = stateForCloudExport(STATE);
+  if (privateTableAvailable === null) await loadPrivateFromCloud().catch(() => {});
+  /* Migration non appliquée : on garde l'ancien format pour ne rien perdre */
+  const payload = stateForCloudExport(STATE, { includePrivate: privateTableAvailable === false });
+  await pushPrivateToCloud();
   const { error } = await AUTH.client
     .from('pharmacy_planning')
     .upsert({
@@ -215,7 +320,7 @@ async function pushPlanningToCloud() {
     });
   if (error) throw error;
   lastCloudUpdatedAt = new Date().toISOString();
-  setSyncStatus('Enregistré cloud', 'ok');
+  setSyncStatus(privateTableAvailable === false ? 'Enregistré (migration sécurité à appliquer)' : 'Enregistré cloud', privateTableAvailable === false ? 'warn' : 'ok');
 }
 
 function formatCloudSyncError(err) {
@@ -280,7 +385,7 @@ async function mergeStaffPatchesFromProfiles() {
 
   const { data: members, error: membersErr } = await AUTH.client
     .from('pharmacy_members')
-    .select('user_id')
+    .select('user_id, role, employee_name')
     .eq('pharmacy_id', pharmacyId);
   if (membersErr) throw membersErr;
 
@@ -293,19 +398,36 @@ async function mergeStaffPatchesFromProfiles() {
     .in('id', userIds);
   if (error) throw error;
 
+  const memberByUser = new Map((members || []).map(m => [m.user_id, m]));
   let mergedAny = false;
   for (const profile of profiles || []) {
     const patch = profile.personal_data?.staffSharedPatch;
     if (!patch) continue;
 
-    if (patch.conges?.length) {
-      STATE.conges = mergeRecordsById(STATE.conges || [], patch.conges);
+    /* Un salarié ne peut déposer que ses propres congés / demandes (le chef d'équipe,
+       ceux de tous), et une demande reste « en attente » sans écraser une demande traitée. */
+    const member = memberByUser.get(profile.id) || {};
+    const leader = member.role === 'team_leader';
+    const ownsItem = (item) => leader || (member.employee_name && employeeNamesMatch(item?.emp, member.employee_name));
+    const conges = (patch.conges || []).filter(c => {
+      if (!c?.id || !ownsItem(c)) return false;
+      const cur = (STATE.conges || []).find(x => x.id === c.id);
+      return !cur || ownsItem(cur);
+    });
+    const requests = (patch.planningChangeRequests || []).filter(r => {
+      if (!r?.id || !ownsItem(r)) return false;
+      const cur = (STATE.planningChangeRequests || []).find(x => x.id === r.id);
+      return !cur || cur.status === 'pending';
+    }).map(r => ({ ...r, status: 'pending' }));
+
+    if (conges.length) {
+      STATE.conges = mergeRecordsById(STATE.conges || [], conges);
       mergedAny = true;
     }
-    if (patch.planningChangeRequests?.length) {
+    if (requests.length) {
       STATE.planningChangeRequests = mergeRecordsById(
         STATE.planningChangeRequests || [],
-        patch.planningChangeRequests
+        requests
       );
       mergedAny = true;
     }
@@ -448,6 +570,7 @@ async function pullCloudUpdatesOnly() {
 
       lastCloudUpdatedAt = row.updated_at;
       const mergedProfiles = await mergeStaffPatchesFromProfiles();
+      const mergedPrivate = await loadPrivateFromCloud().catch(() => false);
       let mergedShared = false;
       if (row.data) {
         suppressDirtyTracking = true;
@@ -455,7 +578,7 @@ async function pullCloudUpdatesOnly() {
         if (mergedShared) migrateState(STATE);
         suppressDirtyTracking = false;
       }
-      if (mergedProfiles || mergedShared) {
+      if (mergedProfiles || mergedShared || mergedPrivate) {
         if (typeof saveState === 'function') saveState();
         if (typeof render === 'function') render();
         setSyncStatus('Mise à jour équipe', 'ok');
