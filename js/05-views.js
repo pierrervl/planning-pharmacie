@@ -85,6 +85,7 @@ function resetPlanningFilters() {
 }
 
 function render() {
+  if (typeof applyAppTheme === 'function') applyAppTheme();
   syncNavTabs();
   if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
     STATE.ui.currentTab = 'rgpd';
@@ -1911,7 +1912,7 @@ function renderSidebar() {
       <div class="legend-item">${num('sw-request', '4')} Demande en attente</div>
       <div class="side-subhead"><span>Cases vides</span></div>
       <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Repos</div>
-      <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Non défini</div>`;
+      <div class="legend-item"><span class="sw" style="background:var(--empty)"></span> Non défini</div>`;
     for (const ct of getCongeTypeCatalog()) {
       const color = getCongeEntryColors(ct).bg;
       h += `<div class="legend-item"><span class="sw" style="background:${color}"></span> ${escapeHtml(ct.label)}</div>`;

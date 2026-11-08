@@ -53,6 +53,75 @@
   --week-even-head: #eef3f0;
   --week-odd-bg:    #d4cfc2;
   --week-odd-head:  #c8c2b4;
+  --week-odd-rest:  #c4bdb0;
+  --week-odd-empty: #ccc6b8;
+  --empty:          #f0eee6;       /* case vide non définie */
+  --topbar:         #1a1a1a;
+}
+
+/* =========================================================================
+   THÈMES — choisis dans Paramètres → Apparence (attribut data-theme sur <html>)
+   « Papier » = palette historique (valeurs de :root ci-dessus).
+   ========================================================================= */
+html[data-theme="sauge"] {
+  --bg:           #f3f6f4;
+  --bg-panel:     #ffffff;
+  --bg-soft:      #eaf0ec;
+  --ink:          #16201b;
+  --ink-soft:     #45524b;
+  --ink-mute:     #5f6c66;
+  --line:         #dbe3de;
+  --line-strong:  #c3cec8;
+  --accent:       #0e7a5f;
+  --accent-soft:  #dcf1e8;
+  --ok:           #0e7a5f;
+  --rest:         #c5d0ca;
+  --rest-soft:    #e3e9e5;
+  --ferie:        #f6f8f7;
+  --ferie-stripe: rgba(90, 120, 105, 0.2);
+  --ferie-text:   #55625b;
+  --garde:        #ffe4e6;
+  --garde-border: #f19aa6;
+  --week-even-bg:   #ffffff;
+  --week-even-head: #e6f1ec;
+  --week-odd-bg:    #dde6e1;
+  --week-odd-head:  #d0dcd5;
+  --week-odd-rest:  #c8d3cd;
+  --week-odd-empty: #d4ded8;
+  --empty:          #f1f4f2;
+  --topbar:         #13261f;
+  --pattern-ref-odd: #bcdccd;
+  --pattern-ref-odd-text: #0a4a39;
+}
+html[data-theme="ocean"] {
+  --bg:           #f2f5f9;
+  --bg-panel:     #ffffff;
+  --bg-soft:      #e9eef5;
+  --ink:          #142033;
+  --ink-soft:     #44526a;
+  --ink-mute:     #5d6b80;
+  --line:         #dae2ec;
+  --line-strong:  #c3cede;
+  --accent:       #1d5fa8;
+  --accent-soft:  #dde9f7;
+  --ok:           #1d5fa8;
+  --rest:         #c3cfdd;
+  --rest-soft:    #e2e8f0;
+  --ferie:        #f6f8fb;
+  --ferie-stripe: rgba(90, 110, 140, 0.2);
+  --ferie-text:   #5d6b80;
+  --garde:        #ffe1e4;
+  --garde-border: #ef9aa6;
+  --week-even-bg:   #ffffff;
+  --week-even-head: #e6eef8;
+  --week-odd-bg:    #dbe3ee;
+  --week-odd-head:  #cdd8e6;
+  --week-odd-rest:  #c6d0de;
+  --week-odd-empty: #d2dbe7;
+  --empty:          #f1f4f8;
+  --topbar:         #14243a;
+  --pattern-ref-odd: #bcd2ec;
+  --pattern-ref-odd-text: #12365f;
 }
 
 /* =========================================================================
@@ -120,7 +189,7 @@ input:where(.fr-date) {
 
 /* En-tête */
 header.topbar {
-  background: var(--ink);
+  background: var(--topbar, var(--ink));
   color: #fff;
   padding: 10px 18px;
   display: flex;
@@ -480,6 +549,36 @@ aside.side .sw-num {
   display: inline-flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700; font-size: 8px; letter-spacing: -0.02em;
 }
+
+/* Paramètres → Apparence : choix du thème */
+.theme-field { margin: 4px 0 16px; }
+.theme-field-label { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.theme-field .muted { margin: 0 0 10px; font-size: 12px; }
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.theme-option:hover { border-color: var(--accent); }
+.theme-option.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.theme-swatches { display: flex; width: 100%; height: 22px; border-radius: 6px; overflow: hidden; margin-bottom: 4px; }
+.theme-swatches span { flex: 1; }
+.theme-option-name { font-weight: 600; font-size: 14px; color: var(--ink); }
+.theme-option-hint { font-size: 12px; color: var(--ink-mute); }
+.theme-subtitle { margin: 6px 0 8px; font-size: 13px; }
 
 /* Boutons Filtres / Légende dans la barre Affichage */
 .week-view-bar { flex-wrap: wrap; }
@@ -1200,8 +1299,8 @@ table.planning th.pattern-ref.week-even {
   color: var(--accent);
 }
 table.planning th.pattern-ref.week-odd {
-  background: #b8d4c8;
-  color: #0f3d2e;
+  background: var(--pattern-ref-odd, #b8d4c8);
+  color: var(--pattern-ref-odd-text, #0f3d2e);
 }
 table.planning th.week-band.week-even { background: var(--week-even-head); }
 table.planning th.week-band.week-odd  { background: var(--week-odd-head); }
@@ -1223,9 +1322,9 @@ table.planning tbody td.week-odd {
   background-color: var(--week-odd-bg);
 }
 table.planning tbody td.week-even.vide.rest { background: var(--rest-soft); }
-table.planning tbody td.week-even.vide.empty { background: #f0eee6; }
-table.planning tbody td.week-odd.vide.rest  { background: #c4bdb0; }
-table.planning tbody td.week-odd.vide.empty { background: #ccc6b8; }
+table.planning tbody td.week-even.vide.empty { background: var(--empty); }
+table.planning tbody td.week-odd.vide.rest  { background: var(--week-odd-rest); }
+table.planning tbody td.week-odd.vide.empty { background: var(--week-odd-empty); }
 table.planning tbody td.week-even.plein,
 table.planning tbody td.week-odd.plein {
   background: var(--accent);
@@ -1378,7 +1477,7 @@ table.planning tfoot td.hours-total-cell.sum-row-hours {
   font-size: 0;
 }
 .cell.vide.rest, .pcell.vide.rest     { background: var(--rest-soft); }
-.cell.vide.empty, .pcell.vide.empty   { background: #f0eee6; }
+.cell.vide.empty, .pcell.vide.empty   { background: var(--empty); }
 .cell.vide.cp, .pcell.vide.cp         { background: var(--cp); }
 .cell.vide.rtt, .pcell.vide.rtt       { background: var(--rtt); }
 .cell.vide.mal, .pcell.vide.mal       { background: var(--mal); }
@@ -1528,7 +1627,7 @@ th.day-header.is-garde.is-today {
 .month-cell .badge.plein { background: var(--accent); min-height: 14px; }
 .month-cell .badge.vide { min-height: 14px; color: transparent; font-size: 0; }
 .month-cell .badge.vide.rest   { background: var(--rest-soft); }
-.month-cell .badge.vide.empty  { background: #f0eee6; }
+.month-cell .badge.vide.empty  { background: var(--empty); }
 .month-cell .badge.vide.cp     { background: var(--cp); }
 .month-cell .badge.vide.rtt    { background: var(--rtt); }
 .month-cell .badge.vide.mal    { background: var(--mal); }
@@ -3514,7 +3613,7 @@ td.cdi-cell {
   width: 36px;
   height: 32px;
   cursor: pointer;
-  background: #f0eee6;
+  background: var(--empty);
   transition: background 0.12s, box-shadow 0.12s;
 }
 td.cdi-cell:hover {
@@ -5012,7 +5111,7 @@ body.read-only-mode table.planning td.cell-click:hover {
 }
 
 .help-swatch.vide.empty {
-  background: #f0eee6;
+  background: var(--empty);
 }
 
 .help-swatch.vide.cp {

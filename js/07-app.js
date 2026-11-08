@@ -84,6 +84,36 @@ function updateExportButtonState() {
 
 const DEFAULT_TOPBAR_COLOR = '#1a1a1a';
 
+/* Thèmes de couleurs (préférence par appareil, enregistrée dans STATE.ui) */
+const APP_THEMES = [
+  { id: 'sauge',  label: 'Sauge',  hint: 'Vert émeraude, fond clair (par défaut)', swatches: ['#13261f', '#0e7a5f', '#dcf1e8', '#f3f6f4'] },
+  { id: 'ocean',  label: 'Océan',  hint: 'Bleu profond, fond bleuté',              swatches: ['#14243a', '#1d5fa8', '#dde9f7', '#f2f5f9'] },
+  { id: 'papier', label: 'Papier', hint: 'Palette historique, vert sapin et beige', swatches: ['#1a1a1a', '#1f5f4a', '#d8e9e0', '#f5f3ee'] },
+];
+const DEFAULT_APP_THEME = 'sauge';
+
+function getAppTheme(state = STATE) {
+  const id = state.ui?.theme;
+  return APP_THEMES.some(t => t.id === id) ? id : DEFAULT_APP_THEME;
+}
+
+function applyAppTheme() {
+  document.documentElement.dataset.theme = getAppTheme();
+}
+
+function setAppTheme(id) {
+  if (!APP_THEMES.some(t => t.id === id)) return;
+  STATE.ui.theme = id;
+  saveState();
+  applyAppTheme();
+  updateTopbarAppearance();
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    const on = btn.dataset.theme === id;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+}
+
 const TOPBAR_COLOR_PRESETS = [
   { label: 'Noir', color: '#1a1a1a' },
   { label: 'Vert sapin', color: '#1f5f4a' },
@@ -98,8 +128,13 @@ function normalizeTopbarColor(raw) {
   return '';
 }
 
+function getThemeTopbarColor() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--topbar').trim();
+  return normalizeTopbarColor(v) || DEFAULT_TOPBAR_COLOR;
+}
+
 function getTopbarColor(state = STATE) {
-  return normalizeTopbarColor(state.ui?.topbarColor) || DEFAULT_TOPBAR_COLOR;
+  return normalizeTopbarColor(state.ui?.topbarColor) || getThemeTopbarColor();
 }
 
 function getAppDisplayTitle(state = STATE) {
@@ -118,14 +153,16 @@ function updateTopbarAppearance() {
   const title = getAppDisplayTitle();
   if (titleEl) titleEl.textContent = title;
   document.title = title;
-  const color = getTopbarColor();
-  if (topbar) topbar.style.background = color;
+  /* Sans couleur personnalisée, le bandeau suit le thème (variable --topbar). */
+  const custom = normalizeTopbarColor(STATE.ui?.topbarColor);
+  if (topbar) topbar.style.background = custom || '';
+  const color = custom || getThemeTopbarColor();
   const preview = document.getElementById('topbar-preview');
   const previewTitle = document.getElementById('topbar-preview-title');
   if (preview) preview.style.background = color;
   if (previewTitle) previewTitle.textContent = title;
   document.querySelectorAll('.topbar-color-preset').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.color === color);
+    btn.classList.toggle('active', !!custom && btn.dataset.color === custom);
   });
   const colorInput = document.getElementById('cfg-topbar-color');
   if (colorInput) colorInput.value = color;
@@ -146,8 +183,22 @@ function mountTopbarAppearanceSection(root, options = {}) {
   const card = document.createElement('div');
   card.className = 'form-card topbar-appearance-card settings-section';
   card.id = sectionId;
+  const theme = getAppTheme();
   card.innerHTML = `
-    <h3>En-tête de l'application</h3>
+    <h3>Apparence</h3>
+    <div class="theme-field">
+      <div class="theme-field-label">Thème de couleurs</div>
+      <p class="muted">Enregistré sur cet appareil uniquement : chaque utilisateur peut choisir le sien.</p>
+      <div class="theme-options" role="group" aria-label="Thème de couleurs">
+        ${APP_THEMES.map(t => `
+          <button type="button" class="theme-option${t.id === theme ? ' active' : ''}" data-theme="${t.id}" aria-pressed="${t.id === theme}">
+            <span class="theme-swatches" aria-hidden="true">${t.swatches.map(c => `<span style="background:${c}"></span>`).join('')}</span>
+            <span class="theme-option-name">${escapeHtml(t.label)}</span>
+            <span class="theme-option-hint">${escapeHtml(t.hint)}</span>
+          </button>`).join('')}
+      </div>
+    </div>
+    <h4 class="theme-subtitle">En-tête</h4>
     <p class="muted">Le titre du bandeau reprend le <strong>nom de la pharmacie</strong> (ci-dessous, section Pharmacie &amp; employeur). S'il est vide, le nom cloud ou « Planning » s'affiche.</p>
     <div class="topbar-appearance-preview" id="topbar-preview" style="background:${escapeHtml(color)}">
       <span id="topbar-preview-title">${escapeHtml(title)}</span>
@@ -162,7 +213,7 @@ function mountTopbarAppearanceSection(root, options = {}) {
               data-color="${p.color}" title="${escapeHtml(p.label)}"
               style="background:${p.color}"></button>`).join('')}
         </div>
-        <button type="button" class="nav topbar-color-reset" id="cfg-topbar-reset">Par défaut</button>
+        <button type="button" class="nav topbar-color-reset" id="cfg-topbar-reset">Couleur du thème</button>
       </div>
     </div>`;
   root.appendChild(card);
@@ -176,6 +227,9 @@ function mountTopbarAppearanceSection(root, options = {}) {
   });
 
   card.querySelector('#cfg-topbar-reset').onclick = () => setTopbarColor('');
+  card.querySelectorAll('.theme-option').forEach(btn => {
+    btn.onclick = () => setAppTheme(btn.dataset.theme);
+  });
 }
 
 function persistAndRender({ skipCloud = false } = {}) {
@@ -947,6 +1001,7 @@ function initApp() {
   });
 
   // rendu initial
+  applyAppTheme();
   render();
   updateTopbarAppearance();
   sessionInitialized = true;
