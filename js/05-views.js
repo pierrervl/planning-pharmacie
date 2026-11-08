@@ -11,12 +11,62 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'reunions', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
 
 const TAB_GROUPS = {
-  planning: ['week', 'patterns', 'planning-requests', 'reunions'],
-  analyse:  ['emp-overview', 'emp-detail'],
-  equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
-  journees: ['feries', 'gardes', 'pantecotes'],
-  config:   ['help', 'settings', 'rgpd'],
+  planning:   ['week', 'planning-requests', 'patterns'],
+  evenements: ['conges', 'reunions', 'gardes', 'feries', 'pantecotes'],
+  equipe:     ['employees', 'contract', 'cdi'],
+  heures:     ['releve', 'emp-overview', 'emp-detail'],
+  config:     ['help', 'settings', 'rgpd'],
 };
+
+/* Pages fusionnées : une seule entrée de menu, un sélecteur en haut de page.
+   Les anciens identifiants restent valides (liens, raccourcis, sauvegardes). */
+const NAV_ALIASES = { cdi: 'contract', pantecotes: 'feries', 'emp-detail': 'emp-overview' };
+const MERGED_PAGES = [
+  { tabs: [['contract', 'CDD — jours travaillés'], ['cdi', 'CDI — semaines de demi-journées']], label: 'Type de contrat' },
+  { tabs: [['feries', 'Jours fériés'], ['pantecotes', 'Journées de solidarité']], label: 'Rubrique' },
+  { tabs: [['emp-overview', "Vue d'ensemble"], ['emp-detail', 'Par salarié']], label: 'Analyse' },
+];
+
+function navTabFor(tab) {
+  return NAV_ALIASES[tab] || tab;
+}
+
+/* Sélecteur en haut des pages fusionnées ; renvoie le conteneur où dessiner la page. */
+function mountMergedPageSwitch(content, tab) {
+  const page = MERGED_PAGES.find(m => m.tabs.some(([t]) => t === tab));
+  if (!page) return content;
+  const bar = document.createElement('div');
+  bar.className = 'subtabs no-print';
+  bar.setAttribute('role', 'tablist');
+  bar.setAttribute('aria-label', page.label);
+  bar.innerHTML = page.tabs.map(([t, lbl]) => `
+    <button type="button" role="tab" class="subtab${t === tab ? ' active' : ''}" data-subtab="${t}"
+      aria-selected="${t === tab}">${escapeHtml(lbl)}</button>`).join('');
+  bar.querySelectorAll('[data-subtab]').forEach(b => {
+    b.onclick = () => {
+      if (b.dataset.subtab === STATE.ui.currentTab) return;
+      STATE.ui.currentTab = b.dataset.subtab;
+      persistAndRender({ skipCloud: true });
+    };
+  });
+  content.appendChild(bar);
+  const host = document.createElement('div');
+  host.className = 'subtab-page';
+  content.appendChild(host);
+  return host;
+}
+
+/* Pastille du nombre de demandes en attente (administrateurs) */
+function syncNavBadges() {
+  const badge = document.querySelector('[data-nav-badge="requests"]');
+  if (!badge) return;
+  const isAdminView = !(typeof isStaff === 'function' && isStaff());
+  const n = isAdminView && typeof countPendingPlanningRequests === 'function' ? countPendingPlanningRequests() : 0;
+  badge.hidden = !n;
+  badge.textContent = n > 99 ? '99+' : String(n);
+  const btn = badge.closest('button');
+  if (btn) btn.title = n ? `Demandes (${n} en attente)` : 'Demandes';
+}
 
 function goToTab(tab, hash) {
   if (VALID_TABS.includes(tab)) STATE.ui.currentTab = tab;
@@ -37,14 +87,16 @@ function syncNavTabs() {
     b.classList.toggle('active', b.dataset.group === group);
   });
   /* Menu latéral : tous les onglets autorisés restent visibles, regroupés par rubrique. */
+  const navTab = navTabFor(STATE.ui.currentTab);
   $$('#tabs button[data-tab]').forEach(b => {
     b.hidden = b.dataset.tab === 'rgpd' && typeof shouldShowRgpdTab === 'function' && !shouldShowRgpdTab();
-    const active = b.dataset.tab === STATE.ui.currentTab;
+    const active = b.dataset.tab === navTab;
     b.classList.toggle('active', active);
     if (active) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
   syncNavGroupVisibility();
+  syncNavBadges();
 }
 
 /* Masque une rubrique quand aucun de ses onglets n'est visible (rôle employé, RGPD…). */
@@ -116,19 +168,19 @@ function render() {
   content.innerHTML = '';
   switch (STATE.ui.currentTab) {
     case 'week':           renderWeekView(content); break;
-    case 'emp-overview':   renderEmployeeOverviewView(content); break;
-    case 'emp-detail':     renderEmployeeDetailView(content); break;
+    case 'emp-overview':   renderEmployeeOverviewView(mountMergedPageSwitch(content, 'emp-overview')); break;
+    case 'emp-detail':     renderEmployeeDetailView(mountMergedPageSwitch(content, 'emp-detail')); break;
     case 'patterns':       renderPatternsEditor(content); break;
     case 'planning-requests': renderPlanningRequestsEditor(content); break;
     case 'employees':      renderEmployeesEditor(content); break;
-    case 'contract':       renderContractEditor(content); break;
-    case 'cdi':            renderCdiEditor(content); break;
+    case 'contract':       renderContractEditor(mountMergedPageSwitch(content, 'contract')); break;
+    case 'cdi':            renderCdiEditor(mountMergedPageSwitch(content, 'cdi')); break;
     case 'releve':         renderReleveView(content); break;
     case 'conges':         renderCongesEditor(content); break;
-    case 'feries':         renderFeriesEditor(content); break;
+    case 'feries':         renderFeriesEditor(mountMergedPageSwitch(content, 'feries')); break;
     case 'gardes':         renderGardesEditor(content); break;
     case 'reunions':       renderReunionsEditor(content); break;
-    case 'pantecotes':     renderPantecotesEditor(content); break;
+    case 'pantecotes':     renderPantecotesEditor(mountMergedPageSwitch(content, 'pantecotes')); break;
     case 'settings':       renderSettingsEditor(content); break;
     case 'help':           renderHelpEditor(content); break;
     case 'rgpd':           if (typeof renderRgpdEditor === 'function') renderRgpdEditor(content); break;
@@ -1192,7 +1244,7 @@ function renderWeekView(root) {
       ? (typeof getPlanningRequestHelpText === 'function' ? getPlanningRequestHelpText() : 'Cliquez sur une demi-journée pour proposer une modification en <b>violet</b>')
       : detailMode
         ? `Chaque barre = une demi-journée, calée sur ses horaires · ligne <b>Eff./h</b> = effectif par heure${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · barres <b>violettes</b> : demandes en attente' : ''}`
-        : `Semaine pattern (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon Patterns${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · <b>cases violettes</b> : clic pour traiter une demande' : ''}`}</span>
+        : `Semaine-type (S1…) · ancrage S1 = semaine du ${frFormat(anchorMon)} · clic = plein ↔ repos · clic droit = orange → rouge → vert · durées selon les semaines-types${typeof countPendingPlanningRequests === 'function' && countPendingPlanningRequests() ? ' · <b>cases violettes</b> : clic pour traiter une demande' : ''}`}</span>
   `;
   root.appendChild(ctrl);
 

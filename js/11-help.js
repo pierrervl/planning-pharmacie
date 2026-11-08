@@ -560,15 +560,15 @@ function buildAdminStartupSteps({ progress, cloudConfigured, pharmacyName, invit
       body: `${typeof PATTERN_CONCEPT_NOTE !== 'undefined' ? `<div class="pattern-concept-note pattern-concept-note--compact">${PATTERN_CONCEPT_NOTE}</div>` : ''}
         <p>Durée du cycle, horaires par défaut, semaines-types, ancrage calendaire.</p>`,
       actions: [
-        { label: '→ Patterns', tab: 'patterns' },
-        { label: '→ Ancrage cycle', tab: 'settings', hash: 'cfg-pattern-anchor' },
+        { label: '→ Semaines-types', tab: 'patterns' },
+        { label: '→ Réglages du cycle', tab: 'patterns', hash: 'pattern-settings' },
       ],
     },
     {
       id: 'planning', done: stepDone('planning'),
       title: '5. Appliquer le cycle au planning',
       body: `<p>Bloc <strong>Appliquer au planning</strong>, sous la grille des semaines-types : le tampon est appliqué sur le calendrier.</p>`,
-      actions: [{ label: '→ Patterns → Import', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
+      actions: [{ label: '→ Appliquer au planning', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
     },
     {
       id: 'invite', done: false, optional: true,

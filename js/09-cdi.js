@@ -167,6 +167,7 @@ function renderCdiEditor(root) {
     <div class="cdi-weeks-head">
       <h3>Semaines (${weeks.length})</h3>
       <span class="muted cdi-total-summary">${totalHalf} demi-journée${totalHalf > 1 ? 's' : ''} au total</span>
+      <button type="button" class="nav" id="cdi-from-patterns" title="Reprend les demi-journées travaillées des semaines-types de ce salarié">↺ Pré-remplir depuis les semaines-types</button>
       <button type="button" class="primary" id="cdi-week-add">+ Ajouter une semaine</button>
     </div>
     <p class="muted">Chaque semaine représente un modèle de présence (7 jours × matin / après-midi). Ajoutez-en autant que nécessaire.</p>`;
@@ -226,6 +227,17 @@ function renderCdiEditor(root) {
   $('#cdi-doc-title').onchange = persistCdiMetaFromDom;
   $('#cdi-doc-comment')?.addEventListener('change', persistCdiMetaFromDom);
   $('#cdi-doc-comment')?.addEventListener('blur', persistCdiMetaFromDom);
+  const fromPatternsBtn = root.querySelector('#cdi-from-patterns');
+  if (fromPatternsBtn) fromPatternsBtn.onclick = () => {
+    const current = getCdiWeeks(emp);
+    if (current.length && !confirm(`Remplacer les ${current.length} semaine(s) CDI de ${emp} par celles de ses semaines-types ?`)) return;
+    persistCdiMetaFromDom();
+    const r = replaceCdiWeeksFromPatterns(emp);
+    if (!r.ok) { toast(r.error, true); return; }
+    persistAndRender();
+    toast(`${r.count} semaine(s) reprise(s) depuis les semaines-types`);
+  };
+
 
   $('#cdi-week-add').onclick = () => {
     const r = addCdiWeek(emp);

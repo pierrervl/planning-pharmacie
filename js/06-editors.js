@@ -146,10 +146,14 @@ function renderPatternsEditor(root) {
     root.appendChild(tools.el);
     mountPatternCopyPanel(tools.body, patternEmps);
 
-    const settings = createPatternSection('settings', 'Réglages du cycle : horaires par défaut et ancrage', open.settings ?? false);
+    const wantSettings = STATE.ui.settingsScrollHash === 'pattern-settings';
+    if (wantSettings) STATE.ui.settingsScrollHash = null;
+    const settings = createPatternSection('settings', 'Réglages du cycle : horaires par défaut et ancrage', wantSettings || (open.settings ?? false));
+    settings.el.id = 'pattern-settings';
     root.appendChild(settings.el);
     mountPatternShiftDefaultsPanel(settings.body);
     mountPatternAnchorPanel(settings.body);
+    if (wantSettings) window.setTimeout(() => settings.el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 }
 
@@ -813,7 +817,7 @@ function mountPatternAnchorPanel(root, options = {}) {
       Indique quelle semaine ISO correspond à quelle semaine du cycle (S1, S2, S3…).
       <strong>Cela ne modifie pas le planning en vue Semaine</strong> — seul un import explicite
       recopie le modèle dans les cellules.
-      ${compactHelp ? ` <button type="button" class="nav settings-goto" data-tab="patterns">→ Import depuis Patterns</button>` : ''}
+      ${compactHelp ? ` <button type="button" class="nav settings-goto" data-tab="patterns">→ Semaines-types</button>` : ''}
     </p>
     <p class="pattern-anchor-current">
       <strong>Actuellement :</strong> S1 = semaine ISO <b>${anchorSummary.isoWeek}</b> (${anchorSummary.isoYear})
@@ -910,7 +914,7 @@ function renderAssignmentsEditor(root) {
     const list = STATE.affectations[emp] || [];
     const patNames = Object.keys(STATE.patterns[emp] || {});
     if (patNames.length === 0) {
-      card.innerHTML = `<h3>${emp}</h3><p class="muted">Aucun pattern défini. Va dans l'onglet Patterns pour en créer.</p>`;
+      card.innerHTML = `<h3>${emp}</h3><p class="muted">Aucune semaine-type définie. Remplissez-les dans Planning → Semaines-types.</p>`;
       root.appendChild(card);
       continue;
     }
@@ -2441,7 +2445,6 @@ function renderSettingsEditor(root) {
   toc.innerHTML = `
     <a href="#cfg-emp-types" class="settings-toc-link">Types de salariés</a>
     <a href="#cfg-conge-types" class="settings-toc-link">Modes de congés</a>
-    <a href="#cfg-pattern-anchor" class="settings-toc-link">Ancrage cycle</a>
     <a href="#cfg-appearance" class="settings-toc-link">Apparence</a>
     <a href="#cfg-contract-party" class="settings-toc-link">Pharmacie &amp; employeur</a>
     <a href="#cfg-users" class="settings-toc-link auth-admin-only">Comptes utilisateurs</a>
@@ -2459,7 +2462,6 @@ function renderSettingsEditor(root) {
 
   mountEmployeeTypeCatalogSection(root, { sectionId: 'cfg-emp-types' });
   mountCongeTypeCatalogSection(root, { sectionId: 'cfg-conge-types' });
-  mountPatternAnchorPanel(root, { sectionId: 'cfg-pattern-anchor', idPrefix: 'cfg-pat-anchor', compactHelp: true });
 
   if (typeof mountTopbarAppearanceSection === 'function') {
     mountTopbarAppearanceSection(root, { sectionId: 'cfg-appearance' });
@@ -2480,8 +2482,8 @@ function renderSettingsEditor(root) {
     <div class="settings-related-grid">
       <button type="button" class="settings-related-item settings-goto" data-tab="patterns">
         <span class="settings-related-icon">🧩</span>
-        <span class="settings-related-label">Modèle de cycle (patterns)</span>
-        <span class="settings-related-desc">Grille 6 semaines-types et import vers le planning</span>
+        <span class="settings-related-label">Semaines-types</span>
+        <span class="settings-related-desc">Grille du cycle, horaires par défaut, ancrage et application au planning</span>
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="feries">
         <span class="settings-related-icon">🎉</span>
@@ -2500,13 +2502,13 @@ function renderSettingsEditor(root) {
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="contract">
         <span class="settings-related-icon">📄</span>
-        <span class="settings-related-label">Contrats PDF</span>
-        <span class="settings-related-desc">Journées travaillées par salarié</span>
+        <span class="settings-related-label">Contrats CDD</span>
+        <span class="settings-related-desc">Journées travaillées par salarié (PDF)</span>
       </button>
       <button type="button" class="settings-related-item settings-goto" data-tab="cdi">
         <span class="settings-related-icon">📋</span>
-        <span class="settings-related-label">CDI</span>
-        <span class="settings-related-desc">Semaines de demi-journées travaillées</span>
+        <span class="settings-related-label">Contrats CDI</span>
+        <span class="settings-related-desc">Semaines de demi-journées, pré-remplies depuis les semaines-types</span>
       </button>
     </div>`;
   root.appendChild(related);
