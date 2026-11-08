@@ -5381,6 +5381,51 @@ body.read-only-mode table.planning td.cell-click:hover {
   font-weight: 500;
 }
 
+.help-support-box {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+}
+
+.help-support-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.help-support-status.is-open {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.help-support-status.is-blocked {
+  background: #e7e3f3;
+  color: #3f3470;
+}
+
+.help-support-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0 10px;
+  cursor: pointer;
+}
+
+.help-support-toggle input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.help-support-explain p:first-child {
+  margin-top: 0;
+}
+
 .help-step-actions {
   display: flex;
   flex-wrap: wrap;

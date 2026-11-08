@@ -207,6 +207,14 @@ function renderHelpEditor(root) {
     }));
   }
 
+  accordions.appendChild(createHelpAccordion({
+    id: 'help-cloud-security',
+    title: 'Sécurité du cloud et confidentialité',
+    hint: isAdminUser ? 'Protection des données · accès du support' : 'Protection des données',
+    open: false,
+    bodyHtml: buildCloudSecurityHtml({ isAdminUser, cloudConfigured }),
+  }));
+
   if (isStaffUser) {
     accordions.appendChild(createHelpAccordion({
       id: 'help-employee-guide',
@@ -267,6 +275,7 @@ function renderHelpEditor(root) {
         <li>Utilisez l'application via <strong>http://localhost:8080</strong> ou votre hébergement web — pas en ouvrant le fichier HTML directement.</li>
         <li>Le cloud se synchronise automatiquement une fois connecté — exportez quand même en JSON de temps en temps.</li>
         <li>Le code d'invitation est visible dans <strong>Paramètres → Comptes utilisateurs</strong> (réservé aux administrateurs).</li>
+        <li>Vous pouvez refuser l'accès du support technique dans <strong>Aide → Sécurité du cloud et confidentialité</strong>.</li>
         <li>Les comptes employés ne voient que leur propre planning et peuvent proposer des congés ou des modifications.</li>
       </ul>`,
   }));
@@ -274,6 +283,79 @@ function renderHelpEditor(root) {
   root.appendChild(accordions);
   applyHelpStartupSpotlight(root);
   bindHelpActions(root);
+}
+
+function buildSupportAccessControlHtml({ isAdminUser }) {
+  const connected = typeof isAuthenticated === 'function' && isAuthenticated()
+    && typeof getCurrentPharmacyId === 'function' && !!getCurrentPharmacyId();
+  if (!connected) {
+    return `<p class="muted">Connectez-vous à votre pharmacie cloud pour voir et régler l'accès du support.</p>
+      <div class="help-step-actions"><button type="button" class="help-action-btn" data-help-action="login">Se connecter</button></div>`;
+  }
+  if (typeof isSupportAccessSettingAvailable === 'function' && !isSupportAccessSettingAvailable()) {
+    return `<p class="help-warn">Ce réglage n'est pas encore disponible sur le serveur. Il apparaîtra après la prochaine mise à jour.</p>`;
+  }
+  const blocked = typeof isSupportAccessBlocked === 'function' && isSupportAccessBlocked();
+  const status = blocked
+    ? '<span class="help-support-status is-blocked">🔒 Accès du support refusé</span>'
+    : '<span class="help-support-status is-open">🛟 Accès du support autorisé (sur code d\'invitation)</span>';
+
+  if (!isAdminUser) {
+    return `<p>${status}</p><p class="muted">Seul l'administrateur de la pharmacie peut modifier ce réglage.</p>`;
+  }
+  const isSupportAccount = typeof isSuperAdmin === 'function' && isSuperAdmin();
+  return `
+    <p data-support-status>${status}</p>
+    <label class="help-support-toggle">
+      <input type="checkbox" data-help-action="support-access" ${blocked ? 'checked' : ''} ${isSupportAccount ? 'disabled' : ''}>
+      <span><strong>Refuser l'accès du support technique à ma pharmacie</strong></span>
+    </label>
+    ${isSupportAccount ? '<p class="muted">Vous êtes connecté avec le compte support : ce réglage appartient au titulaire.</p>' : ''}
+    <div class="help-support-explain">
+      <p><strong>Si vous cochez cette case&nbsp;:</strong></p>
+      <ul class="help-tips-list">
+        <li>Vos plannings, salariés, congés et demandes deviennent <strong>invisibles pour le support</strong> dans l'application.</li>
+        <li>Si le compte support avait rejoint votre pharmacie, il en est <strong>retiré immédiatement</strong>.</li>
+        <li>La base de données <strong>refuse</strong> qu'il revienne, même avec votre code d'invitation.</li>
+        <li>Vous gardez <strong>tous les avantages du cloud</strong>&nbsp;: synchronisation, accès des salariés, sauvegarde en ligne.</li>
+        <li>Vous pouvez décocher à tout moment, par exemple le temps d'un dépannage.</li>
+      </ul>
+      <p class="muted">Ce blocage s'applique à l'application. Comme pour tout service en ligne, l'éditeur garde un accès
+      technique à l'hébergement pour assurer la maintenance&nbsp;; il ne l'utilise pas pour consulter vos données.</p>
+    </div>`;
+}
+
+function buildCloudSecurityHtml({ isAdminUser, cloudConfigured }) {
+  return `
+    <p class="help-section-intro">
+      Le cloud n'est pas seulement plus pratique&nbsp;: il est aussi plus sûr qu'un planning qui ne vit que
+      sur un ordinateur de l'officine.
+    </p>
+
+    <h3 class="help-subtitle">Pourquoi passer au cloud</h3>
+    <ul class="help-tips-list">
+      <li><strong>Plus de perte de planning</strong> si l'ordinateur tombe en panne, est remplacé ou si le navigateur est vidé.</li>
+      <li><strong>Toute l'équipe à jour</strong>&nbsp;: chaque salarié consulte son planning depuis son téléphone ou son poste.</li>
+      <li><strong>Moins d'allers-retours</strong>&nbsp;: les congés et demandes de modification arrivent directement chez le titulaire.</li>
+      <li>Le planning reste aussi enregistré <strong>dans votre navigateur</strong>, et l'export <strong>JSON</strong> vous permet d'en garder une copie à tout moment.</li>
+    </ul>
+
+    <h3 class="help-subtitle">Comment vos données sont protégées</h3>
+    <ul class="help-tips-list">
+      <li><strong>Connexion chiffrée (HTTPS)</strong> entre votre navigateur et le serveur&nbsp;: personne ne peut lire les échanges en chemin.</li>
+      <li><strong>Pharmacies cloisonnées par la base de données elle-même</strong>&nbsp;: un compte d'une autre pharmacie ne peut ni voir ni lister vos données, même en contournant l'application.</li>
+      <li><strong>Accès sur invitation</strong>&nbsp;: personne ne rejoint votre pharmacie sans votre code d'invitation, et chaque personne a son propre compte.</li>
+      <li><strong>Mots de passe jamais stockés en clair</strong>&nbsp;: ils sont hachés par l'hébergeur, même l'éditeur ne peut pas les lire.</li>
+      <li><strong>Rôles</strong>&nbsp;: un salarié propose, seul l'administrateur modifie et valide le planning.</li>
+      <li><strong>Hébergement professionnel (Supabase)</strong>&nbsp;: disques chiffrés, sous-traitance encadrée par un contrat RGPD (voir la notice de confidentialité).</li>
+    </ul>
+
+    <h3 class="help-subtitle">Accès du support technique</h3>
+    <p>Pour vous dépanner, le support technique peut rejoindre votre pharmacie, <strong>uniquement si vous lui
+    communiquez votre code d'invitation</strong>. Si vous préférez qu'il n'y ait jamais accès, cochez la case ci-dessous.</p>
+    ${cloudConfigured
+      ? `<div class="help-support-box">${buildSupportAccessControlHtml({ isAdminUser })}</div>`
+      : '<p class="help-warn">Cloud non configuré sur cette instance.</p>'}`;
 }
 
 function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false } = {}) {
@@ -639,6 +721,37 @@ function bindHelpActions(root) {
       if (typeof forceCloudSync === 'function') {
         try { await forceCloudSync(); } catch (_e) { /* toast */ }
       } else document.getElementById('btn-cloud-sync')?.click();
+    };
+  });
+  root.querySelectorAll('[data-help-action="support-access"]').forEach(input => {
+    input.onchange = async () => {
+      const wantBlocked = input.checked;
+      if (wantBlocked && !window.confirm(
+        'Refuser l\'accès du support technique ?\n\n'
+        + 'Le support ne pourra plus voir votre pharmacie dans l\'application, même avec votre code d\'invitation. '
+        + 'Vous pourrez revenir sur ce choix à tout moment.'
+      )) {
+        input.checked = false;
+        return;
+      }
+      input.disabled = true;
+      try {
+        const blocked = await setSupportAccessBlocked(wantBlocked);
+        input.checked = blocked;
+        const box = input.closest('.help-support-box');
+        if (box) {
+          box.innerHTML = buildSupportAccessControlHtml({ isAdminUser: true });
+          bindHelpActions(box);
+        }
+        if (typeof toast === 'function') {
+          toast(blocked ? 'Accès du support refusé' : 'Accès du support autorisé (sur code d\'invitation)');
+        }
+      } catch (e) {
+        input.checked = !wantBlocked;
+        if (typeof toast === 'function') toast(e.message || 'Erreur', true);
+      } finally {
+        input.disabled = false;
+      }
     };
   });
   root.querySelectorAll('[data-help-action="export-json"]').forEach(btn => {

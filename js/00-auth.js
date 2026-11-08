@@ -135,13 +135,18 @@ async function loadProfile(userId) {
 
 async function loadPharmacyMemberships(userId) {
   await ensureAuthClient();
-  const { data, error } = await AUTH.client
+  const query = (pharmacyCols) => AUTH.client
     .from('pharmacy_members')
     .select(`
       id, role, employee_name, pharmacy_id,
-      pharmacies ( id, name, invite_code )
+      pharmacies ( ${pharmacyCols} )
     `)
     .eq('user_id', userId);
+  let { data, error } = await query('id, name, invite_code, support_access_blocked');
+  if (error) {
+    // Migration « accès support » pas encore appliquée : on relit sans la colonne.
+    ({ data, error } = await query('id, name, invite_code'));
+  }
   if (error) throw error;
   AUTH.memberships = (data || []).map(m => ({
     id: m.id,
@@ -197,6 +202,34 @@ async function ensurePharmacySelected() {
 
   await selectPharmacy(AUTH.memberships[0].pharmacy_id);
   return AUTH.membership;
+}
+
+/* Accès du support technique ------------------------------------------------ */
+
+function isSupportAccessBlocked() {
+  return AUTH.pharmacy?.support_access_blocked === true;
+}
+
+function isSupportAccessSettingAvailable() {
+  return !!AUTH.pharmacy && Object.prototype.hasOwnProperty.call(AUTH.pharmacy, 'support_access_blocked');
+}
+
+async function setSupportAccessBlocked(blocked) {
+  if (!isAdmin()) throw new Error('Accès réservé aux administrateurs');
+  const pharmacyId = getCurrentPharmacyId();
+  if (!pharmacyId) throw new Error('Aucune pharmacie sélectionnée');
+  await ensureAuthClient();
+  const { data, error } = await AUTH.client.rpc('set_support_access_blocked', {
+    p_pharmacy_id: pharmacyId,
+    p_blocked: !!blocked,
+  });
+  if (error) throw error;
+  const value = data === true;
+  if (AUTH.pharmacy) AUTH.pharmacy.support_access_blocked = value;
+  AUTH.memberships.forEach(m => {
+    if (m.pharmacy_id === pharmacyId && m.pharmacy) m.pharmacy.support_access_blocked = value;
+  });
+  return value;
 }
 
 async function joinPharmacyByInvite(inviteCode) {
