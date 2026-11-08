@@ -8,10 +8,10 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const VALID_TABS = ['week', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
+const VALID_TABS = ['week', 'reunions', 'emp-overview', 'emp-detail', 'patterns', 'planning-requests', 'employees', 'conges', 'contract', 'cdi', 'releve', 'feries', 'gardes', 'pantecotes', 'settings', 'help', 'rgpd'];
 
 const TAB_GROUPS = {
-  planning: ['week', 'patterns', 'planning-requests'],
+  planning: ['week', 'reunions', 'patterns', 'planning-requests'],
   analyse:  ['emp-overview', 'emp-detail'],
   equipe:   ['conges', 'employees', 'contract', 'cdi', 'releve'],
   journees: ['feries', 'gardes', 'pantecotes'],
@@ -50,7 +50,7 @@ function applyConfigTabLayout() {
   const sidebar = document.getElementById('sidebar');
   const main = document.querySelector('.main');
   if (!sidebar || !main) return;
-  const hide = ['help', 'rgpd'].includes(STATE.ui.currentTab);
+  const hide = ['help', 'rgpd', 'reunions'].includes(STATE.ui.currentTab);
   sidebar.hidden = hide;
   main.classList.toggle('main-no-sidebar', hide);
 }
@@ -71,6 +71,7 @@ function render() {
   content.innerHTML = '';
   switch (STATE.ui.currentTab) {
     case 'week':           renderWeekView(content); break;
+    case 'reunions':       renderReunionsEditor(content); break;
     case 'emp-overview':   renderEmployeeOverviewView(content); break;
     case 'emp-detail':     renderEmployeeDetailView(content); break;
     case 'patterns':       renderPatternsEditor(content); break;
@@ -366,6 +367,7 @@ function createWeekPlanningTable(days, { editable = true, showImportRow = true, 
         <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
         ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
         ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
+        ${reunionDayHeaderHtml(iso)}
       </th>`;
   });
   thead.appendChild(trDays);
@@ -908,6 +910,7 @@ function createWeekDetailView(days, { editable = true, forPrint = false, timeBou
         <span class="date-num">${d.getDate()}/${d.getMonth() + 1}</span>
         ${fr ? `<span class="ferie-name">${shortFerieLabel(fr)}</span>` : ''}
         ${gd ? `<span class="garde-name">${shortGardeLabel(gd)}</span>` : ''}
+        ${reunionDayHeaderHtml(iso)}
       </th>`;
   });
   trDays.innerHTML += `<th class="hours-col hours-col-week" rowspan="2" title="Heures travaillées — fond rouge si écart avec le pattern">H./sem.</th>`;
@@ -1183,6 +1186,9 @@ function renderWeekView(root) {
       persistAndRender();
     };
   });
+
+  const reunionsStrip = createWeekReunionsStrip(days);
+  if (reunionsStrip) root.appendChild(reunionsStrip);
 
   if (detailMode) {
     const wrap = createWeekDetailView(days, { editable: true });
@@ -1855,7 +1861,8 @@ function renderSidebar() {
     <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
     <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
     <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
-    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>`;
+    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>
+    <div class="legend-item"><span class="sw sw-reunion"></span> Réunion (en-tête vert)</div>`;
   for (const ct of getCongeTypeCatalog()) {
     const color = getCongeEntryColors(ct).bg;
     h += `<div class="legend-item"><span class="sw" style="background:${color}"></span> Vide — ${escapeHtml(ct.label)}</div>`;

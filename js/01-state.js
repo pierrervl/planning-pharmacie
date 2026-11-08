@@ -236,6 +236,9 @@ function buildDefaultState() {
     feriesRemove: [],  // dates ISO retirées du calcul auto
     /* jours de garde pharmacie : [{ id, start, end, label }]            */
     gardes:       [],
+    /* réunions : sporadiques { id, kind, title, date, startTime, … }
+       ou périodiques { id, kind, freq, weekday, startDate, endDate, … } */
+    reunions:     [],
     /* journées de solidarité : [{ id, year, start, end, label }]            */
     pantecotes:   [],
     /* heures récupérées : { pantecoteId: { emp: { work, formation } } } */
@@ -274,6 +277,8 @@ function buildDefaultState() {
       weekPrintStart: null,
       weekPrintEnd: null,
       weekCellDisplay: 'cross', /* 'cross' | 'hours' | 'detail' */
+      reunionFilter: 'all', /* 'all' | 'periodique' | 'sporadique' */
+      reunionEditId: '',
     }
   };
 
@@ -370,6 +375,12 @@ function migrateState(state) {
 
   if (!state.gardes) state.gardes = [];
   ensureGardes(state);
+  if (!state.reunions) state.reunions = [];
+  ensureReunions(state);
+  if (!state.ui.reunionFilter || !['all', 'periodique', 'sporadique'].includes(state.ui.reunionFilter)) {
+    state.ui.reunionFilter = 'all';
+  }
+  if (state.ui.reunionEditId == null) state.ui.reunionEditId = '';
   if (!state.pantecotes) state.pantecotes = [];
   if (!state.pantecoteRecovery) state.pantecoteRecovery = {};
   ensurePantecotes(state);
@@ -544,6 +555,7 @@ function renameEmployee(oldName, newName) {
   for (const c of STATE.conges || []) {
     if (c.emp === oldName) c.emp = next;
   }
+  if (typeof renameReunionParticipant === 'function') renameReunionParticipant(oldName, next, STATE);
 
   replaceEmployeeInUiArrays(oldName, next);
   return { ok: true, name: next };

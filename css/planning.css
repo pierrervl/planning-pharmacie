@@ -969,7 +969,8 @@ table.planning.planning-print td.cell {
   height: 20px;
   font-size: 8px;
 }
-table.planning.planning-print .ferie-name {
+table.planning.planning-print .ferie-name,
+table.planning.planning-print .reunion-name {
   font-size: 7px;
   line-height: 1.1;
 }
@@ -1312,6 +1313,19 @@ th.day-header .garde-name {
   font-weight: 600;
   color: var(--ink);
   margin-top: 2px;
+}
+th.day-header .reunion-name {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 2px auto 0;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.25;
 }
 th.day-header.is-garde.is-today {
   box-shadow: inset 0 -4px 0 var(--accent), inset 0 -7px 0 var(--garde-border);
@@ -3675,6 +3689,10 @@ body.printing-cdi #cdi-print-root {
   background: var(--garde);
   box-shadow: inset 0 0 0 1px var(--garde-border);
 }
+.legend-item .sw-reunion {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 .legend-item .sw-special {
   background: var(--presence-special);
   color: #fff;
@@ -3895,7 +3913,8 @@ body.printing-cdi #cdi-print-root {
     font-weight: 700;
   }
   body.printing-week-detail table.planning.week-detail-table th.week-detail-day .ferie-name,
-  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .garde-name {
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .garde-name,
+  body.printing-week-detail table.planning.week-detail-table th.week-detail-day .reunion-name {
     display: block;
     font-size: 7.5px;
     font-weight: 600;
@@ -5381,4 +5400,169 @@ body.rgpd-locked .app {
 
 .feedback-overlay-body .feedback-inbox-card {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+/* =========================================================================
+   RÉUNIONS (onglet + bandeau semaine)
+   ========================================================================= */
+.reunion-kind {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-soft);
+  margin-bottom: 6px;
+}
+.reunion-kind-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.reunion-kind-btn + .reunion-kind-btn { border-left: 1px solid var(--line-strong); }
+.reunion-kind-btn.active { background: var(--accent); color: #fff; }
+.reunion-form-grid textarea {
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel);
+  padding: 6px 8px;
+  border-radius: var(--r);
+  resize: vertical;
+  min-height: 52px;
+}
+.reunion-span-all { grid-column: 1 / -1; }
+.form-grid .field[hidden],
+.reunion-participants[hidden] {
+  display: none !important;
+}
+.reunion-audience {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 2px 0 8px;
+  font-size: 13px;
+}
+.reunion-audience label { display: inline-flex; align-items: center; gap: 6px; }
+.reunion-participants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reunion-participant {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  font-size: 12px;
+}
+.reunion-participant:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.reunion-preview {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.reunion-preview.is-error { color: var(--warn); }
+.reunion-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.reunion-form-actions .primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 7px 14px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.reunion-form-actions .nav,
+.week-reunions-strip button.nav,
+.reunion-row-actions .nav {
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  padding: 6px 10px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font-size: 12px;
+}
+.reunion-row-actions { white-space: nowrap; }
+.reunion-row-actions .nav { padding: 2px 8px; font-size: 11px; }
+.reunion-row-actions .del { margin-left: 4px; }
+table.list tr.is-editing td { background: var(--accent-soft); }
+.reunion-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.reunion-badge.periodique { background: var(--accent-soft); color: var(--accent); }
+.reunion-badge.sporadique { background: #f3e5f5; color: #6a1b9a; }
+.reunion-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.reunion-filters button {
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.reunion-filters button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.reunion-table-wrap { overflow-x: auto; }
+.reunion-readonly-note { margin: 0 0 12px; }
+.week-reunions-strip {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+}
+.week-reunions-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.week-reunions-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.week-reunions-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .reunion-span-all { grid-column: auto; }
 }
