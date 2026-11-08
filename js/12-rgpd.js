@@ -286,6 +286,7 @@ function applyRgpdGate() {
   document.querySelectorAll('#tabs button').forEach(btn => {
     btn.style.display = btn.dataset.tab === 'rgpd' ? '' : 'none';
   });
+  if (typeof syncNavGroupVisibility === 'function') syncNavGroupVisibility();
 
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.style.display = 'none';

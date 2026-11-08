@@ -232,6 +232,64 @@ function mountTopbarAppearanceSection(root, options = {}) {
   });
 }
 
+/* ===========================================================================
+   MENU LATÉRAL — replié en icônes, déplié au survol, épinglable ; tiroir sur mobile
+   ========================================================================= */
+function isNavPinned() {
+  return !!STATE.ui?.navPinned;
+}
+
+function applyNavPinned() {
+  const pinned = isNavPinned();
+  document.body.classList.toggle('nav-pinned', pinned);
+  const btn = document.getElementById('btn-nav-pin');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(pinned));
+    const label = pinned ? 'Détacher le menu (il se replie automatiquement)' : 'Épingler le menu ouvert';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+  }
+}
+
+function setNavDrawerOpen(open) {
+  document.body.classList.toggle('nav-open', open);
+  const toggle = document.getElementById('btn-nav-toggle');
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Fermer le menu' : 'Ouvrir le menu');
+  }
+  const backdrop = document.getElementById('app-nav-backdrop');
+  if (backdrop) backdrop.hidden = !open;
+}
+
+/* Hauteur réelle de l'en-tête (il passe sur plusieurs lignes sur petit écran). */
+function syncTopbarHeight() {
+  const topbar = document.querySelector('header.topbar');
+  if (topbar) document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`);
+}
+
+function setupAppNav() {
+  applyNavPinned();
+  syncTopbarHeight();
+  const topbar = document.querySelector('header.topbar');
+  if (topbar && typeof ResizeObserver === 'function') new ResizeObserver(syncTopbarHeight).observe(topbar);
+  else window.addEventListener('resize', syncTopbarHeight);
+  const pin = document.getElementById('btn-nav-pin');
+  if (pin) pin.onclick = () => {
+    STATE.ui.navPinned = !isNavPinned();
+    saveState();
+    applyNavPinned();
+    pin.blur();
+  };
+  const toggle = document.getElementById('btn-nav-toggle');
+  if (toggle) toggle.onclick = () => setNavDrawerOpen(!document.body.classList.contains('nav-open'));
+  const backdrop = document.getElementById('app-nav-backdrop');
+  if (backdrop) backdrop.onclick = () => setNavDrawerOpen(false);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.body.classList.contains('nav-open')) setNavDrawerOpen(false);
+  });
+}
+
 function persistAndRender({ skipCloud = false } = {}) {
   saveState();
   if (sessionInitialized && !skipCloud) markSessionDirty();
@@ -969,12 +1027,14 @@ function initApp() {
       persistAndRender({ skipCloud: true });
     };
   });
-  $$('#tabs button').forEach(b => {
+  $$('#tabs button[data-tab]').forEach(b => {
     b.onclick = () => {
       STATE.ui.currentTab = b.dataset.tab;
+      setNavDrawerOpen(false);
       persistAndRender({ skipCloud: true });
     };
   });
+  setupAppNav();
 
   // boutons top
   $('#btn-export-json').onclick = exportJSON;

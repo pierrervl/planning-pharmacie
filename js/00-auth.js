@@ -1341,6 +1341,7 @@ function applyEmployeeViewRestrictions() {
     document.querySelectorAll('#tabs button, #nav-groups button').forEach(btn => {
       btn.style.display = '';
     });
+    if (typeof syncNavGroupVisibility === 'function') syncNavGroupVisibility();
     return;
   }
 
@@ -1373,6 +1374,8 @@ function applyEmployeeViewRestrictions() {
   document.querySelectorAll('#tabs button').forEach(btn => {
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
+
+  if (typeof syncNavGroupVisibility === 'function') syncNavGroupVisibility();
 
   const resetBtn = document.getElementById('btn-reset');
   if (resetBtn) resetBtn.style.display = 'none';

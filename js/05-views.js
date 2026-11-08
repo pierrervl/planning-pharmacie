@@ -36,13 +36,23 @@ function syncNavTabs() {
   $$('#nav-groups button').forEach(b => {
     b.classList.toggle('active', b.dataset.group === group);
   });
-  $$('#tabs button').forEach(b => {
-    const inGroup = b.dataset.group === group;
-    b.hidden = !inGroup;
-    if (b.dataset.tab === 'rgpd' && typeof shouldShowRgpdTab === 'function' && !shouldShowRgpdTab()) {
-      b.hidden = true;
-    }
-    b.classList.toggle('active', b.dataset.tab === STATE.ui.currentTab);
+  /* Menu latéral : tous les onglets autorisés restent visibles, regroupés par rubrique. */
+  $$('#tabs button[data-tab]').forEach(b => {
+    b.hidden = b.dataset.tab === 'rgpd' && typeof shouldShowRgpdTab === 'function' && !shouldShowRgpdTab();
+    const active = b.dataset.tab === STATE.ui.currentTab;
+    b.classList.toggle('active', active);
+    if (active) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  syncNavGroupVisibility();
+}
+
+/* Masque une rubrique quand aucun de ses onglets n'est visible (rôle employé, RGPD…). */
+function syncNavGroupVisibility() {
+  $$('#tabs [data-nav-group]').forEach(g => {
+    const visible = [...g.querySelectorAll('button[data-tab]')]
+      .some(b => !b.hidden && b.style.display !== 'none');
+    g.hidden = !visible;
   });
 }
 

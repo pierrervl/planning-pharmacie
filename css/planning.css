@@ -182,13 +182,17 @@ input:where(.fr-date) {
   min-height: 100vh;
   min-width: 0;
 }
-.app > .main {
+.app > .main,
+.app-body > .main {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 /* En-tête */
 header.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 70;
   background: var(--topbar, var(--ink));
   color: #fff;
   padding: 10px 18px;
@@ -548,6 +552,199 @@ aside.side .legend-list .legend-item { padding: 2px 0; }
 aside.side .sw-num {
   display: inline-flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700; font-size: 8px; letter-spacing: -0.02em;
+}
+
+/* =========================================================================
+   MENU LATÉRAL
+   Ordinateur : colonne d'icônes, dépliée au survol (par-dessus le contenu)
+   ou épinglée (body.nav-pinned, le contenu se décale).
+   Mobile : tiroir ouvert par le bouton ☰ (body.nav-open).
+   ========================================================================= */
+.app-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+.app-nav {
+  --nav-rail: 60px;
+  --nav-open: 244px;
+  position: sticky;
+  top: var(--topbar-h, 58px);
+  align-self: flex-start;
+  flex: 0 0 var(--nav-rail);
+  height: calc(100vh - var(--topbar-h, 58px));
+  z-index: 60;
+  transition: flex-basis 0.18s ease;
+}
+body.nav-pinned .app-nav { flex-basis: var(--nav-open); }
+.app-nav-panel {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: var(--nav-rail);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+  transition: width 0.18s ease, box-shadow 0.18s ease;
+}
+.app-nav:hover .app-nav-panel,
+.app-nav:focus-within .app-nav-panel {
+  width: var(--nav-open);
+  transition: width 0.18s ease 0.1s, box-shadow 0.18s ease 0.1s;
+}
+body.nav-pinned .app-nav-panel { width: var(--nav-open); }
+body:not(.nav-pinned) .app-nav:hover .app-nav-panel,
+body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
+  box-shadow: 10px 0 30px rgba(15, 25, 20, 0.14);
+}
+.app-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0 10px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.app-nav-head-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+.app-nav-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+.app-nav-pin svg { width: 16px; height: 16px; }
+.app-nav-pin:hover { color: var(--ink); background: var(--bg-soft); }
+.app-nav-pin[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.app-nav-list {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0 10px;
+}
+.app-nav-group[hidden] { display: none; }
+.app-nav-group--bottom { margin-top: auto; padding-top: 6px; }
+.app-nav-label {
+  position: relative;
+  height: 24px;
+  padding: 9px 18px 0;
+  box-sizing: border-box;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+#tabs button[data-tab] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 16px);
+  height: 36px;
+  margin: 1px 8px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+#tabs button[data-tab][hidden] { display: none; }
+#tabs button[data-tab]:hover { background: var(--bg-soft); color: var(--ink); }
+#tabs button[data-tab].active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+#tabs button[data-tab]:focus:not(:focus-visible) { outline: none; }
+#tabs button[data-tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.app-nav-icon { width: 20px; height: 20px; flex: 0 0 20px; }
+.app-nav-text { overflow: hidden; text-overflow: ellipsis; }
+.topbar-menu-btn { display: none; }
+.app-nav-backdrop[hidden] { display: none; }
+
+@media (min-width: 901px) {
+  /* Replié : on ne garde que les icônes, les rubriques deviennent un trait. */
+  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-text,
+  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-head > * {
+    opacity: 0;
+    pointer-events: none;
+  }
+  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-label { color: transparent; }
+  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-label::after {
+    content: '';
+    position: absolute;
+    left: 16px; right: 16px; top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .app-nav-text, .app-nav-head > * { transition: opacity 0.12s ease; }
+}
+
+@media (max-width: 900px) {
+  .topbar-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: -4px 0 -4px -8px;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    color: #fff;
+  }
+  .app-nav {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(290px, 86vw);
+    height: auto;
+    align-self: stretch;
+    flex: none;
+    z-index: 1000;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+  body.nav-open .app-nav { transform: none; }
+  .app-nav-panel,
+  .app-nav:hover .app-nav-panel,
+  body.nav-pinned .app-nav-panel { width: 100%; box-shadow: 8px 0 28px rgba(15, 25, 20, 0.22); }
+  .app-nav-pin { display: none; }
+  .app-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(15, 20, 18, 0.4);
+  }
 }
 
 /* Paramètres → Apparence : choix du thème */
@@ -3968,7 +4165,7 @@ body.printing-cdi #cdi-print-root {
    IMPRESSION
    ========================================================================= */
 @media print {
-  header.topbar, .nav-shell, aside.side, .controls, .no-print, .import-dialog-overlay, .fr-calendar-popup { display: none !important; }
+  header.topbar, .nav-shell, .app-nav, .app-nav-backdrop, aside.side, .controls, .no-print, .import-dialog-overlay, .fr-calendar-popup { display: none !important; }
   body { background: #fff; }
   .app { display: block; }
   main.content { padding: 0; overflow: visible; }
