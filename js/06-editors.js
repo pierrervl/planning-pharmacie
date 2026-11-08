@@ -2167,7 +2167,7 @@ function renderEmployeesEditor(root) {
   listCard.className = 'form-card employees-list-card';
   listCard.innerHTML = `
     <h3>Salariés (${STATE.employees.length})</h3>
-    <p class="muted">Glissez la poignée ⋮⋮ ou utilisez ↑ / ↓ pour définir l'ordre d'affichage (planning, listes). Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées, la <b>fin de contrat</b> et les données personnelles (exportées dans le JSON).</p>`;
+    <p class="muted">Glissez la poignée ⋮⋮ ou utilisez ↑ / ↓ pour définir l'ordre d'affichage (planning, listes). Modifiez le nom ou le type. Ouvrez « Infos » pour les coordonnées, la <b>fin de contrat</b> et les données personnelles (exportées dans le JSON). <b>Retirer…</b> enregistre un départ ou supprime un salarié.</p>`;
 
   if (STATE.employees.length === 0) {
     listCard.innerHTML += `<p class="muted">Aucun salarié pour l'instant.</p>`;
@@ -2224,6 +2224,7 @@ function renderEmployeesEditor(root) {
               <button type="button" class="nav emp-info-toggle" data-emp="${escapeHtml(emp)}" aria-expanded="${open}">
                 ${open ? 'Infos ▲' : 'Infos ▼'}
               </button>
+              <button type="button" class="nav emp-remove-btn" data-emp="${escapeHtml(emp)}" title="Départ ou suppression de ${escapeHtml(emp)}">Retirer…</button>
             </td>
           </tr>
           <tr class="emp-details-row${open ? '' : ' hidden'}" data-emp="${escapeHtml(emp)}">
@@ -2332,6 +2333,10 @@ function renderEmployeesEditor(root) {
     };
   });
 
+  listCard.querySelectorAll('.emp-remove-btn').forEach(btn => {
+    btn.onclick = () => openEmployeeRemoveDialog(btn.dataset.emp);
+  });
+
   listCard.querySelectorAll('.emp-info-save').forEach(btn => {
     btn.onclick = () => {
       const emp = btn.dataset.emp;
@@ -2355,6 +2360,103 @@ function renderEmployeesEditor(root) {
       persistAndRender();
     };
   });
+}
+
+/* Départ ou suppression d'un salarié */
+function openEmployeeRemoveDialog(emp) {
+  if (!STATE.employees.includes(emp)) return;
+  document.querySelector('.emp-remove-overlay')?.remove();
+  const fp = employeeFootprint(emp);
+  const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+  const parts = [
+    fp.presences && plural(fp.presences, 'demi-journée au planning', 'demi-journées au planning'),
+    fp.conges && plural(fp.conges, 'congé', 'congés'),
+    fp.demandes && plural(fp.demandes, 'demande en attente', 'demandes en attente'),
+    fp.reunions && plural(fp.reunions, 'réunion', 'réunions'),
+    fp.joursCdd && plural(fp.joursCdd, 'jour de contrat CDD', 'jours de contrat CDD'),
+    fp.semainesCdi && plural(fp.semainesCdi, 'semaine CDI', 'semaines CDI'),
+  ].filter(Boolean);
+  const today = todayISO();
+  const currentEnd = getEmployeeContractEndDate(emp);
+  const cloud = typeof isAuthenticated === 'function' && isAuthenticated();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'import-dialog-overlay emp-remove-overlay';
+  overlay.innerHTML = `
+    <div class="import-dialog emp-remove-dialog" role="dialog" aria-modal="true" aria-labelledby="emp-remove-title">
+      <h3 id="emp-remove-title">Retirer « ${escapeHtml(emp)} » de l'équipe</h3>
+      <p class="muted">${parts.length ? 'Données liées : ' + parts.join(' · ') + '.' : 'Aucune donnée liée pour l\'instant.'}</p>
+
+      <section class="emp-remove-option">
+        <h4>La personne quitte la pharmacie <span class="emp-remove-tag">recommandé</span></h4>
+        <p>L'historique est conservé (heures, relevés, contrats). Les présences prévues <b>après</b> le dernier jour sont retirées du planning.</p>
+        <div class="emp-remove-row">
+          <label>Dernier jour travaillé
+            <input type="text" class="fr-date" id="emp-leave-date" data-iso="${currentEnd || today}" value="${frFormatNumeric(currentEnd || today)}">
+          </label>
+          <button type="button" class="primary" data-act="leave">Enregistrer le départ</button>
+        </div>
+      </section>
+
+      <section class="emp-remove-option emp-remove-option--danger">
+        <h4>Supprimer définitivement</h4>
+        <p>En cas d'erreur de saisie ou de doublon : supprime le salarié et <b>toutes</b> ses données (planning, semaines-types, congés, demandes, contrats, fiche). Il est retiré des réunions.${cloud ? ' Si un compte salarié lui est associé, déliez-le ensuite dans Paramètres → Comptes utilisateurs.' : ''}</p>
+        <button type="button" class="emp-remove-delete" data-act="delete">Supprimer définitivement</button>
+      </section>
+
+      <div class="import-dialog-btns">
+        <button type="button" class="nav muted-btn" data-act="cancel">Annuler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  initFrDateInputs(overlay);
+
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('[data-act="cancel"]').onclick = close;
+
+  overlay.querySelector('[data-act="leave"]').onclick = () => {
+    const end = readFrDateInput(overlay.querySelector('#emp-leave-date'));
+    if (!end) { toast('Indiquez le dernier jour (jj/mm/aaaa).', true); return; }
+    setEmployeeInfo(emp, { ...getEmployeeInfo(emp), contractEndDate: end });
+    const cleared = enforceEmployeeContractEnd(emp).cleared;
+    close();
+    persistAndRender();
+    toast(`Départ de ${emp} enregistré au ${frFormatNumeric(end)}`
+      + (cleared ? ` — ${cleared} présence${cleared > 1 ? 's' : ''} retirée${cleared > 1 ? 's' : ''}` : ''));
+  };
+
+  const delBtn = overlay.querySelector('[data-act="delete"]');
+  delBtn.onclick = () => {
+    if (!delBtn.classList.contains('is-confirming')) {
+      delBtn.classList.add('is-confirming');
+      delBtn.textContent = `Oui, supprimer ${emp} et ses données`;
+      return;
+    }
+    const r = removeEmployee(emp);
+    close();
+    if (!r.ok) { toast(r.error, true); return; }
+    persistAndRender();
+    showUndoBar(`« ${emp} » a été supprimé de l'équipe.`, () => {
+      restoreEmployeeSnapshot(r.snapshot);
+      persistAndRender();
+      toast(`${emp} a été restauré`);
+    });
+  };
+}
+
+/* Barre « Annuler » temporaire après une suppression */
+function showUndoBar(message, onUndo, delayMs = 15000) {
+  document.querySelector('.undo-bar')?.remove();
+  const bar = document.createElement('div');
+  bar.className = 'undo-bar';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML = `<span>${escapeHtml(message)}</span><button type="button">Annuler</button>`;
+  document.body.appendChild(bar);
+  const timer = setTimeout(() => bar.remove(), delayMs);
+  bar.querySelector('button').onclick = () => { clearTimeout(timer); bar.remove(); onUndo(); };
 }
 
 function bindEmployeeListReorder(listCard) {
