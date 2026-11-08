@@ -591,14 +591,16 @@ body.nav-pinned .app-nav { flex-basis: var(--nav-open); }
   overflow: hidden;
   transition: width 0.18s ease, box-shadow 0.18s ease;
 }
-.app-nav:hover .app-nav-panel,
-.app-nav:focus-within .app-nav-panel {
+/* .nav-closing : posé après un clic à la souris sur un onglet, pour replier le menu
+   tout de suite (le bouton cliqué garde le focus) ; retiré quand la souris sort du menu. */
+.app-nav:not(.nav-closing):hover .app-nav-panel,
+.app-nav:not(.nav-closing):focus-within .app-nav-panel {
   width: var(--nav-open);
   transition: width 0.18s ease 0.1s, box-shadow 0.18s ease 0.1s;
 }
 body.nav-pinned .app-nav-panel { width: var(--nav-open); }
-body:not(.nav-pinned) .app-nav:hover .app-nav-panel,
-body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
+body:not(.nav-pinned) .app-nav:not(.nav-closing):hover .app-nav-panel,
+body:not(.nav-pinned) .app-nav:not(.nav-closing):focus-within .app-nav-panel {
   box-shadow: 10px 0 30px rgba(15, 25, 20, 0.14);
 }
 .app-nav-head {
@@ -697,13 +699,13 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
 
 @media (min-width: 901px) {
   /* Replié : on ne garde que les icônes, les rubriques deviennent un trait. */
-  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-text,
-  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-head > * {
+  body:not(.nav-pinned) .app-nav:is(:not(:hover):not(:focus-within), .nav-closing) .app-nav-text,
+  body:not(.nav-pinned) .app-nav:is(:not(:hover):not(:focus-within), .nav-closing) .app-nav-head > * {
     opacity: 0;
     pointer-events: none;
   }
-  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-label { color: transparent; }
-  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-label::after {
+  body:not(.nav-pinned) .app-nav:is(:not(:hover):not(:focus-within), .nav-closing) .app-nav-label { color: transparent; }
+  body:not(.nav-pinned) .app-nav:is(:not(:hover):not(:focus-within), .nav-closing) .app-nav-label::after {
     content: '';
     position: absolute;
     left: 16px; right: 16px; top: 14px;
@@ -907,7 +909,7 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
 #tabs button[data-tab] { position: relative; }
 @media (min-width: 901px) {
   /* Menu replié : la pastille devient un point sur l'icône */
-  body:not(.nav-pinned) .app-nav:not(:hover):not(:focus-within) .app-nav-badge:not([hidden]) {
+  body:not(.nav-pinned) .app-nav:is(:not(:hover):not(:focus-within), .nav-closing) .app-nav-badge:not([hidden]) {
     position: absolute;
     top: 6px;
     left: 30px;

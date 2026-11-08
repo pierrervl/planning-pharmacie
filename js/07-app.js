@@ -268,7 +268,21 @@ function syncTopbarHeight() {
   if (topbar) document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`);
 }
 
+/* Clic souris sur un onglet (menu non épinglé, ordinateur) : le menu se replie
+   aussitôt, sans attendre que la souris le quitte ni qu'on clique ailleurs. */
+function collapseNavAfterPick(btn, e) {
+  if (isNavPinned()) return;
+  if (!window.matchMedia('(min-width: 901px)').matches) return;
+  if (e && e.detail === 0) return; /* activation au clavier : le menu reste ouvert */
+  const nav = document.getElementById('app-nav');
+  if (!nav) return;
+  nav.classList.add('nav-closing');
+  if (btn) btn.blur();
+}
+
 function setupAppNav() {
+  const navEl = document.getElementById('app-nav');
+  if (navEl) navEl.addEventListener('mouseleave', () => navEl.classList.remove('nav-closing'));
   applyNavPinned();
   syncTopbarHeight();
   const topbar = document.querySelector('header.topbar');
@@ -1028,9 +1042,10 @@ function initApp() {
     };
   });
   $$('#tabs button[data-tab]').forEach(b => {
-    b.onclick = () => {
+    b.onclick = (e) => {
       STATE.ui.currentTab = b.dataset.tab;
       setNavDrawerOpen(false);
+      collapseNavAfterPick(b, e);
       persistAndRender({ skipCloud: true });
     };
   });
