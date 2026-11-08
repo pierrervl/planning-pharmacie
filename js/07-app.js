@@ -930,6 +930,12 @@ function initApp() {
 
   // raccourcis clavier : ←/→ pour naviguer dans semaine/mois/année
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && typeof getSidePanel === 'function' && getSidePanel()
+      && !document.querySelector('.import-dialog-overlay, .modal-backdrop')) {
+      STATE.ui.sidePanel = null;
+      persistAndRender({ skipCloud: true });
+      return;
+    }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       const sign = (e.key === 'ArrowLeft') ? -1 : 1;

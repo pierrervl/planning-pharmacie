@@ -297,7 +297,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
 
     <h3 class="help-subtitle">Onglets disponibles</h3>
     <ul class="help-tips-list">
-      <li><strong>Semaine</strong> — planning de l'équipe sur 3 semaines (navigation, filtres latéraux).</li>
+      <li><strong>Semaine</strong> — planning de l'équipe sur 3 semaines (navigation, boutons <strong>Filtres</strong> et <strong>Légende</strong>).</li>
       <li><strong>Congés</strong> — demander une absence (CP, RTT, maladie…).</li>
       <li><strong>Aide</strong> — ce guide.</li>
     </ul>
@@ -306,7 +306,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
     <ul class="help-tips-list">
       <li>Chaque jour = deux demi-journées <strong>M</strong> (matin) et <strong>A</strong> (après-midi).</li>
       <li>Basculez l'affichage <strong>Croix</strong> / <strong>Heures</strong> au-dessus du tableau.</li>
-      <li>Utilisez le panneau latéral pour filtrer les types de cellules (travail, repos, congés…).</li>
+      <li>Le bouton <strong>Filtres</strong> (à droite de « Affichage ») masque des salariés ou des types de cellules ; <strong>Légende</strong> rappelle le sens des couleurs.</li>
       ${isTeamLeader ? '' : '<li>Votre ligne est identifiable dans le tableau (surbrillance).</li>'}
     </ul>
 
@@ -425,9 +425,10 @@ function buildPlanningTutorialHtml({ forAdmin = true } = {}) {
       <li><span class="help-effectif-swatch high"></span> <strong>Vert</strong> — 4 personnes ou plus</li>
     </ul>
 
-    <h3 class="help-subtitle">Filtres (panneau latéral)</h3>
-    <p>Cochez les salariés, le créneau (matin / après-midi / les deux) et les types de cellules à afficher
-    (travail, repos, vide, congés…) pour simplifier la lecture.</p>`;
+    <h3 class="help-subtitle">Filtres et légende</h3>
+    <p>Dans la vue Semaine, le bouton <strong>Filtres</strong> (à droite de « Affichage ») ouvre le panneau : cochez les salariés, le créneau (matin / après-midi / les deux) et les types de cellules à afficher
+    (travail, repos, vide, congés…) pour simplifier la lecture. Un badge indique le nombre de filtres actifs ; « Réinitialiser les filtres » remet tout à zéro.
+    Le bouton <strong>Légende</strong> affiche la signification des couleurs. Échap ferme le panneau.</p>`;
 }
 
 function buildAdminStartupHtml({ progress, cloudConfigured, pharmacyName, inviteCode, pct }) {

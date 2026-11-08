@@ -45,7 +45,7 @@ function renderPatternsEditor(root) {
       (<b>${cycleLabel}</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
       (horaires demandés sur orange/rouge) · double-clic sur orange/rouge = modifier les horaires.
       Les cases affichent la durée calculée (ex. 5,5).
-      Tous les salariés sont listés ici (filtres latéraux ignorés).
+      Tous les salariés sont listés ici (les filtres de la vue Semaine ne s'appliquent pas ici).
       L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
     </div>
     <div class="spacer"></div>

@@ -422,6 +422,115 @@ aside.side h3 {
 }
 aside.side h3:first-child { margin-top: 0; }
 
+/* Panneau à la demande (Filtres / Légende) */
+.main:not(.main-no-sidebar) { grid-template-columns: minmax(0, 1fr) 248px; }
+aside.side[hidden] { display: none; }
+aside.side .side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -2px 0 10px;
+}
+aside.side .side-tabs {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-soft);
+  border-radius: var(--r);
+}
+aside.side .side-tab {
+  border: none; background: transparent;
+  padding: 5px 10px; border-radius: 4px;
+  font-size: 12px; color: var(--ink-soft); cursor: pointer;
+}
+aside.side .side-tab.active { background: var(--bg-panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+aside.side .side-close {
+  width: 28px; height: 28px;
+  border: none; border-radius: var(--r);
+  background: transparent; color: var(--ink-soft);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+aside.side .side-close:hover { background: var(--bg-soft); color: var(--ink); }
+aside.side .side-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+aside.side .side-section > .side-subhead:first-child { margin-top: 0; }
+aside.side .side-links { display: inline-flex; gap: 10px; text-transform: none; letter-spacing: 0; }
+aside.side .link-btn {
+  background: none; border: none; padding: 0;
+  color: var(--accent); font-size: 11px; cursor: pointer; text-decoration: underline;
+}
+aside.side .row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+aside.side .side-select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+}
+aside.side .legend-list .legend-item { padding: 2px 0; }
+aside.side .sw-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 8px; letter-spacing: -0.02em;
+}
+
+/* Boutons Filtres / Légende dans la barre Affichage */
+.week-view-bar { flex-wrap: wrap; }
+.week-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.week-tool-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+  color: var(--ink-soft);
+  font-size: 12px; cursor: pointer;
+}
+.week-tool-btn:hover { background: var(--bg-soft); color: var(--ink); }
+.week-tool-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.week-tool-badge {
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.week-tool-reset {
+  white-space: nowrap;
+  background: none; border: none; padding: 4px 6px;
+  color: var(--accent); font-size: 12px; text-decoration: underline; cursor: pointer;
+}
+.week-filter-empty {
+  margin: 0 0 10px; padding: 10px 12px;
+  background: #fff8e1; border: 1px solid #f0d58a; border-radius: var(--r);
+  font-size: 13px;
+}
+.week-filter-empty .link-btn {
+  background: none; border: none; padding: 0; margin-left: 6px;
+  color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit;
+}
+
+/* Mobile : le panneau s'ouvre en tiroir par-dessus la page */
+@media (max-width: 900px) {
+  .main:not(.main-no-sidebar) { grid-template-columns: minmax(0, 1fr); }
+  aside.side:not([hidden]) {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(300px, 86vw);
+    z-index: 900;
+    border-left: 1px solid var(--line);
+    border-top: none;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  }
+  .week-tools { margin-left: 0; width: 100%; }
+}
+
 /* =========================================================================
    CONTROLES (barre supérieure de chaque vue)
    ========================================================================= */

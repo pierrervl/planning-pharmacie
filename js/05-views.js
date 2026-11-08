@@ -50,9 +50,38 @@ function applyConfigTabLayout() {
   const sidebar = document.getElementById('sidebar');
   const main = document.querySelector('.main');
   if (!sidebar || !main) return;
-  const hide = ['help', 'rgpd'].includes(STATE.ui.currentTab);
+  /* Les filtres et la légende ne concernent que la vue Semaine : panneau
+     masqué ailleurs, et fermé tant que l'utilisateur ne l'ouvre pas. */
+  const panel = getSidePanel();
+  const hide = !panel;
   sidebar.hidden = hide;
+  sidebar.dataset.panel = panel || '';
   main.classList.toggle('main-no-sidebar', hide);
+}
+
+function getSidePanel() {
+  if (STATE.ui.currentTab !== 'week') return null;
+  const p = STATE.ui.sidePanel;
+  return p === 'filters' || p === 'legend' ? p : null;
+}
+
+function toggleSidePanel(panel) {
+  STATE.ui.sidePanel = STATE.ui.sidePanel === panel ? null : panel;
+  persistAndRender({ skipCloud: true });
+}
+
+/* Nombre de restrictions actives (salariés masqués, demi-journée, statuts masqués). */
+function countActivePlanningFilters() {
+  const hiddenEmps = STATE.employees.filter(e => !(STATE.ui.filtersEmp || []).includes(e)).length;
+  const shift = STATE.ui.filterShift && STATE.ui.filterShift !== 'both' ? 1 : 0;
+  const hiddenTypes = getPlanningFilterTypes().filter(t => !(STATE.ui.filterTypes || []).includes(t)).length;
+  return { hiddenEmps, shift, hiddenTypes, total: hiddenEmps + shift + hiddenTypes };
+}
+
+function resetPlanningFilters() {
+  STATE.ui.filtersEmp = STATE.employees.slice();
+  STATE.ui.filterShift = 'both';
+  STATE.ui.filterTypes = getPlanningFilterTypes().slice();
 }
 
 function render() {
@@ -1163,6 +1192,8 @@ function renderWeekView(root) {
     }
   }
 
+  const sidePanel = getSidePanel();
+  const activeFilters = countActivePlanningFilters();
   const viewBar = document.createElement('div');
   viewBar.className = 'week-view-bar no-print';
   viewBar.innerHTML = `
@@ -1171,8 +1202,33 @@ function renderWeekView(root) {
       <button type="button" class="week-display-btn${displayMode === 'cross' ? ' active' : ''}" data-week-display="cross" aria-pressed="${displayMode === 'cross'}">Croix</button>
       <button type="button" class="week-display-btn${displayMode === 'hours' ? ' active' : ''}" data-week-display="hours" aria-pressed="${displayMode === 'hours'}">Heures</button>
       <button type="button" class="week-display-btn${displayMode === 'detail' ? ' active' : ''}" data-week-display="detail" aria-pressed="${displayMode === 'detail'}">Détail</button>
+    </div>
+    <div class="week-tools">
+      ${activeFilters.total ? '<button type="button" class="week-tool-reset" data-filters-reset>Réinitialiser les filtres</button>' : ''}
+      <button type="button" class="week-tool-btn${sidePanel === 'filters' ? ' active' : ''}" data-side-panel="filters" aria-pressed="${sidePanel === 'filters'}" aria-controls="sidebar">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        Filtres${activeFilters.total ? ` <span class="week-tool-badge" title="${activeFilters.total} filtre(s) actif(s)">${activeFilters.total}</span>` : ''}
+      </button>
+      <button type="button" class="week-tool-btn${sidePanel === 'legend' ? ' active' : ''}" data-side-panel="legend" aria-pressed="${sidePanel === 'legend'}" aria-controls="sidebar">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="2.5" width="4" height="4" rx="1" fill="currentColor"/><rect x="2" y="9.5" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8.5 4.5h5.5M8.5 11.5h5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Légende
+      </button>
     </div>`;
   root.appendChild(viewBar);
+
+  viewBar.querySelectorAll('[data-side-panel]').forEach(btn => {
+    btn.onclick = () => toggleSidePanel(btn.dataset.sidePanel);
+  });
+  const resetBtn = viewBar.querySelector('[data-filters-reset]');
+  if (resetBtn) resetBtn.onclick = () => { resetPlanningFilters(); persistAndRender({ skipCloud: true }); };
+
+  if (STATE.employees.length && !STATE.employees.some(e => (STATE.ui.filtersEmp || []).includes(e))) {
+    const hint = document.createElement('p');
+    hint.className = 'week-filter-empty no-print';
+    hint.innerHTML = 'Aucun salarié affiché : tous sont masqués par les filtres. <button type="button" class="link-btn">Afficher tout le monde</button>';
+    hint.querySelector('button').onclick = () => { STATE.ui.filtersEmp = STATE.employees.slice(); persistAndRender({ skipCloud: true }); };
+    root.appendChild(hint);
+  }
 
   viewBar.querySelectorAll('[data-week-display]').forEach(btn => {
     btn.onclick = () => {
@@ -1800,42 +1856,42 @@ function attachRelevePeriodHandlers() {
   };
 }
 
-/* Panneau latéral — filtres (planning) + légende */
+/* Panneau latéral — une section à la fois (filtres OU légende), vue Semaine uniquement */
 function renderSidebar() {
   const side = $('#sidebar');
-  let h = '';
-  const isEmployeeTab = STATE.ui.currentTab === 'emp-overview'
-    || STATE.ui.currentTab === 'emp-detail'
-    || STATE.ui.currentTab === 'employees'
-    || STATE.ui.currentTab === 'contract'
-    || STATE.ui.currentTab === 'cdi'
-    || STATE.ui.currentTab === 'releve'
-    || STATE.ui.currentTab === 'settings';
+  const panel = getSidePanel();
+  if (!panel) { side.innerHTML = ''; return; }
+  const showFilters = panel === 'filters';
+  let h = `<div class="side-head">
+    <div class="side-tabs" role="group" aria-label="Contenu du panneau">
+      <button type="button" class="side-tab${showFilters ? ' active' : ''}" data-side-switch="filters" aria-pressed="${showFilters}">Filtres</button>
+      <button type="button" class="side-tab${showFilters ? '' : ' active'}" data-side-switch="legend" aria-pressed="${!showFilters}">Légende</button>
+    </div>
+    <button type="button" class="side-close" aria-label="Fermer le panneau" title="Fermer (Échap)">×</button>
+  </div>`;
 
-  if (!isEmployeeTab) {
+  if (showFilters) {
     h += `<div class="side-section">
-      <h3>Filtres</h3>
-      <div style="font-weight:600;margin-top:4px">Salariés</div>`;
+      <div class="side-subhead"><span>Salariés</span>
+        <span class="side-links"><button type="button" class="link-btn" id="sel-all">Tous</button><button type="button" class="link-btn" id="sel-none">Aucun</button></span>
+      </div>`;
     for (const emp of STATE.employees) {
       const checked = STATE.ui.filtersEmp.includes(emp) ? 'checked' : '';
       h += `<div class="row">
-        <input type="checkbox" id="fe-${cssId(emp)}" ${checked} data-emp="${emp}">
-        <label for="fe-${cssId(emp)}">${emp}</label>
+        <input type="checkbox" id="fe-${cssId(emp)}" ${checked} data-emp="${escapeHtml(emp)}">
+        <label for="fe-${cssId(emp)}">${escapeHtml(emp)}</label>
       </div>`;
     }
-    h += `<div style="display:flex;gap:6px;margin-top:4px">
-      <button class="nav" id="sel-all" style="padding:3px 8px;font-size:11px">Tous</button>
-      <button class="nav" id="sel-none" style="padding:3px 8px;font-size:11px">Aucun</button>
-    </div>`;
+    if (!STATE.employees.length) h += '<p class="muted">Aucun salarié pour le moment.</p>';
 
-    h += `<div style="font-weight:600;margin-top:10px">Shift</div>
-      <select id="filter-shift" style="width:100%;margin-top:3px">
-        <option value="both"  ${STATE.ui.filterShift==='both'?'selected':''}>Matin + Aprem</option>
+    h += `<div class="side-subhead"><span>Demi-journées</span></div>
+      <select id="filter-shift" class="side-select">
+        <option value="both"  ${STATE.ui.filterShift==='both'?'selected':''}>Matin + après-midi</option>
         <option value="matin" ${STATE.ui.filterShift==='matin'?'selected':''}>Matin seulement</option>
-        <option value="aprem" ${STATE.ui.filterShift==='aprem'?'selected':''}>Aprem seulement</option>
+        <option value="aprem" ${STATE.ui.filterShift==='aprem'?'selected':''}>Après-midi seulement</option>
       </select>`;
 
-    h += `<div style="font-weight:600;margin-top:10px">Statuts visibles</div>`;
+    h += `<div class="side-subhead"><span>Statuts visibles</span></div>`;
     for (const t of getPlanningFilterTypes()) {
       const checked = STATE.ui.filterTypes.includes(t) ? 'checked' : '';
       const label = t === 'work' ? 'Plein (présent)' : t === 'rest' ? 'Repos (vide)' : t === 'empty' ? 'Non défini (vide)' : t;
@@ -1845,26 +1901,33 @@ function renderSidebar() {
       </div>`;
     }
     h += `</div>`;
+  } else {
+    const num = (cls, txt, style = '') => `<span class="sw sw-num ${cls}" style="${style}">${txt}</span>`;
+    h += `<div class="side-section legend-list">
+      <div class="side-subhead"><span>Présences</span></div>
+      <div class="legend-item">${num('', '5,5', 'background:var(--accent)')} Plein (durée en h)</div>
+      <div class="legend-item">${num('sw-special', '4')} Orange (clic droit)</div>
+      <div class="legend-item">${num('sw-special-red', '3,5')} Rouge (2ᵉ clic droit)</div>
+      <div class="legend-item">${num('sw-request', '4')} Demande en attente</div>
+      <div class="side-subhead"><span>Cases vides</span></div>
+      <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Repos</div>
+      <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Non défini</div>`;
+    for (const ct of getCongeTypeCatalog()) {
+      const color = getCongeEntryColors(ct).bg;
+      h += `<div class="legend-item"><span class="sw" style="background:${color}"></span> ${escapeHtml(ct.label)}</div>`;
+    }
+    h += `<div class="side-subhead"><span>Jours</span></div>
+      <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
+      <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde</div>
+    </div>`;
   }
-  h += `<div class="side-section">
-    <h3>Légende</h3>
-    <div class="legend-item"><span class="sw" style="background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px">5,5</span> Plein (durée en h)</div>
-    <div class="legend-item"><span class="sw sw-special" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">4</span> Présence orange (clic droit)</div>
-    <div class="legend-item"><span class="sw sw-special-red" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">3,5</span> Présence rouge (2e clic droit)</div>
-    <div class="legend-item"><span class="sw sw-request" style="display:flex;align-items:center;justify-content:center;font-weight:700;font-size:9px;color:#fff">4</span> Demande en attente (violet)</div>
-    <div class="legend-item"><span class="sw" style="background:var(--rest-soft)"></span> Vide — repos</div>
-    <div class="legend-item"><span class="sw" style="background:#f0eee6"></span> Vide — non défini</div>
-    <div class="legend-item"><span class="sw sw-ferie"></span> Jour férié (rayures)</div>
-    <div class="legend-item"><span class="sw sw-garde"></span> Jour de garde (en-tête rouge clair)</div>`;
-  for (const ct of getCongeTypeCatalog()) {
-    const color = getCongeEntryColors(ct).bg;
-    h += `<div class="legend-item"><span class="sw" style="background:${color}"></span> Vide — ${escapeHtml(ct.label)}</div>`;
-  }
-  h += `  </div>`;
-
   side.innerHTML = h;
+  side.querySelector('.side-close').onclick = () => toggleSidePanel(panel);
+  side.querySelectorAll('[data-side-switch]').forEach(btn => {
+    btn.onclick = () => { if (btn.dataset.sideSwitch !== panel) toggleSidePanel(btn.dataset.sideSwitch); };
+  });
 
-  if (!isEmployeeTab) {
+  if (showFilters) {
     side.querySelectorAll('[data-emp]').forEach(cb => {
       cb.onchange = () => {
         const emp = cb.dataset.emp;
