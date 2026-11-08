@@ -750,6 +750,112 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
 }
 
 /* =========================================================================
+   PARAMÈTRES — tuiles d'accueil et panneaux repliables
+   ========================================================================= */
+.settings-group-title {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.settings-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.settings-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.settings-tile:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(15, 25, 20, 0.08); transform: translateY(-1px); }
+.settings-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.settings-tile-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.settings-tile-title { font-size: 15px; font-weight: 600; }
+.settings-tile-desc { font-size: 12.5px; line-height: 1.4; color: var(--ink-mute); }
+
+.settings-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  scroll-margin-top: calc(var(--topbar-h, 58px) + 12px);
+  transition: box-shadow 0.3s;
+}
+.settings-panel--flash { box-shadow: 0 0 0 3px var(--accent); }
+.settings-panel-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.settings-panel-summary::-webkit-details-marker { display: none; }
+.settings-panel-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.settings-panel-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.settings-panel-title { font-size: 18px; font-weight: 700; color: var(--ink); }
+.settings-panel-desc { font-size: 13px; color: var(--ink-mute); }
+.settings-panel-chevron {
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-right: 2px solid var(--ink-mute);
+  border-bottom: 2px solid var(--ink-mute);
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+.settings-panel[open] .settings-panel-chevron { transform: rotate(-135deg); }
+.settings-panel[open] .settings-panel-summary { border-bottom: 1px solid var(--line); }
+.settings-panel-body { padding: 16px; }
+.settings-panel-body > .form-card {
+  margin: 0;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+/* Le grand titre du panneau remplace le titre interne de la section */
+.settings-panel-body > .form-card > h3:first-child { display: none; }
+@media (max-width: 600px) {
+  .settings-panel-title { font-size: 16px; }
+  .settings-panel-desc { display: none; }
+}
+
+/* =========================================================================
    PAGES FUSIONNÉES — sélecteur en haut de page
    ========================================================================= */
 .subtabs {
