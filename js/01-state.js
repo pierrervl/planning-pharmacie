@@ -236,6 +236,8 @@ function buildDefaultState() {
     feriesRemove: [],  // dates ISO retirées du calcul auto
     /* jours de garde pharmacie : [{ id, start, end, label }]            */
     gardes:       [],
+    /* réunions ponctuelles ou récurrentes (voir js/14-reunions.js)      */
+    reunions:     [],
     /* journées de solidarité : [{ id, year, start, end, label }]            */
     pantecotes:   [],
     /* heures récupérées : { pantecoteId: { emp: { work, formation } } } */
@@ -318,6 +320,7 @@ function loadState(pharmacyId) {
 function migrateState(state) {
   if (!state.planning) state.planning = {};
   if (!state.conges) state.conges = [];
+  if (!Array.isArray(state.reunions)) state.reunions = [];
   if (!state.feriesAdd) state.feriesAdd = [];
   if (!state.feriesRemove) state.feriesRemove = [];
   if (!state.ui) state.ui = {};
@@ -544,6 +547,7 @@ function renameEmployee(oldName, newName) {
   for (const c of STATE.conges || []) {
     if (c.emp === oldName) c.emp = next;
   }
+  if (typeof renameEmployeeInReunions === 'function') renameEmployeeInReunions(oldName, next);
 
   replaceEmployeeInUiArrays(oldName, next);
   return { ok: true, name: next };

@@ -53,6 +53,35 @@ function addCdiWeek(emp, label, state) {
   return { ok: true, week };
 }
 
+/* Construit les semaines CDI à partir des semaines-types du salarié
+   (une demi-journée est cochée si elle est travaillée dans le modèle). */
+function buildCdiWeeksFromPatterns(emp, state) {
+  if (!state) state = STATE;
+  const out = [];
+  for (const pname of getPatternCycleWeeks()) {
+    const week = makeEmptyCdiWeek(`Semaine ${pname}`);
+    let any = false;
+    for (let i = 0; i < 7; i++) {
+      for (const shift of ['matin', 'aprem']) {
+        const worked = isPlanningPresent(getPatternWeekValue(emp, pname, i, shift));
+        week.days[i][shift] = worked;
+        if (worked) any = true;
+      }
+    }
+    if (any) out.push(week);
+  }
+  return out;
+}
+
+function replaceCdiWeeksFromPatterns(emp, state) {
+  if (!state) state = STATE;
+  const weeks = buildCdiWeeksFromPatterns(emp, state);
+  if (!weeks.length) return { ok: false, error: 'Les semaines-types de ce salarié sont vides.' };
+  if (!state.cdiWeeks) state.cdiWeeks = {};
+  state.cdiWeeks[emp] = weeks;
+  return { ok: true, count: weeks.length };
+}
+
 function removeCdiWeek(emp, weekId, state) {
   if (state === undefined) state = typeof STATE !== 'undefined' ? STATE : null;
   const list = getCdiWeeks(emp, state);

@@ -358,7 +358,7 @@ function isStaff() {
 }
 
 function getStaffAllowedTabs() {
-  const tabs = ['week', 'conges', 'help'];
+  const tabs = ['week', 'reunions', 'conges', 'help'];
   if (typeof needsRgpdAcceptance === 'function' && needsRgpdAcceptance()) {
     tabs.push('rgpd');
   }
@@ -1341,6 +1341,7 @@ function applyEmployeeViewRestrictions() {
     document.querySelectorAll('#tabs button, #nav-groups button').forEach(btn => {
       btn.style.display = '';
     });
+    if (typeof syncNavGroupVisibility === 'function') syncNavGroupVisibility();
     return;
   }
 
@@ -1373,6 +1374,8 @@ function applyEmployeeViewRestrictions() {
   document.querySelectorAll('#tabs button').forEach(btn => {
     btn.style.display = allowedTabs.includes(btn.dataset.tab) ? '' : 'none';
   });
+
+  if (typeof syncNavGroupVisibility === 'function') syncNavGroupVisibility();
 
   const resetBtn = document.getElementById('btn-reset');
   if (resetBtn) resetBtn.style.display = 'none';

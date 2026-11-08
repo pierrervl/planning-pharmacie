@@ -175,7 +175,9 @@ function createHelpAccordion({ id, title, hint, open = false, bodyHtml }) {
 function renderHelpEditor(root) {
   const progress = getStartupProgress();
   const pct = progress.total ? Math.round((progress.doneCount / progress.total) * 100) : 0;
-  const isAdminUser = typeof isAdmin === 'function' ? isAdmin() : (typeof canEditPlanning === 'function' ? canEditPlanning() : true);
+  /* Hors connexion cloud, l'utilisateur local a tous les droits : il voit le guide titulaire. */
+  const isLocalUser = typeof isAuthenticated !== 'function' || !isAuthenticated();
+  const isAdminUser = isLocalUser || (typeof isAdmin === 'function' && isAdmin());
   const isStaffUser = typeof isStaff === 'function' && isStaff();
   const isTeamLeaderUser = typeof isTeamLeader === 'function' && isTeamLeader();
   const cloudConfigured = typeof isSupabaseConfigured === 'function' && isSupabaseConfigured();
@@ -221,6 +223,22 @@ function renderHelpEditor(root) {
     hint: isAdminUser ? 'Clics, couleurs, heures' : 'Administrateurs',
     open: false,
     bodyHtml: buildPlanningTutorialHtml({ forAdmin: isAdminUser || !isStaffUser }),
+  }));
+
+  accordions.appendChild(createHelpAccordion({
+    id: 'help-reunions',
+    title: 'Réunions',
+    hint: 'Ponctuelles ou régulières',
+    open: false,
+    bodyHtml: `
+      <ul class="help-tips-list">
+        <li>Menu <strong>Planning → Réunions</strong> : titre, date, horaire, participants (toute l'équipe ou certains salariés).</li>
+        <li><strong>Répétition</strong> : ne se répète pas, tous les N jours, toutes les N semaines (jours au choix),
+          tous les N mois (le 14, le 2<sup>e</sup> mardi ou le dernier mardi) ou tous les N ans.</li>
+        <li><strong>Fin</strong> : jamais, à une date, ou après un nombre de réunions. Un résumé s'affiche sous le formulaire.</li>
+        <li>Dans la vue Semaine, la réunion apparaît dans l'en-tête du jour et un point bleu marque la demi-journée de chaque participant.</li>
+        <li>« Annuler cette date » retire une seule occurrence d'une réunion régulière.</li>
+      </ul>`,
   }));
 
   accordions.appendChild(createHelpAccordion({
@@ -295,7 +313,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
 
     <h3 class="help-subtitle">Onglets disponibles</h3>
     <ul class="help-tips-list">
-      <li><strong>Semaine</strong> — planning de l'équipe sur 3 semaines (navigation, filtres latéraux).</li>
+      <li><strong>Semaine</strong> — planning de l'équipe sur 3 semaines (navigation, boutons <strong>Filtres</strong> et <strong>Légende</strong>).</li>
       <li><strong>Congés</strong> — demander une absence (CP, RTT, maladie…).</li>
       <li><strong>Aide</strong> — ce guide.</li>
     </ul>
@@ -304,7 +322,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
     <ul class="help-tips-list">
       <li>Chaque jour = deux demi-journées <strong>M</strong> (matin) et <strong>A</strong> (après-midi).</li>
       <li>Basculez l'affichage <strong>Croix</strong> / <strong>Heures</strong> au-dessus du tableau.</li>
-      <li>Utilisez le panneau latéral pour filtrer les types de cellules (travail, repos, congés…).</li>
+      <li>Le bouton <strong>Filtres</strong> (à droite de « Affichage ») masque des salariés ou des types de cellules ; <strong>Légende</strong> rappelle le sens des couleurs.</li>
       ${isTeamLeader ? '' : '<li>Votre ligne est identifiable dans le tableau (surbrillance).</li>'}
     </ul>
 
@@ -423,9 +441,10 @@ function buildPlanningTutorialHtml({ forAdmin = true } = {}) {
       <li><span class="help-effectif-swatch high"></span> <strong>Vert</strong> — 4 personnes ou plus</li>
     </ul>
 
-    <h3 class="help-subtitle">Filtres (panneau latéral)</h3>
-    <p>Cochez les salariés, le créneau (matin / après-midi / les deux) et les types de cellules à afficher
-    (travail, repos, vide, congés…) pour simplifier la lecture.</p>`;
+    <h3 class="help-subtitle">Filtres et légende</h3>
+    <p>Dans la vue Semaine, le bouton <strong>Filtres</strong> (à droite de « Affichage ») ouvre le panneau : cochez les salariés, le créneau (matin / après-midi / les deux) et les types de cellules à afficher
+    (travail, repos, vide, congés…) pour simplifier la lecture. Un badge indique le nombre de filtres actifs ; « Réinitialiser les filtres » remet tout à zéro.
+    Le bouton <strong>Légende</strong> affiche la signification des couleurs. Échap ferme le panneau.</p>`;
 }
 
 function buildAdminStartupHtml({ progress, cloudConfigured, pharmacyName, inviteCode, pct }) {
@@ -541,19 +560,19 @@ function buildAdminStartupSteps({ progress, cloudConfigured, pharmacyName, invit
       body: `${typeof PATTERN_CONCEPT_NOTE !== 'undefined' ? `<div class="pattern-concept-note pattern-concept-note--compact">${PATTERN_CONCEPT_NOTE}</div>` : ''}
         <p>Durée du cycle, horaires par défaut, semaines-types, ancrage calendaire.</p>`,
       actions: [
-        { label: '→ Patterns', tab: 'patterns' },
-        { label: '→ Ancrage cycle', tab: 'settings', hash: 'cfg-pattern-anchor' },
+        { label: '→ Semaines-types', tab: 'patterns' },
+        { label: '→ Réglages du cycle', tab: 'patterns', hash: 'pattern-settings' },
       ],
     },
     {
       id: 'planning', done: stepDone('planning'),
-      title: '5. Importer le cycle dans le planning',
-      body: `<p><strong>Importer le cycle vers le planning</strong> — le tampon est appliqué sur le calendrier.</p>`,
-      actions: [{ label: '→ Patterns → Import', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
+      title: '5. Appliquer le cycle au planning',
+      body: `<p>Bloc <strong>Appliquer au planning</strong>, sous la grille des semaines-types : le tampon est appliqué sur le calendrier.</p>`,
+      actions: [{ label: '→ Appliquer au planning', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
     },
     {
-      id: 'invite', done: false,
-      title: '6. Inviter les collègues',
+      id: 'invite', done: false, optional: true,
+      title: '6. (Optionnel) Inviter les collègues',
       body: `<p>Partagez le code d'invitation. Associez chaque compte au salarié.</p>
         ${inviteCode ? `<p class="help-current">Code : <code class="auth-invite-code">${escapeHtml(inviteCode)}</code></p>` : '<p class="muted">Connectez-vous en admin pour voir le code.</p>'}`,
       actions: [{ label: '→ Comptes utilisateurs', tab: 'settings', hash: 'cfg-users' }],
