@@ -11,6 +11,22 @@ const SYNC_POLL_MS = 45000;
 
 let syncPollTimer = null;
 
+/* Compte support (super-admin) : aucune écriture automatique dans le cloud.
+   Seul un clic sur « Synchroniser » (forceCloudSync) peut enregistrer, et
+   uniquement si le mode édition est activé. */
+let explicitSyncInProgress = false;
+
+function isSupportSession() {
+  return typeof isSuperAdmin === 'function' && isSuperAdmin()
+    && typeof isAdmin === 'function' && isAdmin();
+}
+
+function cloudWriteAllowed() {
+  if (typeof isAdminReadOnly === 'function' && isAdminReadOnly()) return false;
+  if (isSupportSession() && !explicitSyncInProgress) return false;
+  return true;
+}
+
 function canSyncToCloud() {
   if (!isSupabaseConfigured() || !isAuthenticated()) return false;
   if (!getCurrentPharmacyId()) return false;
@@ -94,6 +110,7 @@ async function loadPrivateFromCloud() {
 
 async function pushPrivateToCloud() {
   if (!isAdmin() || privateTableAvailable === false) return false;
+  if (!cloudWriteAllowed()) return false;
   const { error } = await AUTH.client
     .from('pharmacy_private')
     .upsert({
@@ -303,7 +320,7 @@ async function loadPersonalDataFromCloud() {
 
 async function pushPlanningToCloud() {
   if (!isAdmin()) return;
-  if (typeof isAdminReadOnly === 'function' && isAdminReadOnly()) return;
+  if (!cloudWriteAllowed()) return;
   const pharmacyId = getCurrentPharmacyId();
   if (!pharmacyId) return;
   await ensureAuthClient();
@@ -379,6 +396,8 @@ async function pushStaffSharedChangesViaProfile() {
 
 async function mergeStaffPatchesFromProfiles() {
   if (!isAdmin()) return;
+  /* Fusionner vide aussi les profils des salariés : c'est une écriture */
+  if (!cloudWriteAllowed()) return false;
   const pharmacyId = getCurrentPharmacyId();
   if (!pharmacyId) return;
   await ensureAuthClient();
@@ -623,6 +642,10 @@ function stopCloudSyncPoll() {
 function scheduleCloudSync() {
   if (!canSyncToCloud()) return;
   if (typeof sessionNeedsCloudSync !== 'undefined' && !sessionNeedsCloudSync) return;
+  if (isSupportSession()) {
+    setSyncStatus('Modifications locales — cliquez sur Synchroniser pour enregistrer', 'warn');
+    return;
+  }
   clearTimeout(syncTimer);
   setSyncStatus('En attente cloud…', 'pending');
   syncTimer = setTimeout(() => {
@@ -633,6 +656,7 @@ function scheduleCloudSync() {
 
 async function flushCloudSync() {
   if (!canSyncToCloud()) return;
+  if (isSupportSession()) return;
   clearTimeout(syncTimer);
   syncTimer = null;
   await performCloudSync();
@@ -643,23 +667,30 @@ async function forceCloudSync() {
   syncTimer = null;
   syncPending = false;
   setSyncStatus('Synchronisation…', 'pending');
+  explicitSyncInProgress = true;
   try {
-    if (isStaff() && !isAdmin()) {
-      await syncStaffWithCloud();
-    } else {
-      await performCloudSync();
+    try {
+      if (isStaff() && !isAdmin()) {
+        await syncStaffWithCloud();
+      } else {
+        await performCloudSync();
+      }
+      if (typeof markCloudSynced === 'function') markCloudSynced();
+      if (typeof toast === 'function') {
+        toast(isStaff() && !isAdmin()
+          ? 'Synchronisation terminée (planning + vos demandes)'
+          : (typeof isAdminReadOnly === 'function' && isAdminReadOnly())
+            ? 'Affichage actualisé (consultation : rien n\'a été enregistré)'
+            : 'Synchronisation cloud terminée');
+      }
+    } catch (e) {
+      console.error('Sync cloud échouée', e);
+      setSyncStatus('Erreur sync', 'error');
+      if (typeof toast === 'function') toast(formatCloudSyncError(e), true);
+      throw e;
     }
-    if (typeof markCloudSynced === 'function') markCloudSynced();
-    if (typeof toast === 'function') {
-      toast(isStaff() && !isAdmin()
-        ? 'Synchronisation terminée (planning + vos demandes)'
-        : 'Synchronisation cloud terminée');
-    }
-  } catch (e) {
-    console.error('Sync cloud échouée', e);
-    setSyncStatus('Erreur sync', 'error');
-    if (typeof toast === 'function') toast(formatCloudSyncError(e), true);
-    throw e;
+  } finally {
+    explicitSyncInProgress = false;
   }
 }
 

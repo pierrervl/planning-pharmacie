@@ -5121,27 +5121,17 @@ body.auth-locked .app { filter: blur(2px); }
   border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
 }
 
-body.admin-read-only .main input:not([type="checkbox"]),
-body.admin-read-only .main select,
-body.admin-read-only .main textarea,
-body.admin-read-only .main button,
-body.admin-read-only .side input,
-body.admin-read-only .side select,
-body.admin-read-only .side button,
+/* Mode consultation : les cases du planning et des semaines-types ne réagissent pas ;
+   les contrôles de saisie sont désactivés (js : lockReadOnlyControls), la navigation reste libre. */
 body.admin-read-only td.cell.editable,
-body.admin-read-only td.pattern-cell.editable {
+body.admin-read-only td.pattern-cell.editable,
+body.admin-read-only .emp-drag-handle {
   pointer-events: none;
   cursor: default;
 }
-
-body.admin-read-only .main input[type="checkbox"] {
-  pointer-events: none;
+body.admin-read-only .ro-locked {
+  cursor: not-allowed !important;
   opacity: 0.55;
-}
-
-body.admin-read-only .help-accordions summary {
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 .sync-status {
