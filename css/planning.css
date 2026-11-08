@@ -1190,6 +1190,17 @@ td.has-reunion::before {
 .week-detail-reunion-label b { font-weight: 700; }
 .week-detail-reunion { container-type: inline-size; justify-content: center; padding: 0 3px; }
 .wdr-more { display: none; }
+/* Réunion courte : le texte dépasse à droite de la barre (qui garde sa vraie longueur) */
+.week-detail-reunion.wdr-short { overflow: visible; justify-content: flex-start; padding: 0 2px; container-type: normal; }
+.week-detail-reunion.wdr-short .week-detail-reunion-label {
+  position: absolute;
+  left: calc(100% + 3px);
+  top: 50%;
+  transform: translateY(-50%);
+  overflow: visible;
+  text-overflow: clip;
+}
+.week-detail-reunion.wdr-short .wdr-more { display: none; }
 /* Participant en congé ce jour-là */
 .week-detail-reunion.wdr-conflict {
   border-style: dashed;
