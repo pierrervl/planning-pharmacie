@@ -2444,19 +2444,6 @@ const SETTINGS_SECTIONS = [
     icon: '<circle cx="10" cy="10" r="7"/><circle cx="7" cy="8" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="13.5" cy="11.5" r="1"/><path d="M8 14.5a2 2 0 002-2"/>' },
 ];
 
-const SETTINGS_SHORTCUTS = [
-  { tab: 'patterns', title: 'Semaines-types', desc: 'Cycle, horaires par défaut, ancrage',
-    icon: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>' },
-  { tab: 'feries', title: 'Jours fériés', desc: 'Ponts et jours offerts',
-    icon: '<path d="M5 17.5V3M5 3.5h9l-2 3.5 2 3.5H5"/>' },
-  { tab: 'gardes', title: 'Gardes', desc: 'Périodes de garde de la pharmacie',
-    icon: '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M10 6.5v7M6.5 10h7"/>' },
-  { tab: 'pantecotes', title: SOLIDARITE_LABELS, desc: 'Heures travaillées et récupérées',
-    icon: '<path d="M10 16.5s-6-3.6-6-8A3.2 3.2 0 0110 6.6a3.2 3.2 0 016 1.9c0 4.4-6 8-6 8z"/>' },
-  { tab: 'contract', title: 'Contrats', desc: 'CDD et CDI en PDF',
-    icon: '<path d="M5 2.5h7l3 3v12H5z"/><path d="M12 2.5v3h3M7.5 10h5M7.5 13h5"/>' },
-];
-
 function renderSettingsEditor(root) {
   const isAdminUser = typeof isAdmin === 'function' && isAdmin();
   const open = STATE.ui.settingsOpen || (STATE.ui.settingsOpen = {});
@@ -2469,7 +2456,7 @@ function renderSettingsEditor(root) {
   header.className = 'controls settings-header';
   header.innerHTML = `
     <div class="label">Paramètres</div>
-    <div class="help-text">Choisissez une rubrique : elle s'ouvre plus bas. Les réglages propres à un onglet sont accessibles par les raccourcis.</div>`;
+    <div class="help-text">Choisissez une rubrique : elle s'ouvre plus bas.</div>`;
   root.appendChild(header);
 
   const sections = SETTINGS_SECTIONS.filter(sec => !sec.adminOnly || isAdminUser);
@@ -2486,21 +2473,8 @@ function renderSettingsEditor(root) {
             <span class="settings-tile-desc">${escapeHtml(sec.desc)}</span>
           </span>
         </button>`).join('')}
-    </div>
-    <h2 class="settings-group-title">Raccourcis vers les autres onglets</h2>
-    <div class="settings-tiles settings-tiles--small">
-      ${SETTINGS_SHORTCUTS.map(sc => `
-        <button type="button" class="settings-tile settings-tile--link settings-goto" data-tab="${sc.tab}">
-          <span class="settings-tile-icon">${SETTINGS_ICON(sc.icon)}</span>
-          <span class="settings-tile-text">
-            <span class="settings-tile-title">${escapeHtml(sc.title)}</span>
-            <span class="settings-tile-desc">${escapeHtml(sc.desc)}</span>
-          </span>
-          <span class="settings-tile-arrow" aria-hidden="true">→</span>
-        </button>`).join('')}
     </div>`;
   root.appendChild(tiles);
-  bindSettingsNavLinks(tiles);
 
   /* Les sections sont construites normalement (elles cherchent parfois leurs champs
      dans la page), puis rangées chacune dans un panneau repliable. */

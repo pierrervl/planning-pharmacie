@@ -766,7 +766,6 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
   gap: 12px;
   margin-bottom: 22px;
 }
-.settings-tiles--small { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 .settings-tile {
   display: flex;
   align-items: flex-start;
@@ -796,11 +795,6 @@ body:not(.nav-pinned) .app-nav:focus-within .app-nav-panel {
 .settings-tile-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .settings-tile-title { font-size: 15px; font-weight: 600; }
 .settings-tile-desc { font-size: 12.5px; line-height: 1.4; color: var(--ink-mute); }
-.settings-tile--link { align-items: center; padding: 10px 12px; }
-.settings-tile--link .settings-tile-icon { width: 32px; height: 32px; flex-basis: 32px; background: var(--bg-soft); color: var(--ink-soft); }
-.settings-tile--link .settings-tile-icon svg { width: 18px; height: 18px; }
-.settings-tile--link .settings-tile-title { font-size: 14px; }
-.settings-tile-arrow { margin-left: auto; color: var(--ink-mute); }
 
 .settings-panel {
   margin: 0 0 12px;
