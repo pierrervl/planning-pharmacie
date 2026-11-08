@@ -974,8 +974,9 @@ function renderWeekDetailReunionBar(r, startMin, span, conge = null) {
   let tip = `Réunion ${hours} (${duration}) — ${r.title}${r.location ? ` — ${r.location}` : ''}`;
   if (conge) tip += ` — attention : absent ce jour (${conge.type || 'congé'})`;
   /* Durée toujours visible ; horaire et titre ajoutés si la barre est assez large (CSS @container) */
-  const shortDuration = duration.replace(/\s+/g, '');
-  return `<div class="week-detail-reunion${conge ? ' wdr-conflict' : ''}" style="left:${left.toFixed(3)}%;width:${(right - left).toFixed(3)}%" title="${escapeHtml(tip)}">
+  /* Barre courte : « 45' » tient là où « 45min » serait tronqué */
+  const shortDuration = (e - s) < 60 ? `${e - s}'` : duration.replace(/\s+/g, '');
+  return `<div class="week-detail-reunion${conge ? ' wdr-conflict' : ''}${(e - s) < 60 ? ' wdr-short' : ''}" style="left:${left.toFixed(3)}%;width:${(right - left).toFixed(3)}%" title="${escapeHtml(tip)}">
     <span class="week-detail-reunion-label"><b class="wdr-dur">${escapeHtml(shortDuration)}</b><span class="wdr-more"> · ${escapeHtml(hours)} · ${escapeHtml(r.title)}</span></span>
   </div>`;
 }
