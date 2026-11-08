@@ -3,9 +3,9 @@
 -- Données ENTIÈREMENT FICTIVES (noms, adresses, n° de sécurité sociale, SIRET…).
 --
 -- Mode d'emploi :
---   1. Dans l'app : « Connexion cloud » → Inscription avec l'adresse ci-dessous,
---      choisir « Créer une nouvelle pharmacie » (nom libre, il sera remplacé),
---      puis confirmer l'e-mail reçu.
+--   1. Le compte doit exister (Authentication → Users). S'il n'existe pas : dans l'app,
+--      « Connexion cloud » → Inscription avec l'adresse ci-dessous, puis confirmer l'e-mail.
+--      (Un compte ancien sans profil est accepté : le profil est créé ici.)
 --   2. Supabase → SQL Editor : exécuter ce script.
 --   3. Se reconnecter dans l'app avec ce compte.
 --
@@ -28,6 +28,11 @@ begin
   if v_user is null then
     raise exception 'Compte % introuvable : inscrivez-vous d''abord dans l''app (Connexion cloud → Inscription), puis relancez ce script.', v_email;
   end if;
+
+  -- Comptes créés avant la mise en place des profils : on crée le profil manquant
+  insert into public.profiles (id, email, full_name, role)
+  values (v_user, v_email, split_part(v_email, '@', 1), 'employee')
+  on conflict (id) do nothing;
 
   -- Pharmacie déjà rattachée au compte (créée à l'inscription ou lors d'un précédent lancement)
   select pm.pharmacy_id into v_ph
