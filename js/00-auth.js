@@ -368,6 +368,81 @@ function setAdminEditUnlocked(unlocked) {
   }
 }
 
+/* Mode consultation (compte support) : on peut naviguer comme le pharmacien
+   (semaines, filtres, affichage, sous-onglets, périodes, impression…) mais
+   tout contrôle qui modifie des données est désactivé. */
+const READ_ONLY_ALLOWED_SELECTORS = [
+  /* Vue Semaine : navigation, affichage, filtres, impression */
+  '#wk-prev', '#wk-next', '#wk-today', '#wk-jump',
+  '#wk-print-start', '#wk-print-end', '#wk-print-run', '#wk-print-sync',
+  '[data-week-display]', '[data-side-panel]', '[data-filters-reset]', '.week-filter-empty button',
+  /* Navigation entre pages et sections */
+  '.subtab', '.settings-tile', '.settings-goto', '[data-tab]', '[data-goto-apply]',
+  '[data-help-action="sync"]',
+  /* Analyse et relevé d'heures */
+  '#e-emp', '#e-period-start', '#e-period-end', '#e-refresh',
+  '[data-chart-emp]', '#chart-sel-all', '#chart-sel-none',
+  '#rel-start', '#rel-end', '#rel-prev-month', '#rel-next-month', '#rel-this-month', '#rel-refresh',
+  /* Choix du salarié / de l'année affichés, documents PDF */
+  '#contract-emp-select', '#contract-pdf-btn', '#cdi-emp-select', '#cdi-pdf-btn',
+  '#fr-year', '#gd-year', '#pat-layout', '.emp-info-toggle',
+].join(', ');
+
+function isReadOnlyAllowedControl(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (el.matches(READ_ONLY_ALLOWED_SELECTORS)) return true;
+  /* Bouton calendrier : autorisé seulement à côté d'un champ date autorisé */
+  if (el.classList.contains('fr-date-picker-btn')) {
+    const input = el.parentElement?.querySelector('input.fr-date');
+    return !!input && input.matches(READ_ONLY_ALLOWED_SELECTORS);
+  }
+  return false;
+}
+
+function lockReadOnlyControls(root) {
+  root = root || document.getElementById('content');
+  if (!root) return;
+  const readOnly = isAdminReadOnly();
+  root.querySelectorAll('input, select, textarea, button').forEach(el => {
+    if (!readOnly) {
+      if (el.dataset.roLocked) {
+        el.disabled = false;
+        el.classList.remove('ro-locked');
+        delete el.dataset.roLocked;
+      }
+      return;
+    }
+    if (el.disabled || isReadOnlyAllowedControl(el)) return;
+    el.disabled = true;
+    el.dataset.roLocked = '1';
+    el.classList.add('ro-locked');
+  });
+  root.querySelectorAll('[draggable="true"]').forEach(el => {
+    if (readOnly) { el.setAttribute('draggable', 'false'); el.dataset.roDrag = '1'; }
+  });
+  if (!readOnly) {
+    root.querySelectorAll('[data-ro-drag]').forEach(el => {
+      el.setAttribute('draggable', 'true');
+      delete el.dataset.roDrag;
+    });
+  }
+}
+
+let readOnlyObserver = null;
+function watchReadOnlyContent() {
+  if (readOnlyObserver || typeof MutationObserver !== 'function') return;
+  const content = document.getElementById('content');
+  if (!content) return;
+  let scheduled = false;
+  /* Contenus ajoutés après coup (listes chargées du cloud, formulaires dynamiques) */
+  readOnlyObserver = new MutationObserver(() => {
+    if (scheduled || !isAdminReadOnly()) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; lockReadOnlyControls(content); });
+  });
+  readOnlyObserver.observe(content, { childList: true, subtree: true });
+}
+
 function applyAdminReadOnlyUi() {
   const readOnly = isAdminReadOnly();
   document.body.classList.toggle('admin-read-only', readOnly);
@@ -375,6 +450,8 @@ function applyAdminReadOnlyUi() {
     const el = document.getElementById(id);
     if (el) el.disabled = readOnly;
   });
+  watchReadOnlyContent();
+  lockReadOnlyControls();
   if (typeof updateCloudButtonState === 'function') updateCloudButtonState();
 }
 
