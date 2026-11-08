@@ -553,6 +553,69 @@ function renameEmployee(oldName, newName) {
   return { ok: true, name: next };
 }
 
+/* Ce qui est rattaché à un salarié (affiché avant de le retirer) */
+function employeeFootprint(name, state = STATE) {
+  let presences = 0;
+  for (const day of Object.values((state.planning || {})[name] || {})) {
+    if (day && isPlanningPresent(day.matin)) presences++;
+    if (day && isPlanningPresent(day.aprem)) presences++;
+  }
+  return {
+    presences,
+    conges: (state.conges || []).filter(c => c.emp === name).length,
+    demandes: (state.planningChangeRequests || []).filter(r => r.emp === name && r.status === 'pending').length,
+    reunions: (state.reunions || []).filter(r => !r.allTeam && (r.participants || []).includes(name)).length,
+    joursCdd: ((state.contractDays || {})[name] || []).length,
+    semainesCdi: ((state.cdiWeeks || {})[name] || []).length,
+  };
+}
+
+/* Supprime définitivement un salarié et toutes ses données.
+   Renvoie une copie de l'état d'avant, pour pouvoir annuler. */
+function removeEmployee(name) {
+  const idx = STATE.employees.indexOf(name);
+  if (idx < 0) return { ok: false, error: 'Salarié introuvable.' };
+  const snapshot = JSON.parse(JSON.stringify({ ...STATE, ui: undefined }));
+
+  STATE.employees.splice(idx, 1);
+  for (const key of ['patterns', 'affectations', 'planning', 'employeeTypes', 'employeeInfo',
+    'contractDays', 'contractDescriptions', 'cdiWeeks', 'cdiDescriptions']) {
+    if (STATE[key] && typeof STATE[key] === 'object') delete STATE[key][name];
+  }
+  STATE.conges = (STATE.conges || []).filter(c => c.emp !== name);
+  STATE.planningChangeRequests = (STATE.planningChangeRequests || []).filter(r => r.emp !== name);
+  /* Réunions : retiré des participants ; une réunion qui n'a plus personne disparaît */
+  STATE.reunions = (STATE.reunions || []).filter(r => {
+    if (r.allTeam) return true;
+    r.participants = (r.participants || []).filter(p => p !== name);
+    return r.participants.length > 0;
+  });
+  for (const bucket of Object.values(STATE.pantecoteRecovery || {})) {
+    if (bucket && typeof bucket === 'object') delete bucket[name];
+  }
+
+  const ui = STATE.ui;
+  for (const key of ['filtersEmp', 'employeeChartEmps', 'employeeDetailsOpen']) {
+    if (Array.isArray(ui[key])) ui[key] = ui[key].filter(e => e !== name);
+  }
+  const fallback = STATE.employees[0] || null;
+  for (const key of ['employeeView', 'monthEmp', 'yearEmp', 'contractEmp', 'cdiEmp']) {
+    if (ui[key] === name) ui[key] = fallback;
+  }
+  return { ok: true, snapshot };
+}
+
+function restoreEmployeeSnapshot(snapshot) {
+  if (!snapshot) return false;
+  const ui = STATE.ui;
+  STATE = { ...JSON.parse(JSON.stringify(snapshot)), ui };
+  migrateState(STATE);
+  for (const emp of STATE.employees) {
+    if (!STATE.ui.filtersEmp.includes(emp)) STATE.ui.filtersEmp.push(emp);
+  }
+  return true;
+}
+
 function reorderEmployee(fromIndex, toIndex) {
   const list = STATE.employees;
   const n = list.length;
