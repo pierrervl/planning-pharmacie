@@ -289,6 +289,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
     ${linkedNote}
     <div class="help-step-actions" style="margin-bottom:14px">
       <button type="button" class="help-action-btn primary settings-goto" data-tab="week">→ Vue Semaine</button>
+      <button type="button" class="help-action-btn settings-goto" data-tab="reunions">→ Réunions</button>
       <button type="button" class="help-action-btn settings-goto" data-tab="conges">→ Congés</button>
       ${cloudConfigured ? '<button type="button" class="help-action-btn" data-help-action="sync">☁ Synchroniser</button>' : ''}
     </div>
@@ -296,6 +297,7 @@ function buildEmployeeGuideHtml({ isTeamLeader = false, cloudConfigured = false 
     <h3 class="help-subtitle">Onglets disponibles</h3>
     <ul class="help-tips-list">
       <li><strong>Semaine</strong> — planning de l'équipe sur 3 semaines (navigation, filtres latéraux).</li>
+      <li><strong>Réunions</strong> — consulter les réunions périodiques et sporadiques. Le jour concerné est signalé en vert dans la vue Semaine.</li>
       <li><strong>Congés</strong> — demander une absence (CP, RTT, maladie…).</li>
       <li><strong>Aide</strong> — ce guide.</li>
     </ul>
@@ -360,6 +362,9 @@ function buildPlanningTutorialHtml({ forAdmin = true } = {}) {
       L'onglet <strong>Semaine</strong> affiche le calendrier réel de l'équipe.
       Chaque jour est découpé en deux demi-journées : <strong>M</strong> (matin) et <strong>A</strong> (après-midi).
     </p>
+    <p>Les réunions se gèrent dans l'onglet <strong>Réunions</strong> : une réunion <strong>sporadique</strong>
+    n'a lieu qu'une fois, une réunion <strong>périodique</strong> revient chaque semaine, toutes les 2 semaines
+    ou chaque mois. Sur la semaine affichée, un bandeau les liste et le titre apparaît en vert dans l'en-tête du jour.</p>
     <div class="help-step-actions" style="margin-bottom:14px">
       <button type="button" class="help-action-btn primary settings-goto" data-tab="week">→ Ouvrir la vue Semaine</button>
     </div>
@@ -566,12 +571,13 @@ function buildAdminStartupSteps({ progress, cloudConfigured, pharmacyName, invit
     },
     {
       id: 'optional', done: false, optional: true,
-      title: '8. (Optionnel) Journées spéciales',
-      body: `<p>Fériés, gardes, journées de solidarité.</p>`,
+      title: '8. (Optionnel) Journées spéciales et réunions',
+      body: `<p>Fériés, gardes, journées de solidarité. Les réunions d'équipe (périodiques ou ponctuelles) se saisissent dans Planning → Réunions.</p>`,
       actions: [
         { label: '→ Jours fériés', tab: 'feries' },
         { label: '→ Jours de garde', tab: 'gardes' },
         { label: '→ Journées de solidarité', tab: 'pantecotes' },
+        { label: '→ Réunions', tab: 'reunions' },
       ],
     },
   ];
