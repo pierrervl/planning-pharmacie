@@ -8,7 +8,7 @@ const PATTERN_CONCEPT_NOTE = `
     Le <strong>planning</strong> (onglet Semaine) est d'abord un <strong>calendrier vierge</strong>.
     Le <strong>pattern</strong>, c'est le modèle — comme un <strong>tampon</strong> avec l'empreinte
     des horaires de travail habituels de chaque salarié. Vous le préparez ici, puis vous l'« estampez »
-    sur le calendrier via <em>Importer le cycle vers le planning</em>.
+    sur le calendrier via <em>Appliquer au planning</em>.
   </p>`;
 
 function patternEscapeAttr(s) {
@@ -26,6 +26,9 @@ function renderPatternsEditor(root) {
   const anchorSummary = getPatternAnchorSummary();
   const cycleWeeks = getPatternCycleWeekCount();
   const cycleLabel = getPatternCycleWeeksLabel();
+  const editable = typeof canEditPlanning !== 'function' || canEditPlanning();
+  const hasContent = typeof hasPatternContent === 'function' ? hasPatternContent() : true;
+  const open = STATE.ui.patternSectionsOpen || (STATE.ui.patternSectionsOpen = {});
   const cycleWeekOptions = Array.from(
     { length: PATTERN_CYCLE_WEEKS_MAX - PATTERN_CYCLE_WEEKS_MIN + 1 },
     (_, i) => {
@@ -37,17 +40,8 @@ function renderPatternsEditor(root) {
   const ctrl = document.createElement('div');
   ctrl.className = 'controls pattern-controls';
   ctrl.innerHTML = `
-    <div class="label">Modèle de cycle — ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
-    <div class="pattern-concept-note">${PATTERN_CONCEPT_NOTE}</div>
-    <div class="help-text">
-      Modèle indépendant du planning affiché : chaque salarié, demi-journées M/A,
-      <b>${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}-types</b>
-      (<b>${cycleLabel}</b>). Clic = plein ↔ repos · clic droit = orange → rouge → vert
-      (horaires demandés sur orange/rouge) · double-clic sur orange/rouge = modifier les horaires.
-      Les cases affichent la durée calculée (ex. 5,5).
-      Tous les salariés sont listés ici (les filtres de la vue Semaine ne s'appliquent pas ici).
-      L'ancrage sert <b>uniquement à l'import</b> : S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
-    </div>
+    <div class="label">Semaines-types — cycle de ${cycleWeeks} semaine${cycleWeeks > 1 ? 's' : ''}</div>
+    <div class="help-text">Horaires habituels de chaque salarié (${cycleLabel}), à appliquer ensuite sur le planning.</div>
     <div class="spacer"></div>
     <label>Durée du cycle :
       <select id="pat-cycle-weeks">${cycleWeekOptions}</select>
@@ -69,42 +63,56 @@ function renderPatternsEditor(root) {
     toast(`Cycle modifié : ${n} semaine${n > 1 ? 's' : ''} (${getPatternCycleWeeksLabel()}).`);
     persistAndRender();
   };
+  ctrl.querySelector('#pat-layout').onchange = (e) => {
+    STATE.ui.patternLayout = e.target.value;
+    persistAndRender();
+  };
 
-  mountPatternShiftDefaultsPanel(root);
-  mountPatternAnchorPanel(root);
-
-  const importPanel = document.createElement('div');
-  importPanel.className = 'form-card pattern-import-panel no-print';
-  importPanel.innerHTML = `
-    <h3>Importer le cycle vers le planning</h3>
-    <p class="muted">
-      Recopie les ${getPatternCycleWeekCount()} semaines-types (${getPatternCycleWeeksLabel()}) sur une période calendaire, pour tous les salariés,
-      selon l'ancrage défini ci-dessus. Les cellules existantes peuvent être écrasées ou conservées.
-    </p>
-    <div class="form-grid pattern-import-grid">
-      <label>Du <input type="text" class="fr-date" id="pat-import-start" data-iso="${defaultStart}" value="${frFormatNumeric(defaultStart)}"></label>
-      <label>Au <input type="text" class="fr-date" id="pat-import-end" data-iso="${defaultEnd}" value="${frFormatNumeric(defaultEnd)}"></label>
-      <button type="button" class="primary" id="pat-import-run">↓ Importer sur la période</button>
-    </div>
-  `;
-  root.appendChild(importPanel);
-  attachPatternPeriodImportHandlers(importPanel);
-
-  if (patternEmps.length > 0) {
-    mountPatternCopyPanel(root, patternEmps);
-  }
+  /* Repère « comment ça marche », ouvert d'office tant que le modèle est vide */
+  const howto = createPatternSection('howto', 'Comment ça marche ?', open.howto ?? !hasContent);
+  howto.body.innerHTML = `
+    <div class="pattern-concept-note">${PATTERN_CONCEPT_NOTE}</div>
+    <ol class="pattern-steps">
+      <li><strong>Remplissez</strong> la grille ci-dessous : chaque ligne est un salarié, chaque colonne une demi-journée (M = matin, A = après-midi) des ${cycleWeeks} semaines du cycle.</li>
+      <li><strong>Appliquez</strong> le cycle au planning sur la période voulue (bloc « Appliquer au planning » sous la grille).</li>
+      <li>Ajustez ensuite le planning semaine par semaine dans l'onglet <strong>Semaine</strong> (congés, remplacements…).</li>
+    </ol>
+    <p class="muted">L'ancrage (réglages du cycle) indique quelle semaine du calendrier correspond à S1 :
+      actuellement S1 = semaine ISO ${anchorSummary.isoWeek} (${anchorSummary.isoYear}), lundi ${anchorSummary.anchorLabel}.
+      Les filtres de la vue Semaine ne s'appliquent pas ici : tous les salariés sont listés.</p>`;
+  root.appendChild(howto.el);
 
   if (patternEmps.length === 0) {
-    const msg = document.createElement('p');
-    msg.className = 'muted';
-    msg.textContent = 'Aucun salarié dans l\'équipe. Ajoutez des salariés dans l\'onglet Équipe.';
+    const msg = document.createElement('div');
+    msg.className = 'form-card pattern-empty';
+    msg.innerHTML = `<p>Aucun salarié dans l'équipe pour l'instant.</p>
+      <button type="button" class="primary settings-goto" data-tab="employees">→ Ajouter des salariés</button>`;
     root.appendChild(msg);
-    $('#pat-layout').onchange = (e) => {
-      STATE.ui.patternLayout = e.target.value;
-      persistAndRender();
-    };
+    msg.querySelector('.settings-goto').onclick = () => goToTab('employees');
     return;
   }
+
+  /* Barre d'aide aux gestes + rappel si le modèle n'est pas appliqué */
+  const bar = document.createElement('div');
+  bar.className = 'pattern-toolbar no-print';
+  const dirty = editable && typeof patternsNeedApply === 'function' && patternsNeedApply();
+  bar.innerHTML = `
+    <div class="pattern-gestures">
+      ${editable ? `<span><kbd>Clic</kbd> ou <kbd>glisser</kbd> présent ↔ repos</span>
+      <span><kbd>Clic droit</kbd> horaire spécial (orange → rouge → vert)</span>
+      <span><kbd>Double-clic</kbd> modifier les horaires</span>` : '<span>Consultation seule</span>'}
+    </div>
+    ${dirty ? `<div class="pattern-apply-hint" role="status">
+      <span>Semaines-types modifiées depuis le dernier import.</span>
+      <button type="button" class="primary" data-goto-apply>Appliquer au planning ↓</button>
+    </div>` : ''}`;
+  root.appendChild(bar);
+  bar.querySelector('[data-goto-apply]')?.addEventListener('click', () => {
+    const card = document.getElementById('pattern-apply');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card?.classList.add('pattern-apply--flash');
+    window.setTimeout(() => card?.classList.remove('pattern-apply--flash'), 1600);
+  });
 
   if (layout === 'split') {
     renderPatternsSplit(root, patternEmps);
@@ -112,10 +120,54 @@ function renderPatternsEditor(root) {
     renderPatternsUnified(root, patternEmps);
   }
 
-  $('#pat-layout').onchange = (e) => {
-    STATE.ui.patternLayout = e.target.value;
-    persistAndRender();
-  };
+  if (editable) {
+    const importPanel = document.createElement('div');
+    importPanel.className = 'form-card pattern-import-panel no-print';
+    importPanel.id = 'pattern-apply';
+    importPanel.innerHTML = `
+      <h3>Appliquer au planning</h3>
+      <p class="muted">
+        Recopie les ${cycleWeeks} semaines-types (${cycleLabel}) sur une période du calendrier, pour tous les salariés.
+        S1 tombe sur la semaine du ${anchorSummary.anchorLabel} (ancrage) puis le cycle se répète.
+        Si la période contient déjà des présences, vous choisirez de tout écraser ou de ne remplir que les cases vides.
+      </p>
+      <div class="form-grid pattern-import-grid">
+        <label>Du <input type="text" class="fr-date" id="pat-import-start" data-iso="${defaultStart}" value="${frFormatNumeric(defaultStart)}"></label>
+        <label>Au <input type="text" class="fr-date" id="pat-import-end" data-iso="${defaultEnd}" value="${frFormatNumeric(defaultEnd)}"></label>
+        <button type="button" class="primary" id="pat-import-run">↓ Appliquer sur la période</button>
+      </div>
+    `;
+    root.appendChild(importPanel);
+    attachPatternPeriodImportHandlers(importPanel);
+
+    /* Sections insérées dans la page avant d'être remplies (certains panneaux
+       cherchent leurs champs dans le document). */
+    const tools = createPatternSection('tools', 'Outils : copier une semaine-type', open.tools ?? false);
+    root.appendChild(tools.el);
+    mountPatternCopyPanel(tools.body, patternEmps);
+
+    const settings = createPatternSection('settings', 'Réglages du cycle : horaires par défaut et ancrage', open.settings ?? false);
+    root.appendChild(settings.el);
+    mountPatternShiftDefaultsPanel(settings.body);
+    mountPatternAnchorPanel(settings.body);
+  }
+}
+
+/* Section repliable de l'onglet Patterns (état mémorisé dans STATE.ui) */
+function createPatternSection(key, title, isOpen) {
+  const el = document.createElement('details');
+  el.className = 'pattern-section no-print';
+  el.open = !!isOpen;
+  el.innerHTML = `<summary class="pattern-section-summary"><span class="pattern-section-chevron" aria-hidden="true"></span>${escapeHtml(title)}</summary>`;
+  const body = document.createElement('div');
+  body.className = 'pattern-section-body';
+  el.appendChild(body);
+  el.addEventListener('toggle', () => {
+    if (!STATE.ui.patternSectionsOpen) STATE.ui.patternSectionsOpen = {};
+    STATE.ui.patternSectionsOpen[key] = el.open;
+    saveState();
+  });
+  return { el, body };
 }
 
 function mountPatternShiftDefaultsPanel(root) {
@@ -455,7 +507,7 @@ function renderPatternEditorCell(emp, pname, dayIdx, shift, weekBoundary) {
       inner = `<span class="pattern-cell-hours">${formatContractHours(h)}</span>`;
     }
   }
-  title += ' — clic : plein ↔ repos · clic droit : orange → rouge → vert';
+  title += ' — clic ou glisser : plein ↔ repos · clic droit : orange → rouge → vert';
   if (isPlanningSpecialVal(v)) {
     title += ' · double-clic : modifier les horaires';
   }
@@ -543,43 +595,93 @@ function buildPatternTableBody(tbody, visibleEmps, weekNames, { showMonthCol = f
   }
 }
 
+function patternCellInfo(el) {
+  return {
+    emp: el.dataset.patEmp,
+    pname: el.dataset.patName,
+    dayIdx: parseInt(el.dataset.patDay, 10),
+    shift: el.dataset.patShift,
+  };
+}
+
+/* Clic ou glisser sur plusieurs cases : la valeur de la 1re case est appliquée à toutes
+   celles survolées tant que le bouton reste enfoncé. Un seul rendu à la fin. */
 function attachPatternCellHandlers(container) {
-  container.querySelectorAll('td.pattern-cell[data-pat-emp]').forEach(el => {
-    el.onclick = (e) => {
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      setPatternWeekValue(emp, pname, dayIdx, shift, nextPlanningValueOnLeftClick(cur, e));
+  if (typeof canEditPlanning === 'function' && !canEditPlanning()) return;
+  const cellSel = 'td.pattern-cell[data-pat-emp]';
+  let paint = null;
+
+  const applyTo = (el, value) => {
+    const i = patternCellInfo(el);
+    if (paint.done.has(el.dataset.patKey)) return;
+    paint.done.add(el.dataset.patKey);
+    if (getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift) === value) return;
+    setPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift, value);
+    const html = renderPatternEditorCell(i.emp, i.pname, i.dayIdx, i.shift, el.classList.contains('week-start'));
+    const tmp = document.createElement('tbody');
+    tmp.innerHTML = `<tr>${html}</tr>`;
+    const fresh = tmp.querySelector('td');
+    fresh.dataset.patKey = el.dataset.patKey;
+    fresh.classList.add('pattern-cell--painted');
+    el.replaceWith(fresh);
+    paint.changed++;
+  };
+
+  const keyOf = (el) => `${el.dataset.patEmp}|${el.dataset.patName}|${el.dataset.patDay}|${el.dataset.patShift}`;
+  container.querySelectorAll(cellSel).forEach(el => { el.dataset.patKey = keyOf(el); });
+
+  const finish = () => {
+    document.removeEventListener('mouseup', finish);
+    if (!paint) return;
+    const changed = paint.changed;
+    paint = null;
+    container.classList.remove('pattern-painting');
+    if (changed) persistAndRender();
+  };
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const el = e.target.closest(cellSel);
+    if (!el || !container.contains(el)) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const value = nextPlanningValueOnLeftClick(getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift), e);
+    paint = { value, changed: 0, done: new Set() };
+    container.classList.add('pattern-painting');
+    applyTo(el, value);
+    document.addEventListener('mouseup', finish);
+  });
+
+  container.addEventListener('mouseover', (e) => {
+    if (!paint) return;
+    const el = e.target.closest(cellSel);
+    if (el && container.contains(el)) applyTo(el, paint.value);
+  });
+
+  container.addEventListener('contextmenu', (e) => {
+    const el = e.target.closest(cellSel);
+    if (!el) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const cur = getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift);
+    const next = nextPlanningValueOnRightClick(cur);
+    setPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift, next);
+    saveState();
+    if (isPlanningSpecialVal(next)) {
+      promptPatternCellHours({ emp: i.emp, pname: i.pname, dayIdx: i.dayIdx, shift: i.shift, onDone: persistAndRender });
+    } else {
       persistAndRender();
-    };
-    el.oncontextmenu = (e) => {
-      e.preventDefault();
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      const next = nextPlanningValueOnRightClick(cur);
-      setPatternWeekValue(emp, pname, dayIdx, shift, next);
-      saveState();
-      if (isPlanningSpecialVal(next)) {
-        promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
-      } else {
-        persistAndRender();
-      }
-    };
-    el.ondblclick = (e) => {
-      e.preventDefault();
-      const emp = el.dataset.patEmp;
-      const pname = el.dataset.patName;
-      const dayIdx = parseInt(el.dataset.patDay, 10);
-      const shift = el.dataset.patShift;
-      const cur = getPatternWeekValue(emp, pname, dayIdx, shift);
-      if (!isPlanningSpecialVal(cur)) return;
-      promptPatternCellHours({ emp, pname, dayIdx, shift, onDone: persistAndRender });
-    };
+    }
+  });
+
+  container.addEventListener('dblclick', (e) => {
+    const el = e.target.closest(cellSel);
+    if (!el) return;
+    e.preventDefault();
+    const i = patternCellInfo(el);
+    const cur = getPatternWeekValue(i.emp, i.pname, i.dayIdx, i.shift);
+    if (!isPlanningSpecialVal(cur)) return;
+    promptPatternCellHours({ emp: i.emp, pname: i.pname, dayIdx: i.dayIdx, shift: i.shift, onDone: persistAndRender });
   });
 }
 
@@ -686,7 +788,7 @@ function attachPatternPeriodImportHandlers(panel) {
     }
 
     showPlanningImportDialog({
-      title: `Importer le cycle — ${startLbl} → ${endLbl}`,
+      title: `Appliquer le cycle — ${startLbl} → ${endLbl}`,
       message: 'Cette période contient déjà des présences dans le planning.',
       onChoose: runImport
     });

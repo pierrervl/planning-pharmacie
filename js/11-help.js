@@ -566,8 +566,8 @@ function buildAdminStartupSteps({ progress, cloudConfigured, pharmacyName, invit
     },
     {
       id: 'planning', done: stepDone('planning'),
-      title: '5. Importer le cycle dans le planning',
-      body: `<p><strong>Importer le cycle vers le planning</strong> — le tampon est appliqué sur le calendrier.</p>`,
+      title: '5. Appliquer le cycle au planning',
+      body: `<p>Bloc <strong>Appliquer au planning</strong>, sous la grille des semaines-types : le tampon est appliqué sur le calendrier.</p>`,
       actions: [{ label: '→ Patterns → Import', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
     },
     {
