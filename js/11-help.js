@@ -244,7 +244,7 @@ function renderHelpEditor(root) {
         <li><strong>Répétition</strong> : ne se répète pas, tous les N jours, toutes les N semaines (jours au choix),
           tous les N mois (le 14, le 2<sup>e</sup> mardi ou le dernier mardi) ou tous les N ans.</li>
         <li><strong>Fin</strong> : jamais, à une date, ou après un nombre de réunions. Un résumé s'affiche sous le formulaire.</li>
-        <li>Dans la vue Semaine, la réunion apparaît dans l'en-tête du jour et un point bleu marque la demi-journée de chaque participant.</li>
+        <li>Dans la vue Semaine, la réunion apparaît dans l'en-tête du jour. En affichage <strong>Croix</strong> ou <strong>Heures</strong>, un point bleu marque la demi-journée de chaque participant ; en affichage <strong>Détail</strong>, une barre bleue montre la réunion à son horaire exact et sa durée, sur la ligne de chaque participant (en pointillés rouges si la personne est en congé ce jour-là).</li>
         <li>« Annuler cette date » retire une seule occurrence d'une réunion régulière.</li>
       </ul>`,
   }));

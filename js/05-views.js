@@ -951,6 +951,35 @@ function renderWeekDetailShiftBlock(emp, iso, shift, c, options = {}) {
   </${tag}>`;
 }
 
+/* Durée lisible : 45 min, 1 h, 1 h 30 */
+function formatReunionDuration(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`;
+}
+
+/* Barre d'une réunion dans la vue Détail, de l'heure de début à l'heure de fin */
+function renderWeekDetailReunionBar(r, startMin, span, conge = null) {
+  const s = reunionTimeToMin(r.start);
+  if (s == null || span <= 0) return '';
+  let e = reunionTimeToMin(r.end);
+  if (e == null || e <= s) e = s + 60;
+  const left = Math.max(0, ((s - startMin) / span) * 100);
+  const right = Math.min(100, ((e - startMin) / span) * 100);
+  if (right <= left) return '';
+  const duration = formatReunionDuration(e - s);
+  const hours = formatReunionHours(r) || formatReunionTime(r.start);
+  let tip = `Réunion ${hours} (${duration}) — ${r.title}${r.location ? ` — ${r.location}` : ''}`;
+  if (conge) tip += ` — attention : absent ce jour (${conge.type || 'congé'})`;
+  /* Durée toujours visible ; horaire et titre ajoutés si la barre est assez large (CSS @container) */
+  const shortDuration = duration.replace(/\s+/g, '');
+  return `<div class="week-detail-reunion${conge ? ' wdr-conflict' : ''}" style="left:${left.toFixed(3)}%;width:${(right - left).toFixed(3)}%" title="${escapeHtml(tip)}">
+    <span class="week-detail-reunion-label"><b class="wdr-dur">${escapeHtml(shortDuration)}</b><span class="wdr-more"> · ${escapeHtml(hours)} · ${escapeHtml(r.title)}</span></span>
+  </div>`;
+}
+
 function createWeekDetailView(days, { editable = true, forPrint = false, timeBounds = null, compactMeta = false } = {}) {
   const requestMode = typeof isEmployeeRequestMode === 'function' && isEmployeeRequestMode();
   if (requestMode && !forPrint) editable = true;
@@ -1031,6 +1060,13 @@ function createWeekDetailView(days, { editable = true, forPrint = false, timeBou
   const tbody = document.createElement('tbody');
   const linkedEmp = typeof getLinkedEmployeeName === 'function' ? getLinkedEmployeeName() : null;
   const blockOpts = { editable, forPrint, startMin, endMin, span };
+  /* Réunions de la semaine : une voie dédiée sous les horaires des participants */
+  const reuIdx = typeof buildReunionIndex === 'function'
+    ? buildReunionIndex(toISO(days[0]), toISO(days[days.length - 1])) : {};
+  const reunionsFor = (emp, iso) => (reuIdx[iso] || []).filter(r => reunionParticipants(r).includes(emp));
+  if (visibleEmps.some(emp => days.some(d => reunionsFor(emp, toISO(d)).length))) {
+    tbl.classList.add('has-reunion-lane');
+  }
 
   for (const emp of visibleEmps) {
     const tr = document.createElement('tr');
@@ -1075,12 +1111,18 @@ function createWeekDetailView(days, { editable = true, forPrint = false, timeBou
         `<span class="week-detail-gridline${hi === 0 ? ' first' : ''}" style="left:${(hi / hourStarts.length) * 100}%"></span>`
       ).join('');
 
+      const congeDuJour = typeof congeForDate === 'function' ? congeForDate(emp, iso) : null;
+      const reunionHtml = reunionsFor(emp, iso)
+        .map(r => renderWeekDetailReunionBar(r, startMin, span, congeDuJour))
+        .join('');
+
       tr.innerHTML += `
         <td class="${dayCls.join(' ')}" colspan="${hourStarts.length}">
           <div class="week-detail-track">
             ${hourLines}
             ${blocksHtml}
             ${noteHtml}
+            ${reunionHtml}
           </div>
         </td>`;
     });

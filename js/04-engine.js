@@ -700,6 +700,22 @@ function getWeekDetailTimeBounds(employees, days, state = STATE) {
       }
     }
   }
+  /* Réunions des salariés affichés : l'échelle s'élargit si une réunion déborde */
+  if (typeof buildReunionIndex === 'function' && state === STATE && days && days.length) {
+    const isoOf = (d) => (typeof d === 'string' ? d : toISO(d));
+    const idx = buildReunionIndex(isoOf(days[0]), isoOf(days[days.length - 1]));
+    for (const list of Object.values(idx)) {
+      for (const r of list) {
+        if (!reunionParticipants(r).some(e => (employees || []).includes(e))) continue;
+        const s = reunionTimeToMin(r.start);
+        if (s == null) continue;
+        let e = reunionTimeToMin(r.end);
+        if (e == null || e <= s) e = s + 60;
+        min = Math.min(min, s);
+        max = Math.max(max, e);
+      }
+    }
+  }
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     min = timeToMinutes('08:00');
     max = timeToMinutes('19:30');

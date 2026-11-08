@@ -1024,8 +1024,7 @@ th.day-header .reunion-name {
   color: var(--reunion);
 }
 td.has-reunion { position: relative; }
-td.has-reunion::before,
-.week-detail-block.has-reunion::before {
+td.has-reunion::before {
   content: '';
   position: absolute;
   top: 2px;
@@ -1160,6 +1159,53 @@ td.has-reunion::before,
   .reunion-up-time { grid-column: 1; }
   .reunion-up-btn, .reunion-upcoming li > span:last-child { grid-column: 2; justify-self: start; }
 }
+
+/* Vue Détail : voie des réunions sous les horaires de travail */
+.week-detail-table.has-reunion-lane .week-detail-track { height: 50px; }
+.week-detail-reunion {
+  position: absolute;
+  top: 33px;
+  height: 15px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--reunion);
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--reunion) 14%, var(--bg-panel));
+  color: var(--reunion);
+  font-size: 10px;
+  line-height: 1;
+  cursor: default;
+}
+.week-detail-reunion-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.week-detail-reunion-label b { font-weight: 700; }
+.week-detail-reunion { container-type: inline-size; justify-content: center; padding: 0 3px; }
+.wdr-more { display: none; }
+/* Participant en congé ce jour-là */
+.week-detail-reunion.wdr-conflict {
+  border-style: dashed;
+  border-color: var(--warn);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-panel));
+}
+@container (min-width: 120px) {
+  .week-detail-reunion-label { width: 100%; text-align: left; }
+  .wdr-more { display: inline; }
+}
+@media print {
+  .week-detail-reunion { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+body.printing-week-detail .week-detail-table.has-reunion-lane .week-detail-track { height: 29px; }
+body.printing-week-detail .week-detail-reunion { top: 19px; height: 9px; font-size: 6.5px; padding: 0 2px; border-left-width: 2px; }
 
 /* Paramètres → Apparence : choix du thème */
 .theme-field { margin: 4px 0 16px; }
