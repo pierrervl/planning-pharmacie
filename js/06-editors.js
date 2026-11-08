@@ -2428,91 +2428,130 @@ function bindSettingsNavLinks(root) {
   });
 }
 
+const SETTINGS_ICON = (d) => `<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+
+/* Sections de la page Paramètres (dans l'ordre d'affichage) */
+const SETTINGS_SECTIONS = [
+  { id: 'cfg-contract-party', title: 'Pharmacie et employeur', desc: 'Nom, adresse, SIRET, employeur : repris dans le bandeau et les contrats PDF',
+    icon: '<path d="M3 17V7l7-4 7 4v10"/><path d="M8 17v-5h4v5M3 17h14"/>' },
+  { id: 'cfg-users', title: 'Comptes utilisateurs', desc: "Code d'invitation, rôles et lien de chaque compte avec un salarié", adminOnly: true,
+    icon: '<circle cx="7.5" cy="7" r="2.8"/><path d="M2.5 16c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/><path d="M13 9.5l1.6 1.6 3-3.2"/>' },
+  { id: 'cfg-emp-types', title: 'Types de salariés', desc: 'Catégories (pharmacien, préparateur…) et leurs couleurs dans le planning',
+    icon: '<circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M13.5 4.2a3 3 0 010 5.6M15.5 12.5c1 .8 1.7 2 2 4"/>' },
+  { id: 'cfg-conge-types', title: 'Modes de congés', desc: 'CP, RTT, maladie, formation… et leurs couleurs',
+    icon: '<path d="M3 10a7 7 0 0114 0z"/><path d="M10 10v6a1.5 1.5 0 01-3 0"/>' },
+  { id: 'cfg-appearance', title: 'Apparence', desc: 'Thème de couleurs (Sauge, Océan, Papier) et couleur du bandeau',
+    icon: '<circle cx="10" cy="10" r="7"/><circle cx="7" cy="8" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="13.5" cy="11.5" r="1"/><path d="M8 14.5a2 2 0 002-2"/>' },
+];
+
+const SETTINGS_SHORTCUTS = [
+  { tab: 'patterns', title: 'Semaines-types', desc: 'Cycle, horaires par défaut, ancrage',
+    icon: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>' },
+  { tab: 'feries', title: 'Jours fériés', desc: 'Ponts et jours offerts',
+    icon: '<path d="M5 17.5V3M5 3.5h9l-2 3.5 2 3.5H5"/>' },
+  { tab: 'gardes', title: 'Gardes', desc: 'Périodes de garde de la pharmacie',
+    icon: '<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M10 6.5v7M6.5 10h7"/>' },
+  { tab: 'pantecotes', title: SOLIDARITE_LABELS, desc: 'Heures travaillées et récupérées',
+    icon: '<path d="M10 16.5s-6-3.6-6-8A3.2 3.2 0 0110 6.6a3.2 3.2 0 016 1.9c0 4.4-6 8-6 8z"/>' },
+  { tab: 'contract', title: 'Contrats', desc: 'CDD et CDI en PDF',
+    icon: '<path d="M5 2.5h7l3 3v12H5z"/><path d="M12 2.5v3h3M7.5 10h5M7.5 13h5"/>' },
+];
+
 function renderSettingsEditor(root) {
+  const isAdminUser = typeof isAdmin === 'function' && isAdmin();
+  const open = STATE.ui.settingsOpen || (STATE.ui.settingsOpen = {});
+  /* Lien direct vers une section (aide, tutoriel) : on l'ouvre */
+  if (STATE.ui.settingsScrollHash && SETTINGS_SECTIONS.some(sec => sec.id === STATE.ui.settingsScrollHash)) {
+    open[STATE.ui.settingsScrollHash] = true;
+  }
+
   const header = document.createElement('div');
   header.className = 'controls settings-header';
   header.innerHTML = `
-    <div class="label">Configuration</div>
-    <div class="help-text">
-      Paramètres globaux de l'application : types et couleurs, ancrage du cycle patterns,
-      informations pharmacie pour les contrats PDF.
-    </div>`;
+    <div class="label">Paramètres</div>
+    <div class="help-text">Choisissez une rubrique : elle s'ouvre plus bas. Les réglages propres à un onglet sont accessibles par les raccourcis.</div>`;
   root.appendChild(header);
 
-  const toc = document.createElement('nav');
-  toc.className = 'settings-toc';
-  toc.setAttribute('aria-label', 'Sections de configuration');
-  toc.innerHTML = `
-    <a href="#cfg-emp-types" class="settings-toc-link">Types de salariés</a>
-    <a href="#cfg-conge-types" class="settings-toc-link">Modes de congés</a>
-    <a href="#cfg-appearance" class="settings-toc-link">Apparence</a>
-    <a href="#cfg-contract-party" class="settings-toc-link">Pharmacie &amp; employeur</a>
-    <a href="#cfg-users" class="settings-toc-link auth-admin-only">Comptes utilisateurs</a>
-    <a href="#cfg-related" class="settings-toc-link">Autres réglages</a>`;
-  root.appendChild(toc);
+  const sections = SETTINGS_SECTIONS.filter(sec => !sec.adminOnly || isAdminUser);
+  const tiles = document.createElement('div');
+  tiles.className = 'settings-home';
+  tiles.innerHTML = `
+    <h2 class="settings-group-title">Réglages de l'application</h2>
+    <div class="settings-tiles">
+      ${sections.map(sec => `
+        <button type="button" class="settings-tile" data-open-section="${sec.id}">
+          <span class="settings-tile-icon">${SETTINGS_ICON(sec.icon)}</span>
+          <span class="settings-tile-text">
+            <span class="settings-tile-title">${escapeHtml(sec.title)}</span>
+            <span class="settings-tile-desc">${escapeHtml(sec.desc)}</span>
+          </span>
+        </button>`).join('')}
+    </div>
+    <h2 class="settings-group-title">Raccourcis vers les autres onglets</h2>
+    <div class="settings-tiles settings-tiles--small">
+      ${SETTINGS_SHORTCUTS.map(sc => `
+        <button type="button" class="settings-tile settings-tile--link settings-goto" data-tab="${sc.tab}">
+          <span class="settings-tile-icon">${SETTINGS_ICON(sc.icon)}</span>
+          <span class="settings-tile-text">
+            <span class="settings-tile-title">${escapeHtml(sc.title)}</span>
+            <span class="settings-tile-desc">${escapeHtml(sc.desc)}</span>
+          </span>
+          <span class="settings-tile-arrow" aria-hidden="true">→</span>
+        </button>`).join('')}
+    </div>`;
+  root.appendChild(tiles);
+  bindSettingsNavLinks(tiles);
 
-  toc.querySelectorAll('.settings-toc-link').forEach(link => {
-    link.onclick = (e) => {
-      e.preventDefault();
-      const id = link.getAttribute('href').slice(1);
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /* Les sections sont construites normalement (elles cherchent parfois leurs champs
+     dans la page), puis rangées chacune dans un panneau repliable. */
+  const mountArea = document.createElement('div');
+  mountArea.className = 'settings-panels';
+  root.appendChild(mountArea);
+
+  mountContractPartySection(mountArea, { sectionId: 'cfg-contract-party' });
+  if (typeof renderAdminUsersSection === 'function') renderAdminUsersSection(mountArea);
+  mountEmployeeTypeCatalogSection(mountArea, { sectionId: 'cfg-emp-types' });
+  mountCongeTypeCatalogSection(mountArea, { sectionId: 'cfg-conge-types' });
+  if (typeof mountTopbarAppearanceSection === 'function') {
+    mountTopbarAppearanceSection(mountArea, { sectionId: 'cfg-appearance' });
+  }
+
+  for (const sec of sections) {
+    const card = mountArea.querySelector(`#${sec.id}`);
+    if (!card) continue;
+    const panel = document.createElement('details');
+    panel.className = 'settings-panel';
+    panel.dataset.section = sec.id;
+    panel.open = !!open[sec.id];
+    panel.innerHTML = `
+      <summary class="settings-panel-summary">
+        <span class="settings-panel-icon">${SETTINGS_ICON(sec.icon)}</span>
+        <span class="settings-panel-head">
+          <span class="settings-panel-title">${escapeHtml(sec.title)}</span>
+          <span class="settings-panel-desc">${escapeHtml(sec.desc)}</span>
+        </span>
+        <span class="settings-panel-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="settings-panel-body"></div>`;
+    mountArea.insertBefore(panel, card);
+    panel.querySelector('.settings-panel-body').appendChild(card);
+    panel.addEventListener('toggle', () => {
+      if (!STATE.ui.settingsOpen) STATE.ui.settingsOpen = {};
+      STATE.ui.settingsOpen[sec.id] = panel.open;
+      saveState();
+    });
+  }
+
+  tiles.querySelectorAll('[data-open-section]').forEach(btn => {
+    btn.onclick = () => {
+      const panel = mountArea.querySelector(`.settings-panel[data-section="${btn.dataset.openSection}"]`);
+      if (!panel) return;
+      panel.open = true;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      panel.classList.add('settings-panel--flash');
+      window.setTimeout(() => panel.classList.remove('settings-panel--flash'), 1400);
     };
   });
-
-  mountEmployeeTypeCatalogSection(root, { sectionId: 'cfg-emp-types' });
-  mountCongeTypeCatalogSection(root, { sectionId: 'cfg-conge-types' });
-
-  if (typeof mountTopbarAppearanceSection === 'function') {
-    mountTopbarAppearanceSection(root, { sectionId: 'cfg-appearance' });
-  }
-
-  mountContractPartySection(root, { sectionId: 'cfg-contract-party' });
-
-  if (typeof renderAdminUsersSection === 'function') {
-    renderAdminUsersSection(root);
-  }
-
-  const related = document.createElement('div');
-  related.className = 'form-card settings-related-card settings-section';
-  related.id = 'cfg-related';
-  related.innerHTML = `
-    <h3>Autres réglages</h3>
-    <p class="muted">Ces éléments se gèrent dans leurs onglets dédiés :</p>
-    <div class="settings-related-grid">
-      <button type="button" class="settings-related-item settings-goto" data-tab="patterns">
-        <span class="settings-related-icon">🧩</span>
-        <span class="settings-related-label">Semaines-types</span>
-        <span class="settings-related-desc">Grille du cycle, horaires par défaut, ancrage et application au planning</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="feries">
-        <span class="settings-related-icon">🎉</span>
-        <span class="settings-related-label">Jours fériés</span>
-        <span class="settings-related-desc">Ponts et jours offerts personnalisés</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="gardes">
-        <span class="settings-related-icon">🏥</span>
-        <span class="settings-related-label">Jours de garde</span>
-        <span class="settings-related-desc">Périodes de garde affichées dans le planning</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="pantecotes">
-        <span class="settings-related-icon">🤝</span>
-        <span class="settings-related-label">${SOLIDARITE_LABELS}</span>
-        <span class="settings-related-desc">Heures travaillées et récupérées par journée de solidarité</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="contract">
-        <span class="settings-related-icon">📄</span>
-        <span class="settings-related-label">Contrats CDD</span>
-        <span class="settings-related-desc">Journées travaillées par salarié (PDF)</span>
-      </button>
-      <button type="button" class="settings-related-item settings-goto" data-tab="cdi">
-        <span class="settings-related-icon">📋</span>
-        <span class="settings-related-label">Contrats CDI</span>
-        <span class="settings-related-desc">Semaines de demi-journées, pré-remplies depuis les semaines-types</span>
-      </button>
-    </div>`;
-  root.appendChild(related);
-  bindSettingsNavLinks(related);
 }
 
 function escapeHtml(s) {

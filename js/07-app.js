@@ -199,7 +199,7 @@ function mountTopbarAppearanceSection(root, options = {}) {
       </div>
     </div>
     <h4 class="theme-subtitle">En-tête</h4>
-    <p class="muted">Le titre du bandeau reprend le <strong>nom de la pharmacie</strong> (ci-dessous, section Pharmacie &amp; employeur). S'il est vide, le nom cloud ou « Planning » s'affiche.</p>
+    <p class="muted">Le titre du bandeau reprend le <strong>nom de la pharmacie</strong> (rubrique <em>Pharmacie et employeur</em>). S'il est vide, le nom cloud ou « Planning » s'affiche.</p>
     <div class="topbar-appearance-preview" id="topbar-preview" style="background:${escapeHtml(color)}">
       <span id="topbar-preview-title">${escapeHtml(title)}</span>
     </div>
