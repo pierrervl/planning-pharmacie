@@ -73,13 +73,49 @@ button, input, select, textarea {
   font-family: inherit; font-size: inherit; color: inherit;
 }
 
+/* Style de base des boutons et champs date, quel que soit le bloc parent.
+   Spécificité d'un simple sélecteur d'élément → les règles ciblées existantes restent prioritaires.
+   Évite les boutons au style brut du navigateur (bordure noire, fond gris). */
+button:where(.nav, .primary) {
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel);
+  padding: 6px 12px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+  transition: background 0.12s, filter 0.12s;
+}
+button:where(.nav):hover { background: var(--bg-soft); }
+button:where(.primary) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button:where(.primary):hover { filter: brightness(0.92); }
+button:where(.nav, .primary):disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+input:where(.fr-date) {
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--bg-panel);
+}
+
 /* =========================================================================
    LAYOUT GENERAL
    ========================================================================= */
 .app {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+  /* Colonne flexible : la barre de connexion (#auth-bar) s'insère dynamiquement
+     sous l'en-tête ; une grille à 3 rangées étirait alors la barre d'onglets. */
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
+}
+.app > .main {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* En-tête */
@@ -332,6 +368,15 @@ nav.nav-subtabs button {
   transition: color 0.15s, border-color 0.15s;
 }
 nav.nav-subtabs button[hidden] { display: none; }
+/* Pas de cadre noir après un clic souris ; anneau discret au clavier. */
+nav.nav-groups button:focus:not(:focus-visible),
+nav.nav-subtabs button:focus:not(:focus-visible) { outline: none; }
+nav.nav-groups button:focus-visible,
+nav.nav-subtabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+  border-radius: 4px;
+}
 nav.nav-subtabs button:hover { color: var(--ink); }
 nav.nav-subtabs button.active {
   color: var(--accent);
@@ -4188,6 +4233,10 @@ body.auth-locked .app { filter: blur(2px); }
   flex-wrap: wrap;
 }
 
+.auth-bar[hidden] {
+  display: none;
+}
+
 .auth-bar.auth-bar-placeholder {
   opacity: 0.85;
 }
@@ -4723,6 +4772,12 @@ body.read-only-mode table.planning td.cell-click:hover {
   background: var(--bg-soft);
   border-radius: 999px;
   white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .help-accordion-summary { flex-wrap: wrap; row-gap: 6px; }
+  .help-accordion-title { flex: 1 1 calc(100% - 40px); }
+  .help-accordion-hint { margin-left: 32px; }
 }
 
 .help-accordion-body {

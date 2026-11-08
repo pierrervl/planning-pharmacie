@@ -175,7 +175,9 @@ function createHelpAccordion({ id, title, hint, open = false, bodyHtml }) {
 function renderHelpEditor(root) {
   const progress = getStartupProgress();
   const pct = progress.total ? Math.round((progress.doneCount / progress.total) * 100) : 0;
-  const isAdminUser = typeof isAdmin === 'function' ? isAdmin() : (typeof canEditPlanning === 'function' ? canEditPlanning() : true);
+  /* Hors connexion cloud, l'utilisateur local a tous les droits : il voit le guide titulaire. */
+  const isLocalUser = typeof isAuthenticated !== 'function' || !isAuthenticated();
+  const isAdminUser = isLocalUser || (typeof isAdmin === 'function' && isAdmin());
   const isStaffUser = typeof isStaff === 'function' && isStaff();
   const isTeamLeaderUser = typeof isTeamLeader === 'function' && isTeamLeader();
   const cloudConfigured = typeof isSupabaseConfigured === 'function' && isSupabaseConfigured();
@@ -552,8 +554,8 @@ function buildAdminStartupSteps({ progress, cloudConfigured, pharmacyName, invit
       actions: [{ label: '→ Patterns → Import', tab: 'patterns' }, { label: '→ Vue Semaine', tab: 'week' }],
     },
     {
-      id: 'invite', done: false,
-      title: '6. Inviter les collègues',
+      id: 'invite', done: false, optional: true,
+      title: '6. (Optionnel) Inviter les collègues',
       body: `<p>Partagez le code d'invitation. Associez chaque compte au salarié.</p>
         ${inviteCode ? `<p class="help-current">Code : <code class="auth-invite-code">${escapeHtml(inviteCode)}</code></p>` : '<p class="muted">Connectez-vous en admin pour voir le code.</p>'}`,
       actions: [{ label: '→ Comptes utilisateurs', tab: 'settings', hash: 'cfg-users' }],
